@@ -51,7 +51,7 @@
   /* toolbar */
   #tools{left:10px;top:64px;display:flex;flex-direction:column;gap:4px;padding:8px;max-height:calc(100vh - 64px - 68px);overflow-y:auto}
   #tools::-webkit-scrollbar{width:0}
-  .tool{display:flex;align-items:center;gap:8px;padding:4.5px 9px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--ink);cursor:pointer;font-size:12px;text-align:left;width:158px;font-family:'Inter'}
+  .tool{display:flex;align-items:center;gap:9px;padding:5px 9px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--ink);cursor:pointer;font-size:12px;text-align:left;width:158px;font-family:'Inter'}
   .tool .ic{flex:none}
   .tool .lbl{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tool:hover{background:var(--panel2)}
@@ -104,9 +104,13 @@
   #orientChip{position:fixed;left:50%;transform:translateX(-50%);bottom:64px;z-index:9;background:var(--panel);border:1px solid var(--amber);color:var(--amber);border-radius:999px;padding:7px 16px;font-family:'Chakra Petch';font-size:13px;letter-spacing:.05em;cursor:pointer;pointer-events:auto;box-shadow:0 6px 24px rgba(0,0,0,.4)}
   #aboutBody p{font-size:13.5px;line-height:1.55;color:#c6d2de;margin:0 0 11px}
   #aboutBody{max-height:56vh;overflow-y:auto;padding-right:4px}
-#mapOpts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;text-align:left}
+#mapOpts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:12px;text-align:left}
   @media (max-width:640px){ #mapOpts{grid-template-columns:1fr} }
-  #mapOpts .opt{background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:11px;padding:9px 12px 10px}
+  #mapOpts .opt{background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:11px;padding:9px 12px 10px;min-width:0;overflow:hidden}
+  #scenChip{display:none;position:fixed;top:52px;left:50%;transform:translateX(-50%);z-index:40;background:rgba(14,20,32,.92);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:12px;color:var(--ink);font-family:'Chakra Petch';letter-spacing:.03em;pointer-events:none;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+  #scenChip b{color:var(--amber)}
+  #scenChip svg{vertical-align:-3px;color:var(--amber)}
+  #scenMT svg{vertical-align:-3px;color:var(--amber);width:21px;height:21px}
   #mapOpts .optLabel{font-family:'Chakra Petch';font-size:10.5px;letter-spacing:.1em;color:var(--dim);margin-bottom:7px;text-transform:uppercase}
 #mapModal #diffRow{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--dim)}
 #mapModal #diffRow input{flex:1}
@@ -146,7 +150,7 @@
   #advList .adv .aico{font-size:20px;flex:none}
   #advList .adv b{display:block;font-size:13px;margin-bottom:2px}
   #advList .adv span{font-size:11px;color:var(--dim);line-height:1.4}
-  .tool .ic{width:22px;height:22px;border-radius:6px;flex:none;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .tool .ic{width:28px;height:28px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;font-size:17px}
   .tool .cost{flex:none;margin-left:auto;color:var(--dim);font-family:'Chakra Petch';font-size:11px}
   .tgroup{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;padding:4px 10px 1px;font-family:'Chakra Petch'}
 
@@ -204,7 +208,7 @@
   #mapBtns button:hover{filter:brightness(1.1)}
   #sizeRow{display:flex;gap:8px;align-items:center}
   #sizeRow > span{font-size:12px;color:var(--dim);font-family:'Chakra Petch';letter-spacing:.08em}
-  #sizeChips{display:flex;gap:6px}
+  #sizeChips{display:flex;gap:6px;flex-wrap:wrap}
   #sizeChips button{background:var(--panel2);border:1px solid var(--line);border-radius:9px;color:var(--dim);padding:5px 10px;cursor:pointer;font-family:'Chakra Petch';font-size:10.5px;letter-spacing:.05em;white-space:nowrap}
   #sizeChips button.on{border-color:var(--amber);color:var(--amber)}
   #nameRow{display:flex;align-items:center;margin-top:0}
@@ -236,7 +240,9 @@
   #saveModal button{padding:9px 16px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer;font-family:'Chakra Petch';font-size:12px}
   #saveModal button.primary{background:var(--amber);color:#1a1206;border-color:var(--amber);font-weight:700}
   #slotList .slot{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;margin-bottom:7px;background:#0a121c}
-  #slotList .slot .nm{font-family:'Chakra Petch';font-size:12px;color:var(--ink);min-width:74px}
+  #slotList .slot .nm{font-family:'Chakra Petch';font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot .thumb{width:46px;height:46px;border-radius:7px;flex:none;border:1px solid var(--line);image-rendering:pixelated;object-fit:cover;background:#13202f;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:18px}
+.slot .mid{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
   #slotList .slot .meta{flex:1;font-size:11px;color:var(--dim);line-height:1.4}
   #slotList .slot button{padding:6px 12px;font-size:11px;border-radius:7px}
   #slotList .slot button.del{padding:6px 9px;color:#c96a6a;border-color:rgba(201,106,106,.4)}
@@ -257,7 +263,10 @@
   #moreMenu{display:none;position:fixed;right:10px;top:58px;z-index:26;flex-direction:column;gap:2px;padding:6px;min-width:170px}
   #moreMenu .msep{height:1px;background:var(--line);margin:4px 6px}
   #moreMenu.open{display:flex}
-  #moreMenu button{background:none;border:none;border-radius:8px;padding:9px 12px;color:var(--ink);cursor:pointer;text-align:left;font-size:13px;font-family:'Chakra Petch'}
+  #moreMenu button{background:none;border:none;border-radius:8px;padding:8px 12px;color:var(--ink);cursor:pointer;text-align:left;font-size:13px;font-family:'Chakra Petch';display:flex;align-items:center;gap:9px;width:100%}
+.mi{display:inline-flex;width:17px;height:17px;flex:none;align-items:center;justify-content:center;color:var(--amber)}
+.mi svg{display:block}
+.demoCard .mi{width:19px;height:19px;margin-right:7px;vertical-align:-3px;display:inline-flex}
   #moreMenu button:hover{background:#22324a}
   .mbtn{padding:8px 13px;border-radius:10px;border:1px solid var(--line);background:rgba(16,26,38,.92);color:var(--ink);cursor:pointer;font-family:'Chakra Petch';font-size:12px}
   .mbtn:hover{background:var(--panel2)}
@@ -288,6 +297,12 @@
      so it works identically in every webview and outranks base rules on specificity. */
   body.mob .tool{width:44px;justify-content:center;padding:7px 0}
   body.mob .tool span.lbl, body.mob .tool .cost, body.mob .tgroup{display:none}
+  #mMore{display:none}
+  body.mob #mMore{display:flex}
+  body.mob #tools .madv{display:none}
+  body.mob #views .madv{display:none}
+  body.mob.mAll #tools .madv{display:flex}
+  body.mob.mAll #views .madv{display:inline-block}
   body.mob #tools{top:56px;gap:3px;padding:6px;max-height:calc(100vh - 56px - 148px);scrollbar-width:none}
   body.mob #tools::-webkit-scrollbar{display:none}
   body.mob #hdr{top:8px;left:8px;right:8px;gap:6px}
@@ -324,7 +339,7 @@
   <p class="keys">You start in <b>Pan</b> mode — pick a tool to build, tap again or Esc to stop · Q / E or ⟲⟳ rotates the view · Drag previews, release builds · Pinch or scroll zooms · 🔊 toggles sound · ⛶ fullscreen lives in the ⋯ menu</p>
   <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
     <button id="continueBtn" style="display:none;background:var(--panel2);color:var(--ink);border:1px solid var(--amber)">CONTINUE</button>
-    <button id="exampleBtn" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line)">EXPLORE A CITY</button>
+    <button id="exampleBtn" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line)">SCENARIOS</button>
     <button id="startBtn">START BUILDING</button>
   </div>
 
@@ -332,23 +347,38 @@
 
 <div id="demoModal" class="modalWrap">
   <div class="modal" style="max-width:560px">
-    <h2>EXPLORE A CITY</h2>
-    <p class="modalSub">Two working cities, ready to inspect, break, or grow.</p>
+    <h2>SCENARIOS</h2>
+    <p class="modalSub">Six challenges with a goal and a deadline. Win, and the city is yours to keep.</p>
     <div id="demoCards">
-      <button class="demoCard" id="demoRiverton">
-        <b>Riverton</b>
-        <span>A cosy river town · ~1,300 residents · Classic 40×40</span>
-        <em>Friendly scale — see every system up close.</em>
+      <button class="demoCard" id="scn_first">
+        <b><span class="mi" data-mi="scn_first"></span>First Steps</b>
+        <span>Cozy 30×30 · fresh land · 4 years</span>
+        <em>Grow a happy village of 2,500 — the gentle introduction.</em>
       </button>
-      <button class="demoCard" id="demoMegara">
-        <b>Mégara</b>
-        <span>A tower metropolis · 65,000+ residents · Vast 64×64</span>
-        <em>Megatower canyons, airports, nuclear grid — the endgame.</em>
+      <button class="demoCard" id="scn_crash">
+        <b><span class="mi" data-mi="scn_crash"></span>The Housing Crash</b>
+        <span>Vast · inherited crisis · 6 years</span>
+        <em>Demand has collapsed and Mégara is emptying. Restore 70,000 residents.</em>
       </button>
-      <button class="demoCard" id="demoAlexandria">
-        <b>Alexandria</b>
-        <span>The megatower capital · 200,000 residents · Colossal 96×96</span>
-        <em>A skyline of lv7 spires, twin airports, 40 reactors — the far horizon.</em>
+      <button class="demoCard" id="scn_blackout">
+        <b><span class="mi" data-mi="scn_blackout"></span>Blackout</b>
+        <span>Colossal · grid sabotage · 4 years</span>
+        <em>Alexandria is going dark. Restore full power for 195,000 — and hold it a year.</em>
+      </button>
+      <button class="demoCard" id="scn_after">
+        <b><span class="mi" data-mi="scn_after"></span>Aftershock</b>
+        <span>Vast · ruined city · 5 years</span>
+        <em>A 7.4 quake scarred the metropolis. Rebuild to 60,000.</em>
+      </button>
+      <button class="demoCard" id="scn_flood">
+        <b><span class="mi" data-mi="scn_flood"></span>The Flood Plain</b>
+        <span>Classic · recurring floods · 10 years</span>
+        <em>The river rises every other year, guaranteed. Reach 25,000 anyway.</em>
+      </button>
+      <button class="demoCard" id="scn_iron">
+        <b><span class="mi" data-mi="scn_iron"></span>Iron Budget</b>
+        <span>Grand · very hard · 8 years</span>
+        <em>§6,000, no loans, no mercy. 15,000 residents and §50,000 banked.</em>
       </button>
     </div>
     <div class="modalBtns"><button id="demoCancel" class="ghostBtn">Back</button></div>
@@ -470,25 +500,37 @@
     <p id="saveStatus"></p>
   </div>
 </div>
+<div id="scenChip"></div>
+<div id="scenModal" class="modalWrap">
+  <div class="modal" style="max-width:440px">
+    <h2 id="scenMT"></h2>
+    <p class="modalSub" id="scenMB"></p>
+    <div class="modalBtns">
+      <button id="scenRetry" class="ghostBtn">Retry scenario</button>
+      <button id="scenCont" class="primary">Keep playing</button>
+    </div>
+  </div>
+</div>
 <div id="moreMenu" class="panel">
-  <button data-for="statsBtn">📈&nbsp; Statistics</button>
-  <button data-for="advBtn">💡&nbsp; Advisor</button>
-  <button data-for="catBtn">🏛&nbsp; Catalog</button>
-  <button id="disMenuBtn">⚠️&nbsp; Disasters…</button>
+  <button data-for="statsBtn"><span class="mi" data-mi="stats"></span><span class="mlbl">Statistics</span></button>
+  <button data-for="advBtn"><span class="mi" data-mi="advisor"></span><span class="mlbl">Advisor</span></button>
+  <button data-for="catBtn"><span class="mi" data-mi="catalog"></span><span class="mlbl">Catalog</span></button>
+  <button id="disMenuBtn"><span class="mi" data-mi="disaster"></span><span class="mlbl">Disasters…</span></button>
+  <button id="scenMenuBtn"><span class="mi" data-mi="scenario"></span><span class="mlbl">Scenarios</span></button>
   <div class="msep"></div>
-  <button id="newMenuBtn">✨&nbsp; New city</button>
-  <button id="saveMenuBtn">💾&nbsp; Save</button>
-  <button id="loadMenuBtn">📂&nbsp; Load</button>
+  <button id="newMenuBtn"><span class="mi" data-mi="newcity"></span><span class="mlbl">New city</span></button>
+  <button id="saveMenuBtn"><span class="mi" data-mi="save"></span><span class="mlbl">Save</span></button>
+  <button id="loadMenuBtn"><span class="mi" data-mi="load"></span><span class="mlbl">Load</span></button>
   <div class="msep"></div>
-  <button data-for="sndBtn">🔊&nbsp; Audio</button>
-  <button id="wxMenuBtn">🌦&nbsp; Weather: Off</button>
-  <button id="pwrMenuBtn">🔋&nbsp; Power saver: On</button>
+  <button data-for="sndBtn"><span class="mi" data-mi="audio"></span><span class="mlbl">Audio</span></button>
+  <button id="wxMenuBtn"><span class="mi" data-mi="weather"></span><span class="mlbl">Weather: Off</span></button>
+  <button id="pwrMenuBtn"><span class="mi" data-mi="saver"></span><span class="mlbl">Power saver: On</span></button>
   <div class="msep"></div>
-  <button id="photoBtn">📷&nbsp; Photo</button>
-  <button id="fsBtn">⛶&nbsp; Fullscreen</button>
+  <button id="photoBtn"><span class="mi" data-mi="photo"></span><span class="mlbl">Photo</span></button>
+  <button id="fsBtn"><span class="mi" data-mi="fullscreen"></span><span class="mlbl">Fullscreen</span></button>
   <div class="msep"></div>
-  <button id="helpBtn">❔&nbsp; Help &amp; shortcuts</button>
-  <button id="aboutMenuBtn">ℹ️&nbsp; About POLIS</button>
+  <button id="helpBtn"><span class="mi" data-mi="help"></span><span class="mlbl">Help &amp; shortcuts</span></button>
+  <button id="aboutMenuBtn"><span class="mi" data-mi="about"></span><span class="mlbl">About POLIS</span></button>
 </div>
 
 <div id="budget" class="hud panel">
@@ -733,9 +775,40 @@ const TOOLS = [
   { id:'inspect',  n:'Inspect',     c:0,   ic:'?', col:'#5a6c80' },
   { id:'pan',      n:'Pan view',    c:0,   ic:'✥', col:'#5a6c80' },
 ];
-const IC=(body)=>`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#0d1420" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const IC=(body)=>`<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="#0d1420" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 const F='fill="#0d1420" stroke="none"';
+const MI=(body)=>`<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const MENU_IC={
+  stats: MI('<path d="M4 20V5M4 20h16"/><path d="M7 15l4-5 3 3 5-7"/><circle cx="19" cy="6" r="1.2" fill="currentColor" stroke="none"/>'),
+  advisor: MI('<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 1 4 10.5c-.8.7-1 1.5-1 2.5h-6c0-1-.2-1.8-1-2.5A6 6 0 0 1 12 3z"/>'),
+  catalog: MI('<path d="M3 9l9-5 9 5"/><path d="M5 9v9M9.5 9v9M14.5 9v9M19 9v9"/><path d="M3 20h18"/>'),
+  disaster: MI('<path d="M12 3 22 20H2z"/><path d="M12 9v5"/><circle cx="12" cy="17" r=".9" fill="currentColor" stroke="none"/>'),
+  scenario: MI('<path d="M6 21V4"/><path d="M6 4h11l-2.5 3.5L17 11H6"/>'),
+  newcity: MI('<path d="M12 3v6M9 6h6"/><path d="M5 21V12l3-2v11M19 21v-7l-3-2v9"/><path d="M3 21h18"/>'),
+  save: MI('<path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><path d="M4 17v3h16v-3"/>'),
+  load: MI('<path d="M12 13V3"/><path d="M8 7l4-4 4 4"/><path d="M4 17v3h16v-3"/>'),
+  audio: MI('<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11"/>'),
+  weather: MI('<path d="M7 15a4.5 4.5 0 1 1 .8-8.9A5.5 5.5 0 0 1 18 8a3.5 3.5 0 0 1-.5 7H7z"/><path d="M9 18.5l-1 2.2M14 18.5l-1 2.2"/>'),
+  saver: MI('<rect x="3" y="8" width="15" height="9" rx="2"/><path d="M21 11v3"/><path d="M11 9.5l-2.5 3h3L9 16"/>'),
+  photo: MI('<rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M9 7l1.5-2.5h3L15 7"/><circle cx="12" cy="13.5" r="3.4"/>'),
+  fullscreen: MI('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
+  help: MI('<circle cx="12" cy="12" r="9"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2 1-1.2 1.9"/><circle cx="12" cy="17" r=".9" fill="currentColor" stroke="none"/>'),
+  about: MI('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r=".9" fill="currentColor" stroke="none"/>'),
+  scn_first: MI('<path d="M12 21v-7"/><path d="M12 14c0-4-2.5-6-6-6 0 4 2.5 6 6 6zM12 12c0-3 2-5 5.5-5 0 3.5-2 5-5.5 5z"/>'),
+  scn_crash: MI('<path d="M4 5l5 6 3-2.5L19 15"/><path d="M19 10.5V15h-4.5"/><path d="M4 20h16"/>'),
+  scn_blackout: MI('<path d="M13 2 5 13h5l-1.5 9L19 10h-5.5z"/>'),
+  scn_after: MI('<path d="M3 20 9 8l3 4 3-7 6 15z"/><path d="M11 20l1.5-3.5L14 20"/>'),
+  scn_flood: MI('<path d="M3 12c2.5-3 5-3 7.5 0s5 3 7.5 0"/><path d="M3 17c2.5-3 5-3 7.5 0s5 3 7.5 0"/>'),
+  scn_iron: MI('<circle cx="12" cy="12" r="8"/><path d="M12 7.5v9M9.5 9.5h4a1.8 1.8 0 0 1 0 3.6h-3a1.8 1.8 0 0 0 0 3.6h4.5"/>'),
+  trophy: MI('<path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/><path d="M12 14v3M8 21h8M10 21v-2h4v2"/>'),
+  hourglass: MI('<path d="M6 3h12M6 21h12"/><path d="M7 3c0 5 4 5.5 4 9s-4 4-4 9M17 3c0 5-4 5.5-4 9s4 4 4 9"/>'),
+};
+function injectMenuIcons(){
+  document.querySelectorAll('.mi[data-mi]').forEach(el=>{ const k=el.dataset.mi; if (MENU_IC[k]) el.innerHTML=MENU_IC[k]; });
+}
 const ICONS={
+  rail: IC(`<path d="M4 15h16" stroke-width="2.6"/><path d="M4 12.5h16" stroke-width="1.4"/><path d="M7 15v6M17 15v6"/><rect x="8" y="6" width="8" height="5" rx="1.6" ${F}/>`),
+  rstation: IC(`<path d="M4 11c0-4 16-4 16 0" stroke-width="2.2"/><path d="M5 11v9M19 11v9"/><path d="M8 16h8" stroke-width="2.4"/><circle cx="12" cy="13" r="1" ${F}/>`),
   road: IC(`<path d="M7 21 10 3h4l3 18z" ${F}/><path d="M12 6v2.5M12 11v2.5M12 16v2.5" stroke="#e8ecf2" stroke-width="1.6"/>`),
   path: IC(`<path d="M9 21c-2-6 8-8 6-14" stroke-width="3" stroke-dasharray="3 2.6"/><path d="M7 5c1.5-1.5 3.5-1.5 5 0M5 9c1.2-1 2.8-1 4 0" stroke-width="1.5"/>`),
   avenue: IC(`<path d="M5 21 8 3h8l3 18z" ${F}/><path d="M10 6v2M10 11v2M10 16v2M14 6v2M14 11v2M14 16v2" stroke="#ffd23f" stroke-width="1.4"/>`),
@@ -1592,6 +1665,7 @@ function simTick(){
   // periodic land value refresh so traffic effects propagate
   if (S.day % 8 === 0) recomputeFields();
 
+  if (S.day % 30 === 0) scenarioTick();
   // month end → budget
   if (S.day % 30 === 0){
     let roads=0, aves=0, paths=0, svc=0, busStops=0, rails=0, rstations=0;
@@ -5587,6 +5661,20 @@ for (const t of TOOLS){
   }
   toolsEl.appendChild(b);
 }
+{ const MADV=new Set(['stadium','arena','airport','cityhall']);
+  toolsEl.querySelectorAll('.tool').forEach(b2=>{ if (MADV.has(b2.dataset.id)) b2.classList.add('madv'); });
+  const more=document.createElement('button'); more.id='mMore'; more.className='tool';
+  more.innerHTML='<span class="ic" style="background:#2a3a52;color:#cdd6e4">⋯</span><span class="lbl">More tools</span>';
+  more.title='Show the full toolset';
+  more.onclick=()=>{
+    const on=document.body.classList.toggle('mAll');
+    more.querySelector('.ic').textContent = on ? '−' : '⋯';
+  };
+  toolsEl.appendChild(more);
+  document.querySelectorAll('#views [data-v]').forEach(b2=>{
+    if (['value','pollution','edu','health','crime'].includes(b2.dataset.v)) b2.classList.add('madv');
+  });
+}
 { const grip=document.createElement('div'); grip.className='dragGrip'; grip.textContent='⋮⋮⋮';
   toolsEl.insertBefore(grip, toolsEl.firstChild);
   makeDraggable(toolsEl, grip);
@@ -5713,6 +5801,7 @@ function loanQuote(P){
   return {P, rate:r, pay, total:pay*LOAN_TERM};
 }
 function takeLoan(P){
+  if (S.scen && S.scen.id==='iron'){ msg('<b>The banks refuse.</b> Under Iron Budget, this city gets no credit.'); return false; }
   if (S.loan){ msg('<b>The bank says no.</b> Pay off the current loan before taking another.'); return false; }
   const q=loanQuote(P);
   S.loan={ bal:P, pay:q.pay, rate:q.rate, left:LOAN_TERM, P };
@@ -5756,7 +5845,7 @@ function makeSave(){
     const c=map[y][x];
     cells.push(TYPE_IDS.indexOf(c.t), c.t==='rubble'?Math.max(0,TYPE_IDS.indexOf(c.rz||'grass')):c.lv, Math.round(c.dev), c.grp ? (c.part?2:1) : (c.bridge?3:(c.bus?4:(c.rail?5:0))));
   }
-  const data={v:3,g:G,m:Math.round(S.money),tx:S.tax,d:S.day,p:S.pop,c:cells,fd:S.fund,df:S.diff,ms:S.milestone,hs:packHist(),wx:S.weather?1:0,au:settingsSnapshot(),cn:S.cityName,ln:S.loan||0};
+  const data={v:3,g:G,m:Math.round(S.money),tx:S.tax,d:S.day,p:S.pop,c:cells,fd:S.fund,df:S.diff,ms:S.milestone,hs:packHist(),wx:S.weather?1:0,au:settingsSnapshot(),cn:S.cityName,ln:S.loan||0,sc:S.scen||0};
   return 'TLV3.'+btoa(unescape(encodeURIComponent(JSON.stringify(data))));
 }
 function loadSave(code){
@@ -5830,11 +5919,13 @@ function loadSave(code){
     S.milestone=Math.min(MILESTONES.length-1, Math.max(S.milestone||0, derived));
   }
   S.loan = (data.ln && data.ln.bal>0) ? data.ln : null;
+  S.scen=(data.sc&&data.sc.id)?data.sc:null;
+  try{ updateScenChip(); }catch(_){}
   refreshLoanBox();
   S.pop=data.p||0;
   S.milestone=data.ms||0;
   if (data.wx!==undefined){ S.weather=!!data.wx; SEAS._init=false; updateSeason();
-    const wb=document.getElementById('wxMenuBtn'); if (wb) wb.innerHTML='🌦&nbsp; Weather: '+(S.weather?'On':'Off'); }
+    const wb=document.querySelector('#wxMenuBtn .mlbl'); if (wb) wb.textContent='Weather: '+(S.weather?'On':'Off'); }
   if (data.au) applySettings(data.au);
   if (data.cn){ S.cityName=data.cn; applyCityName(); }
   unpackHist(data.hs);
@@ -5876,79 +5967,127 @@ const store={
     try{ localStorage.setItem('tlv_probe','1'); localStorage.removeItem('tlv_probe'); return true; }catch(_){ return false; }
   }
 };
-const SLOTS=['slot1','slot2','slot3','auto'];
-const SLOT_NAMES={slot1:'Slot 1',slot2:'Slot 2',slot3:'Slot 3',auto:'Autosave'};
-async function writeSlot(id){
-  const payload=JSON.stringify({code:makeSave(), day:S.day, pop:S.pop, money:Math.round(S.money), ts:Date.now(), cn:S.cityName});
-  return store.set(id, payload);
+/* ---------- saves: a real manager — named saves with map thumbnails ---------- */
+const SV_LIMIT=20;
+async function svIndex(){ try{ const a=JSON.parse(await store.get('svidx')||'[]'); return Array.isArray(a)?a:[]; }catch(_){ return []; } }
+async function svSetIndex(a){ return store.set('svidx', JSON.stringify(a)); }
+function svThumb(){
+  try{
+    const c=document.createElement('canvas'); c.width=G; c.height=G;
+    const g=c.getContext('2d');
+    for (let y=0;y<G;y++) for (let x=0;x<G;x++){
+      const t=map[y][x].t;
+      g.fillStyle = t==='water' ? '#2f6fb8'
+        : ROADTYPE[t] ? '#465264'
+        : t==='res' ? '#79c694' : t==='com' ? '#7fb3ff' : t==='ind' ? '#e9c43f'
+        : t==='tree' ? '#2e6b3e'
+        : (t==='park'||t==='garden'||t==='playground'||t==='plaza'||t==='pool') ? '#46915c'
+        : t==='grass' ? '#3a7a48'
+        : '#a8b0c0';
+      g.fillRect(x,y,1,1);
+    }
+    return c.toDataURL('image/png');
+  }catch(_){ return null; }
 }
-async function readSlot(id){
-  const v=await store.get(id);
-  if (!v) return null;
-  try{ const o=JSON.parse(v); return o&&o.code?o:null; }catch(_){ return null; }
+function svYear(day){ return Math.max(1, Math.ceil(((day||0)+1)/YEAR_DAYS)); }
+async function svWrite(id){
+  if (!id) id='s'+Date.now().toString(36)+((Math.random()*36|0).toString(36));
+  const meta={ id, cn:S.cityName||'Polis', pop:S.pop, money:Math.round(S.money), day:S.day, g:G, ts:Date.now(), scen:S.scen?S.scen.id:null, th:svThumb() };
+  let ok=await store.set('sv_'+id, JSON.stringify({code:makeSave(), meta}));
+  if (!ok){ meta.th=null; ok=await store.set('sv_'+id, JSON.stringify({code:makeSave(), meta})); }
+  if (!ok) return null;
+  const idx=await svIndex();
+  if (!idx.includes(id)) idx.unshift(id);
+  await svSetIndex(idx);
+  return id;
 }
+async function svRead(id){ const v=await store.get('sv_'+id); if (!v) return null; try{ const o=JSON.parse(v); return (o&&o.code)?o:null; }catch(_){ return null; } }
+async function svDelete(id){ await store.del('sv_'+id); await svSetIndex((await svIndex()).filter(x=>x!==id)); }
+async function svMigrate(){
+  if (await store.get('svmig')) return;
+  for (const old of ['slot1','slot2','slot3','auto']){
+    const v=await store.get(old); if (!v) continue;
+    try{
+      const o=JSON.parse(v); if (!o||!o.code) continue;
+      const id=(old==='auto')?'auto':('mig_'+old);
+      await store.set('sv_'+id, JSON.stringify({code:o.code, meta:{id, cn:o.cn||'Polis', pop:o.pop||0, money:o.money||0, day:o.day||0, g:0, ts:o.ts||Date.now(), scen:null, th:null}}));
+      const idx=await svIndex(); if (!idx.includes(id)){ idx.push(id); await svSetIndex(idx); }
+    }catch(_){}
+  }
+  await store.set('svmig','1');
+}
+function writeSlot(id){ return svWrite(id==='auto'?'auto':null); }
 function ago(ts){
-  const s=(Date.now()-ts)/1000;
-  if (s<90) return 'just now';
-  if (s<3600) return Math.round(s/60)+'m ago';
-  if (s<86400) return Math.round(s/3600)+'h ago';
-  return Math.round(s/86400)+'d ago';
+  const s2=(Date.now()-ts)/1000;
+  if (s2<90) return 'just now';
+  if (s2<3600) return Math.round(s2/60)+'m ago';
+  if (s2<86400) return Math.round(s2/3600)+'h ago';
+  return Math.round(s2/86400)+'d ago';
 }
 async function renderSlots(mode){
   const list=document.getElementById('slotList');
   if (!store.available()){ list.innerHTML=''; return; }
-  list.innerHTML='<p class="empty" style="font-size:11px;padding:4px 0">Loading slots…</p>';
-  const rows=await Promise.all(SLOTS.map(readSlot));
+  list.innerHTML='<p class="empty" style="font-size:11px;padding:4px 0">Loading saves…</p>';
+  await svMigrate();
+  const idx=await svIndex();
+  const order=['auto', ...idx.filter(x=>x!=='auto')];
+  const entries=(await Promise.all(order.map(async id=>[id, await svRead(id)]))).filter(e=>e[1]);
   list.innerHTML='';
-  if (mode==='load'){
+  if (mode==='save' && S.started){
+    const nb=document.createElement('button');
+    nb.className='primary'; nb.id='svNew';
+    nb.textContent='＋ Save current city — '+(S.cityName||'Polis')+' · Year '+svYear(S.day);
+    nb.style.cssText='width:100%;margin:0 0 10px;padding:10px;border-radius:9px';
+    nb.onclick=async()=>{
+      const idx2=await svIndex();
+      if (idx2.filter(x=>x!=='auto').length>=SV_LIMIT){ statusEl.textContent='Save limit ('+SV_LIMIT+') reached — delete an old one first.'; return; }
+      nb.disabled=true; nb.textContent='Saving…';
+      const id=await svWrite(null);
+      statusEl.textContent = id ? 'Saved.' : 'Could not save — storage is full.';
+      renderSlots(mode);
+    };
+    list.appendChild(nb);
+  }
+  if (!entries.length){
+    const p2=document.createElement('p');
+    p2.style.cssText='font-size:12px;color:var(--dim);padding:6px 0';
+    p2.textContent= mode==='save' ? 'No saves yet — the button above makes the first one.' : 'No saves yet — start a city, then save it from the ⋯ menu.';
+    list.appendChild(p2);
+  }
+  for (const [id,o] of entries){
+    const m=o.meta||{};
     const row=document.createElement('div'); row.className='slot';
-    const nm=document.createElement('span'); nm.className='nm'; nm.textContent='Example';
-    const meta=document.createElement('span'); meta.className='meta';
-    meta.innerHTML='<b style="color:var(--ink)">Riverton</b> · a complete working town to explore';
-    const b=document.createElement('button'); b.className='primary'; b.textContent='Load';
-    b.onclick=()=>{ try{ loadSave(EXAMPLE_CITY); S.started=true; updateHUD(); applyCityName(); modal.classList.remove('open'); msg('<b>Welcome to Riverton.</b>'); }catch(_){ } };
-    row.appendChild(nm); row.appendChild(meta); row.appendChild(b);
+    let im;
+    if (m.th){ im=document.createElement('img'); im.src=m.th; }
+    else { im=document.createElement('div'); im.textContent='▦'; }
+    im.className='thumb';
+    row.appendChild(im);
+    const mid=document.createElement('div'); mid.className='mid';
+    mid.innerHTML='<span class="nm">'+(id==='auto'?'<b style="color:var(--amber)">AUTO</b> · ':'')+(m.cn||'Polis')+' · Year '+svYear(m.day)+'</span>'
+      +'<span class="meta">'+(m.pop||0).toLocaleString()+' pop · §'+(m.money||0).toLocaleString()+(m.g?(' · '+m.g+'×'+m.g):'')+' · '+ago(m.ts||Date.now())+'</span>';
+    row.appendChild(mid);
+    const lb=document.createElement('button'); lb.className='primary'; lb.textContent='Load';
+    lb.onclick=()=>{
+      try{
+        loadSave(o.code); modal.classList.remove('open');
+        S.started=true; updateHUD(); applyCityName();
+        msg('<b>City restored.</b> Welcome back, mayor.');
+      }catch(err){ statusEl.textContent=err.message; }
+    };
+    row.appendChild(lb);
+    if (mode==='save' && S.started && id!=='auto'){
+      const ob=document.createElement('button'); ob.textContent='⟳';
+      ob.title='Overwrite with the current city';
+      ob.onclick=async()=>{ ob.disabled=true; await svWrite(id); statusEl.textContent='Overwritten.'; renderSlots(mode); };
+      row.appendChild(ob);
+    }
+    if (id!=='auto'){
+      const db=document.createElement('button'); db.className='del'; db.textContent='✕';
+      db.onclick=async()=>{ if (!confirm('Delete this save?')) return; await svDelete(id); renderSlots(mode); };
+      row.appendChild(db);
+    }
     list.appendChild(row);
   }
-  SLOTS.forEach((id,i)=>{
-    const data=rows[i];
-    if (id==='auto' && !data) return;             // hide autosave row until one exists
-    const row=document.createElement('div'); row.className='slot';
-    const nm=document.createElement('span'); nm.className='nm'; nm.textContent=SLOT_NAMES[id];
-    const meta=document.createElement('span'); meta.className='meta';
-    meta.innerHTML = data
-      ? `<b style="color:var(--ink)">${data.cn||'Polis'}</b> · Year ${1+Math.floor(data.day/YEAR_DAYS)}, ${MONTHS[Math.floor(data.day/MONTH_DAYS)%12]} · ${data.pop.toLocaleString()} residents · §${data.money.toLocaleString()}<br><span style="color:#5a6a7d">${ago(data.ts)}</span>`
-      : '<span class="empty">empty — a fresh slot</span>';
-    row.appendChild(nm); row.appendChild(meta);
-    if (mode==='save' && id!=='auto'){
-      const b=document.createElement('button'); b.className='primary'; b.textContent=data?'Overwrite':'Save';
-      b.onclick=async ()=>{
-        b.textContent='…';
-        const ok=await writeSlot(id);
-        statusEl.style.color=''; statusEl.textContent= ok ? 'Saved to '+SLOT_NAMES[id]+'.' : 'Could not save — use the code below instead.';
-        renderSlots(mode);
-      };
-      row.appendChild(b);
-    }
-    if (data && (mode==='load' || id==='auto')){
-      const b=document.createElement('button'); b.className='primary'; b.textContent='Load';
-      b.onclick=()=>{
-        try{
-          loadSave(data.code);
-          modal.classList.remove('open');
-          if (!S.started){ S.started=true; document.getElementById('intro').style.display='none'; }
-          msg('<b>City restored</b> from '+SLOT_NAMES[id]+'. Welcome back, mayor.');
-        }catch(err){ statusEl.style.color='var(--red)'; statusEl.textContent=err.message; }
-      };
-      row.appendChild(b);
-    }
-    if (data){
-      const d=document.createElement('button'); d.className='del'; d.textContent='✕'; d.title='Delete this save';
-      d.onclick=async ()=>{ await store.del(id); renderSlots(mode); };
-      row.appendChild(d);
-    }
-    list.appendChild(row);
-  });
 }
 function openModal(mode){
   modal.classList.add('open');
@@ -6567,12 +6706,13 @@ document.getElementById('moreBtn').onclick=(e)=>{ e.stopPropagation(); moreMenu.
 moreMenu.querySelectorAll('button').forEach(b=>b.onclick=()=>{
   if (b.id==='aboutMenuBtn'){ document.getElementById('aboutModal').classList.add('open'); moreMenu.classList.remove('open'); return; }
   if (b.id==='disMenuBtn'){ openDisModal(); moreMenu.classList.remove('open'); return; }
+  if (b.id==='scenMenuBtn'){ document.getElementById('demoModal').classList.add('open'); moreMenu.classList.remove('open'); return; }
   if (b.id==='wxMenuBtn'){
     S.weather=!S.weather;
     try{ if (store.available()) localStorage.setItem('tlv_weather', S.weather?'1':'0'); }catch(_){}
     if (!S.weather){ WX.target=0; }
     SEAS._init=false; updateSeason(); dirty=true;
-    b.innerHTML='🌦&nbsp; Weather: '+(S.weather?'On':'Off');
+    { const l=b.querySelector('.mlbl'); if (l) l.textContent='Weather: '+(S.weather?'On':'Off'); }
     msg(S.weather?'<b>Seasonal weather on</b> — expect autumn colors, winter snow, and the odd shower.':'<b>Seasonal weather off</b> — eternal summer.');
     return;
   }
@@ -6580,7 +6720,7 @@ moreMenu.querySelectorAll('button').forEach(b=>b.onclick=()=>{
     PERF.saver=!PERF.saver;
     try{ localStorage.setItem('tlv_saver', PERF.saver?'1':'0'); }catch(_){}
     resize(); dirty=true;
-    b.innerHTML='🔋&nbsp; Power saver: '+(PERF.saver?'On':'Off');
+    { const l=b.querySelector('.mlbl'); if (l) l.textContent='Power saver: '+(PERF.saver?'On':'Off'); }
     msg(PERF.saver?'<b>Power saver on</b> — 30fps cap and lighter rendering. The simulation runs exactly the same.':'<b>Power saver off</b> — full 60fps and maximum sharpness.');
     return;
   }
@@ -6639,17 +6779,17 @@ function toggleFullscreen(){
   const fsb=document.getElementById('fsBtn');
   if (!document.fullscreenElement){
     (document.documentElement.requestFullscreen ? document.documentElement.requestFullscreen() : Promise.reject()).then(()=>{
-      if (fsb) fsb.innerHTML='⛶&nbsp; Exit fullscreen';
+      if (fsb){ const l=fsb.querySelector('.mlbl'); if (l) l.textContent='Exit fullscreen'; }
     }).catch(()=>msg('<b>Fullscreen unavailable</b> — try pressing F11 (Windows) or ⌃⌘F (Mac).'));
   } else {
     document.exitFullscreen && document.exitFullscreen();
-    if (fsb) fsb.innerHTML='⛶&nbsp; Fullscreen';
+    if (fsb){ const l=fsb.querySelector('.mlbl'); if (l) l.textContent='Fullscreen'; }
   }
 }
 { const pb2=document.getElementById('pwrMenuBtn');
-  if (pb2 && !PERF.saver) pb2.innerHTML='🔋&nbsp; Power saver: Off'; }
-{ const wb=document.getElementById('wxMenuBtn');
-  if (wb && store.available() && localStorage.getItem('tlv_weather')==='1'){ S.weather=true; wb.innerHTML='🌦&nbsp; Weather: On'; } }
+  if (pb2 && !PERF.saver){ const l=pb2.querySelector('.mlbl'); if (l) l.textContent='Power saver: Off'; } }
+{ const wb=document.querySelector('#wxMenuBtn .mlbl');
+  if (store.available() && localStorage.getItem('tlv_weather')==='1'){ S.weather=true; if (wb) wb.textContent='Weather: On'; } }
 document.addEventListener('pointerdown', e=>{
   if (!moreMenu.classList.contains('open')) return;
   const t=e.target;
@@ -6807,12 +6947,148 @@ function loadDemo(code, welcome){
   updateHUD(); applyCityName();
   setTimeout(()=>msg(welcome), 900);
 }
-document.getElementById('demoRiverton').onclick=()=>loadDemo(EXAMPLE_CITY,
-  '<b>Welcome to Riverton</b> — a working town. Inspect anything (key N), open the 📈 statistics, try the overlays below, or just keep building.');
-document.getElementById('demoMegara').onclick=()=>loadDemo(EXAMPLE_CITY2,
-  '<b>Welcome to Mégara</b> — a metropolis of 65,000. Tour the megatower canyons, check the Density and Power maps, watch the airports — then take the controls.');
-document.getElementById('demoAlexandria').onclick=()=>loadDemo(EXAMPLE_CITY3,
-  '<b>Welcome to Alexandria</b> — 200,000 souls under megatower spires. Forty reactors hum, two airports fly, and every demand is in balance. The city is yours.');
+/* ============ SCENARIOS — six challenges with goals and deadlines ============ */
+const SCEN={
+ first:{ t:'First Steps', icon:'🌱', years:4, goal:'2,500 residents · mood ≥ 60%',
+  check:()=>S.pop>=2500 && S.happy>=60,
+  start(){ scenFresh(30,0,null,'Neapolis');
+    msg('<b>First Steps</b> — grow a village of 2,500 happy residents within 4 years. Power, water, a road, homes — in that order. The 💡 Advisor is watching over you.'); } },
+ crash:{ t:'The Housing Crash', icon:'📉', years:6, goal:'restore 70,000 residents',
+  check:()=>S.pop>=70000,
+  start(){ loadDemo(EXAMPLE_CITY2,
+      '<b>The Housing Crash</b> — the previous mayor zoned homes and forgot the jobs. Demand has collapsed and people are leaving. Restore 70,000 residents within 6 years. The 💡 Advisor knows exactly what is wrong.');
+    let razed=0;
+    for (let y=0;y<G&&razed<110;y++) for (let x=0;x<G&&razed<110;x++){
+      const c=map[y][x];
+      if (c.grp&&!c.part&&(c.t==='com'||c.t==='ind')){ unmerge(x,y,'clear'); razed++; }
+    }
+    S.money=45000; recomputeNets(); recomputeFields(); dirty=true; updateHUD(); } },
+ blackout:{ t:'Blackout', icon:'⚡', years:4, goal:'195,000 residents on full power', hold:12,
+  check:()=>{
+    if (S.pop<195000) return false;
+    let un=0;
+    for (let y=0;y<G;y++) for (let x=0;x<G;x++){
+      const c=map[y][x];
+      if (c.lv>0 && !c.part && !c.pw && (ZONE[c.t]||c.grp)) un++;
+    }
+    return un<=2;
+  },
+  start(){ loadDemo(EXAMPLE_CITY3,
+      '<b>Blackout</b> — sabotage has taken most of the reactor fleet offline and the megatowers are going dark. Rebuild the grid: keep all 195,000+ residents fully powered for twelve straight months.');
+    let keep=12;
+    for (let y=0;y<G;y++) for (let x=0;x<G;x++){
+      const c=map[y][x];
+      if (c.t==='nuclear'&&c.grp&&!c.part){ if (keep>0){ keep--; continue; } unmerge(x,y,'clear'); }
+    }
+    S.money=180000; recomputeNets(); recomputeFields(); dirty=true; updateHUD(); } },
+ after:{ t:'Aftershock', icon:'🌋', years:5, goal:'rebuild to 60,000 residents',
+  check:()=>S.pop>=60000,
+  start(){ loadDemo(EXAMPLE_CITY2,
+      '<b>Aftershock</b> — a 7.4 earthquake tore a scar straight across the metropolis. Clear the rubble, restore the lines, and rebuild to 60,000 within 5 years.');
+    const ruin=(x,y)=>{
+      if (!inB(x,y)) return;
+      const c=map[y][x];
+      if (c.t==='water') return;
+      if (c.grp){ const [bx,by]=c.grp; unmerge(bx,by,'rubble'); return; }
+      if (ROADTYPE[c.t]){ if (c.bridge){ c.t='water'; c.bridge=false; } else c.t='grass'; c.bus=false; c.rail=false; return; }
+      if (c.lv>0 || SVC[c.t] || PLANT[c.t] || WSRC[c.t]){ c.rz=c.t; c.t='rubble'; c.lv=0; c.dev=20; }
+    };
+    let fx=0, fy=(G*0.34)|0;
+    while (fx<G){
+      for (let w=-3;w<=3;w++) if (Math.random()<0.75) ruin(fx, fy+w);
+      fx++; if (Math.random()<0.4) fy+=(Math.random()<0.5?-1:1);
+      fy=Math.max(4,Math.min(G-5,fy));
+    }
+    S.money=80000; recomputeNets(); recomputeFields(); dirty=true; updateHUD(); } },
+ flood:{ t:'The Flood Plain', icon:'🌊', years:10, goal:'25,000 residents despite the floods',
+  check:()=>S.pop>=25000,
+  start(){ scenFresh(40,1,11,'Deltapolis');
+    msg('<b>The Flood Plain</b> — fertile land, treacherous river. The waters WILL rise every other year. Reach 25,000 residents: build back from the banks, and remember that elevated rail does not mind the water.'); } },
+ iron:{ t:'Iron Budget', icon:'🪙', years:8, goal:'15,000 residents · §50,000 banked',
+  check:()=>S.pop>=15000 && S.money>=50000,
+  start(){ scenFresh(52,3,null,'Spartopolis'); S.money=6000; updateHUD();
+    msg('<b>Iron Budget</b> — Very Hard, §6,000 in the chest, and the banks will not lend to this city. Reach 15,000 residents with §50,000 banked inside 8 years. Every coin counts.'); } },
+};
+function scenFresh(size,diff,seed,name){
+  audioInit();
+  document.getElementById('demoModal').classList.remove('open');
+  document.getElementById('intro').style.display='none';
+  S.diff=diff;
+  setWorldSize(size);
+  if (seed!=null) genMap(seed); else genMap();
+  traffic.fill(0); cars.length=0; peds.length=0; smoke.length=0; dirtyRoads=true; dirtyWalk=true;
+  undoStack.length=0; redoStack.length=0; updateUndoUI();
+  S.money=DIFF[S.diff].money;
+  S.day=0; S.pop=0; S.jobs=0; S.tax=9;
+  S.fund={ police:100, fire:100, school:100, health:100 };
+  S.loan=null; S.loanPay=0; refreshLoanBox();
+  S.milestone=0; hist=[]; histStep=30;
+  WX.target=0; WX.rain=0; WX.until=0;
+  SEAS._init=false; updateSeason();
+  S.cityName=name||'Polis';
+  recomputeNets(); recomputeFields(); dirty=true;
+  setSpeed(1); refreshLocks(); S.started=true; updateHUD(); applyCityName();
+}
+function startScenario(id){
+  const d=SCEN[id]; if (!d) return;
+  d.start();
+  S.scen={ id, sd:S.day, hm:0 };
+  updateScenChip();
+}
+function scenTimeLeft(){
+  const d=SCEN[S.scen.id], left=d.years*360-(S.day-S.scen.sd);
+  if (left<=0) return 'time up';
+  const yy=(left/360)|0, mm=Math.max(1,Math.ceil((left%360)/30));
+  return (yy?yy+'y ':'')+mm+'m left';
+}
+function updateScenChip(){
+  const el=document.getElementById('scenChip'); if (!el) return;
+  if (!S.scen || !SCEN[S.scen.id]){ el.style.display='none'; return; }
+  const d=SCEN[S.scen.id];
+  el.style.display='block';
+  el.innerHTML=(MENU_IC['scn_'+S.scen.id]||'')+' <b>'+d.t+'</b> · '+d.goal+(d.hold?(' · '+(S.scen.hm||0)+'/'+d.hold+' mo'):'')+' · '+scenTimeLeft();
+}
+function scenModalShow(title, body, lose){
+  document.getElementById('scenMT').innerHTML=title;
+  document.getElementById('scenMB').innerHTML=body;
+  document.getElementById('scenRetry').style.display=lose?'':'none';
+  document.getElementById('scenModal').classList.add('open');
+}
+function scenarioTick(){
+  if (!S.scen) return;
+  const d=SCEN[S.scen.id]; if (!d){ S.scen=null; updateScenChip(); return; }
+  if (S.scen.id==='flood' && !DIS){ const e=S.day-S.scen.sd; if (e>=540 && ((e-540)%660)<30) triggerDisaster('flood'); }
+  let won=false;
+  if (d.check()){
+    if (d.hold){ S.scen.hm=(S.scen.hm||0)+1; if (S.scen.hm>=d.hold) won=true; }
+    else won=true;
+  } else S.scen.hm=0;
+  if (won){
+    S.money+=25000;
+    scenModalShow(MENU_IC.trophy+' '+d.t+' — complete!',
+      'Goal met: '+d.goal+'. The council votes you a §25,000 reward — and the city is yours to keep building.', false);
+    S.scen=null; updateScenChip(); updateHUD(); return;
+  }
+  if (S.day - S.scen.sd >= d.years*360){
+    const failed=S.scen.id;
+    scenModalShow(MENU_IC.hourglass+' '+d.t+' — time is up',
+      'The deadline passed without meeting the goal ('+d.goal+'). Retry from the start, or keep this city as a sandbox.', true);
+    S.scen=null; updateScenChip();
+    document.getElementById('scenRetry').onclick=()=>{ document.getElementById('scenModal').classList.remove('open'); startScenario(failed); };
+    return;
+  }
+  updateScenChip();
+}
+for (const sid of Object.keys(SCEN)){
+  const b=document.getElementById('scn_'+sid);
+  if (b) b.onclick=()=>{
+    if (S.started && !confirm('Start this scenario? Your current unsaved city will be replaced.')) return;
+    startScenario(sid);
+  };
+}
+injectMenuIcons();
+document.getElementById('scenCont').onclick=()=>document.getElementById('scenModal').classList.remove('open');
+document.getElementById('scenRetry').onclick=()=>document.getElementById('scenModal').classList.remove('open');
 document.getElementById('demoCancel').onclick=()=>document.getElementById('demoModal').classList.remove('open');
 
 document.getElementById('aboutClose').onclick=()=>document.getElementById('aboutModal').classList.remove('open');
@@ -6852,26 +7128,27 @@ document.getElementById('mapBegin').onclick=()=>{
   updateHUD();
   setTimeout(()=>msg('<b>Tip:</b> roads carry power <i>and</i> water. Build a <b>power plant</b> and a riverbank <b>water pump</b> next to your road, then zone <b>R</b>, <b>C</b> and <b>I</b>.'), 1200);
 };
-// offer to continue the most recent save (slots or autosave)
+// offer to continue the most recent save
 (async ()=>{
   if (!store.available()) return;
-  let best=null, bestId=null;
-  for (const id of SLOTS){
-    const s=await readSlot(id);
-    if (s && (!best || s.ts>best.ts)){ best=s; bestId=id; }
+  await svMigrate();
+  let best=null;
+  for (const id of ['auto', ...await svIndex()]){
+    const o=await svRead(id);
+    if (o && o.meta && (!best || (o.meta.ts||0)>(best.meta.ts||0))) best=o;
   }
   if (!best) return;
   const b=document.getElementById('continueBtn');
   b.style.display='';
-  b.textContent='CONTINUE · DAY '+best.day;
+  b.textContent='CONTINUE · '+(best.meta.cn||'POLIS').toUpperCase()+' · YEAR '+svYear(best.meta.day);
   b.onclick=()=>{
     audioInit();
     try{
       loadSave(best.code);
       document.getElementById('intro').style.display='none';
       S.started=true;
-      updateHUD();
-      msg('<b>City restored</b> from '+SLOT_NAMES[bestId]+'. Welcome back, mayor.');
+      updateHUD(); applyCityName();
+      msg('<b>City restored.</b> Welcome back, mayor.');
     }catch(err){
       b.textContent='SAVE DAMAGED — START FRESH';
       b.disabled=true;
