@@ -377,7 +377,8 @@
   #bsub .bchip.on{border-color:var(--amber)}
   #bsub .bchip.locked{opacity:.45}
   #bsub .bchip.locked .ic{filter:grayscale(1) brightness(.75)}
-  body.mob #ticker{order:0;width:auto;max-width:none;margin:0;font-size:11.5px;padding:7px 12px}
+  body.mob #ticker{position:fixed;left:8px;right:8px;bottom:calc(var(--bbarh,58px) + 8px);width:auto;max-width:none;margin:0;font-size:11.5px;padding:8px 14px;text-align:center;z-index:8;pointer-events:none}
+  body.mob #ticker:empty, body.mob #ticker[style*="opacity: 0"]{display:none}
   body.mob #views{display:none}
   body.mob #flatBtn{pointer-events:auto;background:rgba(16,26,38,.92);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:13px;padding:0 14px;height:46px;color:var(--ink);box-shadow:0 6px 24px rgba(0,0,0,.35);white-space:nowrap;font-size:12px}
   body.mob #flatBtn.on{border-color:var(--amber);color:var(--amber)}
@@ -8033,6 +8034,7 @@ function buildBBar(){
   // direct high-frequency chips pulled out of their categories
   const DIRECT=['bulldoze','inspect','pan'];
   for (const grp of groups) grp.leaves=grp.leaves.filter(l=>!DIRECT.includes(l.id));
+  const isUnlocked=(o)=>{ const d=TOOLDEF[o.id]; return !(d && d.lockAt!==undefined && S.milestone<d.lockAt); };
   const openCat=(grp,btn)=>{
     const was=btn.classList.contains('on');
     cats.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
@@ -8043,10 +8045,14 @@ function buildBBar(){
       const ch=document.createElement('button');
       ch.className='bchip'; ch.dataset.id=o.id;
       ch.innerHTML='<span class="ic" style="color:'+o.col+'">'+(tintI(ICONS[o.id])||o.ic)+'</span><span class="bl">'+o.n+'</span>'+(o.c?'<span class="bc">§'+o.c+'</span>':'');
-      ch.onclick=()=>setTool(o.id);
+      ch.onclick=()=>{ grp._cur=o.id; setTool(o.id); bbarSync(); };   // remember the player's pick
       sub.appendChild(ch);
     }
     sub.classList.add('open');
+    // one-tap: opening a category immediately selects its remembered (or first unlocked) leaf
+    const remembered = grp.leaves.find(l=>l.id===grp._cur && isUnlocked(l));
+    const pick = remembered || grp.leaves.find(isUnlocked);
+    if (pick){ grp._cur=pick.id; setTool(pick.id); }
     refreshLocks(); bbarSync(); bbarMeasure();
   };
   for (const grp of groups.filter(g2=>g2.leaves.length)){
