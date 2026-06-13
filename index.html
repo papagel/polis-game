@@ -190,7 +190,7 @@
   #tip .row span:last-child{font-family:'Chakra Petch'}
 
   /* zoom + budget */
-  #corner{right:10px;bottom:12px;display:flex;flex-direction:column;gap:6px}
+  #corner{right:calc(10px + env(safe-area-inset-right));bottom:12px;display:flex;flex-direction:column;gap:6px}
   #corner button.off{opacity:.32;pointer-events:none}
   #corner button{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:rgba(16,26,38,.92);color:var(--ink);font-size:18px;cursor:pointer}
   #corner button:hover{background:var(--panel2)}
@@ -326,7 +326,7 @@
   body.mob.mAll #views .madv{display:inline-block}
   body.mob #tools{top:56px;gap:3px;padding:6px;max-height:calc(100vh - 56px - 148px);scrollbar-width:none}
   body.mob #tools::-webkit-scrollbar{display:none}
-  body.mob #hdr{top:0;left:0;right:0;gap:6px}
+  body.mob #hdr{top:env(safe-area-inset-top);left:env(safe-area-inset-left);right:env(safe-area-inset-right);gap:6px}
   body.mob #top{border-radius:0 0 12px 12px;border-top:none;border-left:none}
   body.mob #zin, body.mob #zout{display:none}
   body.mob #corner{bottom:calc(var(--bbarh, 58px) + 14px)}
@@ -358,7 +358,7 @@
   body.mob #top button{flex:0 0 auto}
   body.mob #footer{left:0;right:54px;bottom:var(--bbarh,58px);padding:0 0 6px;flex-direction:column;align-items:stretch;gap:6px}
   #bbar{display:none}
-  body.mob #bbar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:9;border-radius:14px 14px 0 0;border-bottom:none;padding:6px 6px calc(7px + env(safe-area-inset-bottom))}
+  body.mob #bbar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:9;border-radius:14px 14px 0 0;border-bottom:none;padding:6px calc(6px + env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) calc(6px + env(safe-area-inset-left))}
   body.mob #tools{display:none}
   #bcats{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   #bcats::-webkit-scrollbar{display:none}
@@ -380,7 +380,7 @@
   body.mob #ticker{order:0;width:auto;max-width:none;margin:0;font-size:11.5px;padding:7px 12px}
   body.mob #views{display:none}
   #viewsBtn{display:none;position:fixed;left:8px;bottom:calc(var(--bbarh,58px) + 56px);z-index:8;width:46px;height:46px;align-items:center;justify-content:center;border-radius:13px;color:var(--ink)}
-  body.mob #viewsBtn{display:flex;gap:7px;padding:0 13px;width:auto;min-width:46px}
+  body.mob #viewsBtn{display:flex;gap:7px;padding:0 13px;width:auto;min-width:46px;left:calc(8px + env(safe-area-inset-left))}
   #viewsBtn.on{border-color:var(--amber);color:var(--amber);box-shadow:0 0 0 1px rgba(232,176,74,.25), 0 6px 24px rgba(0,0,0,.35)}
   #viewsBtn .vlbl{font-size:12px;font-family:'Chakra Petch';letter-spacing:.04em;white-space:nowrap}
   #viewSheet{display:none;position:fixed;left:0;right:0;bottom:0;z-index:44;border-radius:16px 16px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom));max-height:58vh;overflow-y:auto}
@@ -391,12 +391,12 @@
   #viewSheetList button.on{border-color:var(--amber);color:var(--amber)}
   body.mob #views::-webkit-scrollbar{display:none}
   body.mob #views button{padding:9px 10px;font-size:10.5px;white-space:nowrap;min-height:34px;flex:0 0 auto}
-  body.mob #audioPanel{top:58px}
+  body.mob #audioPanel{top:calc(58px + env(safe-area-inset-top))}
   .bsecH{cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between}
   .bsecA{color:var(--dim);font-size:11px;transition:transform .15s}
   .bsecH.closed .bsecA{transform:rotate(-90deg)}
   .bsec.closed{display:none}
-  #budget{max-height:calc(100vh - 120px);overflow-y:auto;scrollbar-width:thin}
+  #budget{max-height:calc(100vh - 120px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow-y:auto;scrollbar-width:thin}
   body.mob #budget{max-height:calc(100vh - var(--bbarh,58px) - 70px)}
   body.mob #budget .row{padding:2.5px 0}
   body.mob #budget .frow{padding:2px 0}
@@ -5267,7 +5267,7 @@ cv.addEventListener('pointermove', e=>{
     clearTimeout(tipTimer);
     tipTimer=setTimeout(()=>{                                    // others show after a dwell
       if (S.hover && S.hover[0]===gx && S.hover[1]===gy && !painting && !pend) showTip(gx,gy,false,true);
-    }, 450);
+    }, 850);
   }
 });
 let tipTimer=0;
@@ -5344,9 +5344,25 @@ window.addEventListener('keydown', e=>{
   if (e.key==='e') rotateAnim(1);
   if (e.key==='r' && FOOT[S.tool] && FOOT[S.tool][0]!==FOOT[S.tool][1]){ S.bOrient=!S.bOrient; refreshOrientChip(); }
   if (e.key==='f') toggleFlatten();
+  // tool selection hotkeys
+  if (!e.ctrlKey && !e.metaKey && !e.altKey){
+    const TK={ t:'road', e:'power', w:'pump', p:'police', l:'school', h:'hospital',
+               g:'park', c:'com', i:'ind', x:'bulldoze', n:'inspect' };
+    const k=e.key.toLowerCase();
+    // 'r' is taken by orient-rotate when a rotatable footprint is active; otherwise → Residential
+    if (k==='r' && !(FOOT[S.tool] && FOOT[S.tool][0]!==FOOT[S.tool][1])){ pickTool('res'); return; }
+    if (TK[k]){ pickTool(TK[k]); return; }
+  }
 });
 
 /* ---------- tooltip ---------- */
+function pickTool(id){
+  const grp = groupBtns.find(gb=>gb.t.id===id);
+  const target = grp ? grp.t.cur : id;
+  const def = TOOLDEF[target];
+  if (def && def.lockAt && S.milestone < def.lockAt){ sfxDeny(); msg('<b>'+def.n+'</b> unlocks at a larger settlement.'); return; }
+  hideFly(); setTool(target);
+}
 function refreshOrientChip(){
   const ch=document.getElementById('orientChip');
   if (!ch) return;
@@ -6263,8 +6279,9 @@ for (const t of TOOLS){
     t.cur=t.sub[0].id;
     groupBtns.push({btn:b, t});
     b.innerHTML=groupInner(t.sub[0], true);
-    const HKG={road:'T',fire:'F',hospital:'H',busstop:'U'};
-    b.title='Click to build · hover for options'+(HKG[t.id]?' · key '+HKG[t.id]:'');
+    const HKG={road:'T',power:'E',water:'W',police:'P',school:'L',hospital:'H',park:'G'};
+    if (HKG[t.id]) b.dataset.hk=HKG[t.id];
+    b.title=HKG[t.id]?('Key '+HKG[t.id]):'';
     b.onclick=()=>{
       const curDef=TOOLDEF[t.cur];
       if (S.tool===t.cur){ flyFor===t.id ? hideFly() : showFly(b,t); }   // already active → open the menu
@@ -6273,8 +6290,9 @@ for (const t of TOOLS){
     b.onmouseenter=()=>showFly(b,t);
   } else {
     b.innerHTML=groupInner(t,false);
-    const HK={res:'R',com:'C',ind:'I',bulldoze:'X',police:'P',park:'G',inspect:'N'};
-    b.title=`${t.n}${t.c?' — §'+t.c:''}${HK[t.id]?' · key '+HK[t.id]:''}`;
+    const HK={res:'R',com:'C',ind:'I',bulldoze:'X',inspect:'N',pan:'space'};
+    if (HK[t.id]) b.dataset.hk=HK[t.id];
+    b.title=HK[t.id]?('Key '+HK[t.id]):'';
     b.onclick=()=>{ hideFly(); setTool(S.tool===t.id && t.id!=='pan' ? 'pan' : t.id); };
     b.onmouseenter=()=>hideFly();
   }
@@ -7860,6 +7878,32 @@ function drawAppIcon(g, S2){
     g.fillRect(cx2+5*u+c2*5*u, gy-20*u+r*4*u - c2*1.2*u, 2*u, 2.4*u);
   }
 }
+function drawFavSmall(g, S2){
+  const u=S2/16;
+  g.fillStyle='#101b2e'; g.fillRect(0,0,S2,S2);
+  const cx2=S2*0.5, gy=S2*0.72;
+  g.fillStyle='#46a05f';
+  g.beginPath(); g.moveTo(cx2, gy-2.6*u); g.lineTo(cx2+5*u, gy); g.lineTo(cx2, gy+2.6*u); g.lineTo(cx2-5*u, gy); g.closePath(); g.fill();
+  g.fillStyle='rgba(0,0,0,.18)';
+  g.beginPath(); g.moveTo(cx2, gy); g.lineTo(cx2+5*u, gy); g.lineTo(cx2, gy+2.6*u); g.lineTo(cx2-5*u, gy); g.closePath(); g.fill();
+  const box=(w,top,bot,L,R)=>{
+    g.fillStyle=R; g.beginPath(); g.moveTo(cx2,bot+w*.5); g.lineTo(cx2+w,bot); g.lineTo(cx2+w,top); g.lineTo(cx2,top+w*.5); g.closePath(); g.fill();
+    g.fillStyle=L; g.beginPath(); g.moveTo(cx2,bot+w*.5); g.lineTo(cx2-w,bot); g.lineTo(cx2-w,top); g.lineTo(cx2,top+w*.5); g.closePath(); g.fill();
+    g.fillStyle='#8da2da'; g.beginPath(); g.moveTo(cx2,top+w*.5); g.lineTo(cx2+w,top); g.lineTo(cx2,top-w*.5); g.lineTo(cx2-w,top); g.closePath(); g.fill();
+  };
+  box(3.4*u, gy-5.5*u, gy-0.4*u, '#5d72b2','#46598f');
+  box(2.1*u, gy-8.6*u, gy-5.5*u, '#6479bd','#4d63a0');
+  g.fillStyle='#e8b04a'; g.fillRect(cx2-2.1*u, gy-9*u, 4.2*u, 1*u);
+  g.fillStyle='#ffd23f'; g.fillRect(cx2-0.55*u, gy-11.2*u, 1.1*u, 2.2*u);
+  g.beginPath(); g.arc(cx2, gy-11.5*u, 0.95*u, 0, 7); g.fill();
+}
+function favURL(size){
+  try{
+    const c2=document.createElement('canvas'); c2.width=size; c2.height=size;
+    (size<=24 ? drawFavSmall : drawAppIcon)(c2.getContext('2d'), size);
+    return c2.toDataURL('image/png');
+  }catch(_){ return null; }
+}
 function appIconURL(size){
   try{
     const c2=document.createElement('canvas'); c2.width=size; c2.height=size;
@@ -7876,6 +7920,13 @@ function pwaInit(){
       l.rel='apple-touch-icon'; l.sizes='180x180'; l.href=i180;
       document.head.appendChild(l);
     }
+    // favicons: simplified silhouette at 16, fuller tower at 32 & 48
+    [[16,favURL(16)],[32,favURL(32)],[48,favURL(48)]].forEach(([sz,href])=>{
+      if (!href) return;
+      const fl=document.createElement('link');
+      fl.rel='icon'; fl.type='image/png'; fl.sizes=sz+'x'+sz; fl.href=href;
+      document.head.appendChild(fl);
+    });
     const i192=appIconURL(192), i512=appIconURL(512);
     if (i192 && i512 && window.Blob && window.URL && URL.createObjectURL){
       const man={
