@@ -382,7 +382,7 @@
   body.mob #views{display:none}
   body.mob #flatBtn{pointer-events:auto;background:rgba(16,26,38,.92);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:13px;padding:0 14px;height:46px;color:var(--ink);box-shadow:0 6px 24px rgba(0,0,0,.35);white-space:nowrap;font-size:12px}
   body.mob #flatBtn.on{border-color:var(--amber);color:var(--amber)}
-  #viewsBtn{display:none;position:fixed;left:8px;bottom:calc(var(--bbarh,58px) + 56px);z-index:8;width:46px;height:46px;align-items:center;justify-content:center;border-radius:13px;color:var(--ink)}
+  #viewsBtn{display:none;position:fixed;left:8px;bottom:calc(var(--bbarh,58px) + 8px);z-index:8;width:46px;height:46px;align-items:center;justify-content:center;border-radius:13px;color:var(--ink)}
   body.mob #viewsBtn{display:flex;gap:7px;padding:0 13px;width:auto;min-width:46px;left:calc(8px + env(safe-area-inset-left))}
   #viewsBtn.on{border-color:var(--amber);color:var(--amber);box-shadow:0 0 0 1px rgba(232,176,74,.25), 0 6px 24px rgba(0,0,0,.35)}
   #viewsBtn .vlbl{font-size:12px;font-family:'Chakra Petch';letter-spacing:.04em;white-space:nowrap}
@@ -1187,7 +1187,10 @@ function adjCongested(x,y){
   return false;
 }
 function fmt(n){ return '§' + Math.round(n).toLocaleString('en-US'); }
-function msg(t){ const el=document.getElementById('ticker'); el.innerHTML=t; el.style.opacity=1; el.style.display=''; S.msgT = performance.now(); }
+function msg(t){ const el=document.getElementById('ticker'); el.innerHTML=t; el.style.opacity=1; el.style.display=''; S.msgT = performance.now();
+  // on mobile the ticker lives inside the bottom bar — its height feeds --bbarh, which the
+  // map button and undo/redo/reset cluster sit above. Re-measure so they never hide behind it.
+  if (document.body.classList.contains('mob') && typeof bbarMeasure==='function'){ bbarMeasure(); requestAnimationFrame(bbarMeasure); } }
 
 /* ---------- power, water, pollution, coverage ---------- */
 function recomputePower(){
@@ -2528,30 +2531,80 @@ function drawCell(x,y,now){
   const v=c.vary;
   switch(c.t){
     case 'rstation': {
-      const cxp=sx, cyp=sy+TH/2*z, dh=RAIL_H*z;
-      diamond(sx,sy); cx.fillStyle=shade('#9aa0ae',.95); cx.fill();
-      cx.strokeStyle='#56506b'; cx.lineWidth=Math.max(1.2,2.2*z);
-      cx.beginPath();
-      cx.moveTo(cxp-6*z, cyp); cx.lineTo(cxp-6*z, cyp-dh+2*z);
-      cx.moveTo(cxp+6*z, cyp); cx.lineTo(cxp+6*z, cyp-dh+2*z);
-      cx.stroke();
-      // elevated platform + canopy
-      cx.fillStyle='#7a7492';
-      cx.beginPath(); cx.ellipse(cxp, cyp-dh+1*z, 11*z, 4.6*z, 0, 0, 7); cx.fill();
-      cx.fillStyle='#8a6fd1';
-      cx.beginPath(); cx.ellipse(cxp, cyp-dh-4.5*z, 8.6*z, 3.4*z, 0, 0, 7); cx.fill();
-      cx.strokeStyle='#5c4a96'; cx.lineWidth=Math.max(.8,1.1*z);
-      cx.beginPath();
-      cx.moveTo(cxp-7*z, cyp-dh); cx.lineTo(cxp-7*z, cyp-dh-4*z);
-      cx.moveTo(cxp+7*z, cyp-dh); cx.lineTo(cxp+7*z, cyp-dh-4*z);
-      cx.stroke();
+      const cxp=sx, cyp=sy+TH/2*z, dh=RAIL_H*z, hw0=TW/2*z, hh0=TH/2*z;
       const live = railStations.some(st=>st[0]===x&&st[1]===y);
-      cx.fillStyle = live ? (night?'#ffe28a':'#3ddc84') : '#a85b4b';
-      cx.beginPath(); cx.arc(cxp, cyp-dh-6.5*z, 1.5*z, 0, 7); cx.fill();
-      if (night && live){
-        cx.fillStyle='rgba(255,226,138,.18)';
-        cx.beginPath(); cx.ellipse(cxp, cyp-dh+1*z, 12*z, 5*z, 0, 0, 7); cx.fill();
+      // diamond corners at footprint scale s, lifted L pixels above the tile plane
+      const dpt=(s,L)=>({ T:[cxp,cyp-hh0*s-L], R:[cxp+hw0*s,cyp-L], B:[cxp,cyp+hh0*s-L], L:[cxp-hw0*s,cyp-L] });
+      const quad=(a,b,c2,d2)=>{ cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.lineTo(c2[0],c2[1]); cx.lineTo(d2[0],d2[1]); cx.closePath(); cx.fill(); };
+      const tri=(a,b,c2)=>{ cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.lineTo(c2[0],c2[1]); cx.closePath(); cx.fill(); };
+      // ground shadow + paved base
+      cx.fillStyle='rgba(10,16,28,.20)';
+      cx.beginPath(); cx.ellipse(cxp+2*z, cyp+3*z, 13*z, 5*z, 0,0,7); cx.fill();
+      diamond(sx,sy); cx.fillStyle=shade('#9aa0ae',.95); cx.fill();
+      // four pylons carry the platform
+      const pS=0.9, slabH=3.4*z, g0=dpt(pS,0), d0=dpt(pS,dh), pw=1.9*z;
+      for (const k of ['T','L','R','B']){
+        cx.fillStyle='#5b566e'; cx.fillRect(g0[k][0]-pw, d0[k][1], pw, g0[k][1]-d0[k][1]);
+        cx.fillStyle='#6f6a86'; cx.fillRect(g0[k][0], d0[k][1], pw, g0[k][1]-d0[k][1]);
       }
+      // platform slab: front side faces + purple transit fascia + deck top
+      cx.fillStyle='#6a6582'; quad(d0.L, d0.B, [d0.B[0],d0.B[1]+slabH], [d0.L[0],d0.L[1]+slabH]);
+      cx.fillStyle='#7b7693'; quad(d0.B, d0.R, [d0.R[0],d0.R[1]+slabH], [d0.B[0],d0.B[1]+slabH]);
+      cx.fillStyle='#8a6fd1';
+      quad([d0.L[0],d0.L[1]+slabH*0.5],[d0.B[0],d0.B[1]+slabH*0.5],[d0.B[0],d0.B[1]+slabH],[d0.L[0],d0.L[1]+slabH]);
+      quad([d0.B[0],d0.B[1]+slabH*0.5],[d0.R[0],d0.R[1]+slabH*0.5],[d0.R[0],d0.R[1]+slabH],[d0.B[0],d0.B[1]+slabH]);
+      cx.fillStyle='#928db0'; quad(d0.T,d0.R,d0.B,d0.L);
+      cx.strokeStyle='rgba(255,250,240,.22)'; cx.lineWidth=Math.max(.7,.9*z);
+      cx.beginPath(); cx.moveTo(d0.L[0],d0.L[1]); cx.lineTo(d0.T[0],d0.T[1]); cx.lineTo(d0.R[0],d0.R[1]); cx.stroke();
+      // tracks run onto the platform from each connected rail neighbour
+      const W=3.4*z;
+      for (const [dx2,dy2] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx=x+dx2, ny=y+dy2; if(!inB(nx,ny)||!map[ny][nx].rail) continue;
+        const [nsx,nsy]=tileScreen(nx,ny);
+        const M=[(cxp+nsx)/2,(cyp-dh+nsy+hh0-dh)/2];
+        let vx=M[0]-cxp, vy=M[1]-(cyp-dh); const m=Math.hypot(vx,vy)||1; vx/=m; vy/=m;
+        const px=-vy, py=vx, S0=[cxp+vx*5*z,(cyp-dh)+vy*5*z];
+        cx.fillStyle='#6e6886';
+        quad([S0[0]+px*W,S0[1]+py*W],[M[0]+px*W,M[1]+py*W],[M[0]-px*W,M[1]-py*W],[S0[0]-px*W,S0[1]-py*W]);
+        cx.strokeStyle='#d8d4e8'; cx.lineWidth=Math.max(.6,.8*z);
+        cx.beginPath();
+        cx.moveTo(S0[0]+px*W*.42,S0[1]+py*W*.42); cx.lineTo(M[0]+px*W*.42,M[1]+py*W*.42);
+        cx.moveTo(S0[0]-px*W*.42,S0[1]-py*W*.42); cx.lineTo(M[0]-px*W*.42,M[1]-py*W*.42);
+        cx.stroke();
+      }
+      if (night && live){
+        cx.fillStyle='rgba(255,226,138,.13)';
+        cx.beginPath(); cx.ellipse(cxp, cyp-dh+1*z, 14*z, 6*z, 0,0,7); cx.fill();
+      }
+      // station house on the deck
+      const hS=0.46, bH=8.5*z, hb=dpt(hS,dh), ht=dpt(hS,dh+bH);
+      cx.fillStyle=shade('#d7d4e2',.66); quad(ht.L,ht.B,hb.B,hb.L);
+      cx.fillStyle=shade('#d7d4e2',.86); quad(ht.B,ht.R,hb.R,hb.B);
+      // glazed waiting hall: a lit ribbon along both visible walls
+      const glass = live ? (night?'rgba(255,226,138,.95)':'rgba(150,185,220,.9)') : 'rgba(95,110,140,.85)';
+      const drop=[0,bH], wy0=0.28, wy1=0.66;
+      const eL=(u,v)=>[ht.L[0]+(ht.B[0]-ht.L[0])*u+drop[0]*v, ht.L[1]+(ht.B[1]-ht.L[1])*u+drop[1]*v];
+      const eR=(u,v)=>[ht.B[0]+(ht.R[0]-ht.B[0])*u+drop[0]*v, ht.B[1]+(ht.R[1]-ht.B[1])*u+drop[1]*v];
+      cx.fillStyle=glass;
+      quad(eL(.12,wy0),eL(.9,wy0),eL(.9,wy1),eL(.12,wy1));
+      quad(eR(.1,wy0),eR(.88,wy0),eR(.88,wy1),eR(.1,wy1));
+      cx.strokeStyle='rgba(20,16,34,.30)'; cx.lineWidth=Math.max(.5,.6*z);
+      cx.beginPath(); cx.moveTo(eL(.5,wy0)[0],eL(.5,wy0)[1]); cx.lineTo(eL(.5,wy1)[0],eL(.5,wy1)[1]);
+      cx.moveTo(eR(.5,wy0)[0],eR(.5,wy0)[1]); cx.lineTo(eR(.5,wy1)[0],eR(.5,wy1)[1]); cx.stroke();
+      // purple hip-roof canopy with overhanging eaves
+      const rS=0.62, roofH=6.5*z, rb=dpt(rS,dh+bH), peak=[cxp,cyp-(dh+bH)-roofH];
+      cx.fillStyle=shade('#8a6fd1',1.06); tri(rb.L,rb.T,peak);
+      cx.fillStyle=shade('#8a6fd1',1.14); tri(rb.T,rb.R,peak);
+      cx.fillStyle=shade('#8a6fd1',.70);  tri(rb.L,rb.B,peak);
+      cx.fillStyle=shade('#8a6fd1',.84);  tri(rb.B,rb.R,peak);
+      cx.strokeStyle='rgba(20,12,40,.35)'; cx.lineWidth=Math.max(.7,.8*z);
+      cx.beginPath(); cx.moveTo(rb.L[0],rb.L[1]); cx.lineTo(rb.B[0],rb.B[1]); cx.lineTo(rb.R[0],rb.R[1]); cx.stroke();
+      // finial + line-status beacon
+      cx.strokeStyle='#4a3f6e'; cx.lineWidth=Math.max(.8,1*z);
+      cx.beginPath(); cx.moveTo(peak[0],peak[1]); cx.lineTo(peak[0],peak[1]-3.5*z); cx.stroke();
+      if (live){ cx.fillStyle=hexA(night?'#ffe28a':'#3ddc84',.5); cx.beginPath(); cx.arc(peak[0],peak[1]-4.6*z,3*z,0,7); cx.fill(); }
+      cx.fillStyle = live ? (night?'#ffe28a':'#3ddc84') : '#a85b4b';
+      cx.beginPath(); cx.arc(peak[0],peak[1]-4.6*z,1.6*z,0,7); cx.fill();
       break;
     }
     case 'grass': {
@@ -2662,14 +2715,34 @@ function drawCell(x,y,now){
           cx.beginPath(); cx.moveTo(p1x,p1y); cx.lineTo(p2x,p2y); cx.stroke();
         }
         cx.lineCap='butt';
-        // sidewalks: paved bands along both sides of every connection
+        // sidewalks: paved bands hugging the tile edges on both sides of the road
         cx.fillStyle='#6e7a88';
-        for (const [dx,dy] of conns){
-          for (const sgn of [1,-1]){
-            const o1=.36*sgn, o2=.50*sgn;
-            const a=P(x+.5-dy*o1, y+.5+dx*o1), b2=P(x+.5+dx*.5-dy*o1, y+.5+dy*.5+dx*o1);
-            const c2=P(x+.5+dx*.5-dy*o2, y+.5+dy*.5+dx*o2), d2=P(x+.5-dy*o2, y+.5+dx*o2);
-            cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b2[0],b2[1]); cx.lineTo(c2[0],c2[1]); cx.lineTo(d2[0],d2[1]); cx.closePath(); cx.fill();
+        const bend = conns.length===2 && (conns[0][0]!==-conns[1][0] || conns[0][1]!==-conns[1][1]);
+        if (bend){
+          // a turn: each side is a mitred band that runs along the two tile edges
+          // and turns at the corner — it never cuts a shortcut across the asphalt
+          const d1=conns[0], dB=conns[1];
+          const Ax=x+.5+d1[0]*.5, Ay=y+.5+d1[1]*.5, Bx=x+.5+dB[0]*.5, By=y+.5+dB[1]*.5;
+          const band=(n1,n2)=>{
+            const k=1+(n1[0]*n2[0]+n1[1]*n2[1]);                  // miter scale (perp→1)
+            const mit=o=>[x+.5+(n1[0]+n2[0])*o/k, y+.5+(n1[1]+n2[1])*o/k];
+            const pl=[[Ax+n1[0]*.36,Ay+n1[1]*.36], mit(.36), [Bx+n2[0]*.36,By+n2[1]*.36],
+                      [Bx+n2[0]*.50,By+n2[1]*.50], mit(.50), [Ax+n1[0]*.50,Ay+n1[1]*.50]];
+            cx.beginPath();
+            for (let i=0;i<pl.length;i++){ const q=P(pl[i][0],pl[i][1]); i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1]); }
+            cx.closePath(); cx.fill();
+          };
+          const nL1=[d1[1],-d1[0]], nL2=[-dB[1],dB[0]];           // left of travel A->C->B
+          band(nL1,nL2);
+          band([-nL1[0],-nL1[1]],[-nL2[0],-nL2[1]]);
+        } else {
+          for (const [dx,dy] of conns){
+            for (const sgn of [1,-1]){
+              const o1=.36*sgn, o2=.50*sgn;
+              const a=P(x+.5-dy*o1, y+.5+dx*o1), b2=P(x+.5+dx*.5-dy*o1, y+.5+dy*.5+dx*o1);
+              const c2=P(x+.5+dx*.5-dy*o2, y+.5+dy*.5+dx*o2), d2=P(x+.5-dy*o2, y+.5+dx*o2);
+              cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b2[0],b2[1]); cx.lineTo(c2[0],c2[1]); cx.lineTo(d2[0],d2[1]); cx.closePath(); cx.fill();
+            }
           }
         }
         // markings: solid amber median + dashed white lanes, drawn in grid space so they meet across tiles
@@ -2678,9 +2751,13 @@ function drawCell(x,y,now){
           cx.strokeStyle='rgba(255,196,90,.85)'; cx.lineWidth=Math.max(1,1.5*z); cx.setLineDash([]);
           cx.beginPath(); cx.moveTo(c1x,c1y); cx.lineTo(e1x,e1y); cx.stroke();
           cx.strokeStyle='rgba(240,244,248,.55)'; cx.lineWidth=Math.max(1,1.1*z); cx.setLineDash([3.5*z,4*z]);
+          const other = bend ? (conns[0][0]===dx&&conns[0][1]===dy ? conns[1] : conns[0]) : null;
           for (const sgn of [1,-1]){
             const px2=-dy*.21*sgn, py2=dx*.21*sgn;
-            const [a1x,a1y]=P(x+.5+px2, y+.5+py2), [a2x,a2y]=P(x+.5+dx*.5+px2, y+.5+dy*.5+py2);
+            // on a bend the inner lane line starts on the OTHER arm's median —
+            // pull its inner end back along the arm so it doesn't spill onto the yellow
+            const t0 = (other && Math.sign((-dy)*other[0]+dx*other[1])===sgn) ? 0.34 : 0;
+            const [a1x,a1y]=P(x+.5+dx*.5*t0+px2, y+.5+dy*.5*t0+py2), [a2x,a2y]=P(x+.5+dx*.5+px2, y+.5+dy*.5+py2);
             cx.beginPath(); cx.moveTo(a1x,a1y); cx.lineTo(a2x,a2y); cx.stroke();
           }
           cx.setLineDash([]);
@@ -3819,73 +3896,185 @@ function stepTrains(dt){
   }
 }
 function drawTrains(night){
-  const z=S.zoom, dy=13*z;
+  const z=S.zoom, dy=RAIL_H*z;
+  const quad=(a,b,c2,d2)=>{ cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.lineTo(c2[0],c2[1]); cx.lineTo(d2[0],d2[1]); cx.closePath(); cx.fill(); };
   for (const tr of trains){
-    for (let k=0;k<3;k++){
-      const uu=tr.u-k*0.66;
+    // forward direction at the lead car decides paint order (far car first)
+    const luu=Math.max(0,Math.min(tr.path.length-1.001, tr.u));
+    const li=Math.min(tr.path.length-2, luu|0);
+    const [lp0,lp1]=[tr.path[li], tr.path[Math.min(tr.path.length-1,li+1)]];
+    const [la,lb]=tileScreen(lp0[0],lp0[1]), [lc,ld2]=tileScreen(lp1[0],lp1[1]);
+    const order = (ld2-lb)>=0 ? [2,1,0] : [0,1,2];   // descending screen-y painted last
+    for (const k of order){
+      const uu=tr.u-k*0.34;   // tight coupling so the cars read as one train
       if (uu<0 || uu>tr.path.length-1) continue;
       const i0=Math.min(tr.path.length-2, uu|0), f=uu-i0;
       const [x0,y0]=tr.path[i0], [x1,y1]=tr.path[Math.min(tr.path.length-1,i0+1)];
       const [sa,sb]=tileScreen(x0,y0), [sc,sd]=tileScreen(x1,y1);
       const cx0=sa+(sc-sa)*f, cy0=(sb+TH/2*z)+((sd+TH/2*z)-(sb+TH/2*z))*f - dy;
-      let vx=sc-sa, vy=(sd)-(sb); const m=Math.hypot(vx,vy)||1; vx/=m; vy/=m;
-      const L=10*z, W=2.6*z, px=-vy, py=vx;
-      cx.fillStyle = k===0 ? '#8d7ae0' : '#7e6bd6';
+      let vx=sc-sa, vy=(sd-sb); const m=Math.hypot(vx,vy)||1; vx/=m; vy/=m;
+      const lead=(k===0), tailC=(k===2);
+      const hl=5.5*z, W=2.7*z, carH=5.4*z, px=-vy, py=vx;
+      const sgn = py>=0?1:-1, P=[px*sgn,py*sgn];            // P points toward camera (lower)
+      const ext = lead?2.0*z:0, fhw = lead?W*0.62:W;        // streamlined nose on the lead car
+      const frC=[cx0+vx*(hl+ext), cy0+vy*(hl+ext)], bkC=[cx0-vx*hl, cy0-vy*hl];
+      const UP=carH;                                        // body rises above the deck
+      // footprint corners on the deck (camera side uses +P), roof = footprint lifted UP
+      const fBL=[bkC[0]+P[0]*W,  bkC[1]+P[1]*W ],  rBL=[bkC[0]+P[0]*W,  bkC[1]+P[1]*W -UP];
+      const fFL=[frC[0]+P[0]*fhw,frC[1]+P[1]*fhw], rFL=[frC[0]+P[0]*fhw,frC[1]+P[1]*fhw-UP];
+      const fFR=[frC[0]-P[0]*fhw,frC[1]-P[1]*fhw], rFR=[frC[0]-P[0]*fhw,frC[1]-P[1]*fhw-UP];
+      const fBR=[bkC[0]-P[0]*W,  bkC[1]-P[1]*W ],  rBR=[bkC[0]-P[0]*W,  bkC[1]-P[1]*W -UP];
+      const bodyCol = lead?'#9a86ea':'#8472d6';
+      // soft shadow on the deck
+      cx.fillStyle='rgba(8,10,22,.20)';
+      cx.beginPath(); cx.ellipse(cx0, cy0+1.5*z, hl*1.15, W*1.25, 0,0,7); cx.fill();
+      // camera-facing side, from roof edge down to the deck
+      cx.fillStyle=shade(bodyCol,.62); quad(rBL,rFL,fFL,fBL);
+      // front end-cap (the nose)
+      cx.fillStyle=shade(bodyCol,.5); quad(rFL,rFR,fFR,fFL);
+      // side helpers: u along the car, v from roof(0) to deck(1)
+      const sp=(u,v)=>[ rBL[0]+(rFL[0]-rBL[0])*u, rBL[1]+(rFL[1]-rBL[1])*u + UP*v ];
+      // accent skirt stripe low on the side
+      cx.fillStyle=shade(lead?'#ffd36a':'#b9a6f4', .9);
+      quad(sp(0,0.66),sp(1,0.66),sp(1,0.84),sp(0,0.84));
+      // window band
+      const u0=lead?0.22:0.07, u1=0.94;
+      cx.fillStyle = night?'rgba(255,228,150,.95)':'rgba(150,185,215,.92)';
+      quad(sp(u0,0.22),sp(u1,0.22),sp(u1,0.5),sp(u0,0.5));
+      cx.strokeStyle='rgba(18,14,32,.55)'; cx.lineWidth=Math.max(.5,.6*z);
       cx.beginPath();
-      cx.moveTo(cx0-vx*L/2+px*W, cy0-vy*L/2+py*W);
-      cx.lineTo(cx0+vx*L/2+px*W, cy0+vy*L/2+py*W);
-      cx.lineTo(cx0+vx*L/2-px*W, cy0+vy*L/2-py*W);
-      cx.lineTo(cx0-vx*L/2-px*W, cy0-vy*L/2-py*W);
-      cx.closePath(); cx.fill();
-      cx.fillStyle = night ? 'rgba(255,226,138,.95)' : 'rgba(225,238,250,.9)';
-      cx.fillRect(cx0-vx*L*0.36-px*W*0.4-1.6*z, cy0-vy*L*0.36-py*W*0.4-2.0*z, L*0.72, 1.6*z);
-      if (k===0){ cx.fillStyle='#fff7d0'; cx.beginPath(); cx.arc(cx0+vx*L/2, cy0+vy*L/2, 1.1*z, 0, 7); cx.fill(); }
+      for (let u=u0+0.12; u<u1-0.02; u+=0.16){ const a=sp(u,0.22), b=sp(u,0.5); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); }
+      cx.stroke();
+      // roof
+      cx.fillStyle=shade(bodyCol,1.05); quad(rBL,rFL,rFR,rBR);
+      cx.strokeStyle=shade(bodyCol,1.2); cx.lineWidth=Math.max(.5,.6*z);
+      cx.beginPath(); cx.moveTo(rBL[0],rBL[1]); cx.lineTo(rFL[0],rFL[1]); cx.stroke();
+      // roof AC unit + pantograph on the lead car
+      cx.fillStyle=shade(bodyCol,.8);
+      const rc=[cx0-vx*1.5*z, cy0-vy*1.5*z-UP];
+      cx.fillRect(rc[0]-1.6*z, rc[1]-1.1*z, 3.2*z, 2.2*z);
+      if (lead){
+        cx.strokeStyle='#3a3450'; cx.lineWidth=Math.max(.6,.7*z);
+        const pa=[cx0+vx*0.5*z, cy0+vy*0.5*z-UP];
+        cx.beginPath(); cx.moveTo(pa[0]-2*z, pa[1]); cx.lineTo(pa[0], pa[1]-2.6*z); cx.lineTo(pa[0]+2*z, pa[1]); cx.stroke();
+      }
+      // lamps
+      if (lead){
+        cx.fillStyle = night?'#fff6d2':'#ffe9a8';
+        const lp=[ (fFL[0]+fFR[0])/2, (fFL[1]+fFR[1])/2 - UP*0.32 ];
+        cx.beginPath(); cx.arc(lp[0], lp[1], 1.2*z, 0,7); cx.fill();
+        if (night){ cx.fillStyle='rgba(255,246,210,.35)'; cx.beginPath(); cx.arc(frC[0], frC[1]-UP*0.3, 4*z, 0,7); cx.fill(); }
+      }
+      if (tailC){
+        cx.fillStyle = night?'#ff6b5e':'#d8473b';
+        const tp=[ (fBL[0]+fBR[0])/2, (fBL[1]+fBR[1])/2 - UP*0.32 ];
+        cx.beginPath(); cx.arc(tp[0], tp[1], 1.1*z, 0,7); cx.fill();
+      }
     }
   }
 }
 const RAIL_H=13;
+/* offset endpoints for a rail lane A->C->B at perpendicular distance side*off.
+   The control point sits on the bend's bisector so the two parallel lanes of a
+   turn curve cleanly through the centre instead of crossing each other. */
+function railLane(A,C,B,off,side){
+  let ax=C[0]-A[0], ay=C[1]-A[1]; let m=Math.hypot(ax,ay)||1; ax/=m; ay/=m;
+  let bx=B[0]-C[0], by=B[1]-C[1]; m=Math.hypot(bx,by)||1; bx/=m; by/=m;
+  const nA=[-ay,ax], nB=[-by,bx];
+  let nm=[nA[0]+nB[0],nA[1]+nB[1]]; m=Math.hypot(nm[0],nm[1])||1; nm=[nm[0]/m,nm[1]/m];
+  return { PA:[A[0]+side*off*nA[0],A[1]+side*off*nA[1]],
+           PB:[B[0]+side*off*nB[0],B[1]+side*off*nB[1]],
+           C:[C[0]+side*off*nm[0],C[1]+side*off*nm[1]] };
+}
 function drawRail(x,y){
   const z=S.zoom, [sx,sy]=tileScreen(x,y), cxp=sx, cyp=sy+TH/2*z, dh=RAIL_H*z;
-  // pylon legs
-  cx.strokeStyle='#56506b'; cx.lineWidth=Math.max(1,1.8*z);
-  cx.beginPath();
-  cx.moveTo(cxp-3*z, cyp-0.5*z); cx.lineTo(cxp-3*z, cyp-dh+2.5*z);
-  cx.moveTo(cxp+3*z, cyp-0.5*z); cx.lineTo(cxp+3*z, cyp-dh+2.5*z);
-  cx.stroke();
-  cx.fillStyle='rgba(10,16,28,.20)';
-  cx.beginPath(); cx.ellipse(cxp+2*z, cyp+2.5*z, 7*z, 2.6*z, 0, 0, 7); cx.fill();
-  // deck segments toward connected neighbours (other rails or stations)
-  const seg=(bx2,by2)=>{
-    let vx=bx2-cxp, vy=by2-(cyp-dh); const m=Math.hypot(vx,vy)||1; vx/=m; vy/=m;
-    const px2=-vy, py2=vx, W=3.4*z;
-    cx.fillStyle='#6e6886';
-    cx.beginPath();
-    cx.moveTo(cxp+px2*W, cyp-dh+py2*W); cx.lineTo(bx2+px2*W, by2+py2*W);
-    cx.lineTo(bx2-px2*W, by2-py2*W); cx.lineTo(cxp-px2*W, cyp-dh-py2*W);
-    cx.closePath(); cx.fill();
-    cx.strokeStyle='#4c4660'; cx.lineWidth=Math.max(.7,.9*z);
-    cx.beginPath(); cx.moveTo(cxp+px2*W, cyp-dh+py2*W); cx.lineTo(bx2+px2*W, by2+py2*W);
-    cx.moveTo(cxp-px2*W, cyp-dh-py2*W); cx.lineTo(bx2-px2*W, by2-py2*W); cx.stroke();
-    cx.strokeStyle='#d8d4e8'; cx.lineWidth=Math.max(.6,.8*z);
-    cx.beginPath();
-    cx.moveTo(cxp+px2*W*0.42, cyp-dh+py2*W*0.42); cx.lineTo(bx2+px2*W*0.42, by2+py2*W*0.42);
-    cx.moveTo(cxp-px2*W*0.42, cyp-dh-py2*W*0.42); cx.lineTo(bx2-px2*W*0.42, by2-py2*W*0.42);
-    cx.stroke();
-  };
-  let any=false;
+  const C=[cxp, cyp-dh];
+  // deck midpoints toward connected neighbours (other rails or stations)
+  const cons=[];
   for (const [dx2,dy2] of [[1,0],[-1,0],[0,1],[0,-1]]){
     const nx=x+dx2, ny=y+dy2;
     if (!inB(nx,ny)) continue;
     const n=map[ny][nx];
     if (n.rail || n.t==='rstation'){
       const [nsx,nsy]=tileScreen(nx,ny);
-      seg((cxp+nsx)/2, (cyp-dh+nsy+TH/2*z-dh)/2);
-      any=true;
+      cons.push([(cxp+nsx)/2, (cyp-dh+nsy+TH/2*z-dh)/2]);
     }
   }
-  if (!any){
-    cx.fillStyle='#6e6886';
-    cx.beginPath(); cx.ellipse(cxp, cyp-dh, 4.2*z, 1.9*z, 0, 0, 7); cx.fill();
+  const W=3.4*z, rr=W*0.42;
+  // pylon legs — sit under the deck cross-section using the SAME bisector normal
+  // the deck ribbon uses, so on turns they track the curved edge instead of drifting
+  // off it. legHalf < W keeps each leg-top inside the ribbon, so it's always covered.
+  let nmx=-1, nmy=0;
+  if (cons.length>=2){
+    const A=cons[0], B=cons[1];
+    let ax=C[0]-A[0], ay=C[1]-A[1]; let m=Math.hypot(ax,ay)||1; ax/=m; ay/=m;
+    let bx=B[0]-C[0], by=B[1]-C[1]; m=Math.hypot(bx,by)||1; bx/=m; by/=m;
+    nmx=-ay-by; nmy=ax+bx;
+  } else if (cons.length===1){
+    let dx3=cons[0][0]-C[0], dy3=cons[0][1]-C[1]; const m=Math.hypot(dx3,dy3)||1; dx3/=m; dy3/=m;
+    nmx=-dy3; nmy=dx3;
+  }
+  { const m=Math.hypot(nmx,nmy)||1; nmx/=m; nmy/=m; }
+  // the deck centreline at this tile is the bezier midpoint, which on a turn is
+  // pulled toward the inside of the curve — NOT the tile centre. Plant the legs
+  // there so they always land under the actual platform.
+  let mx=cxp, my=cyp-dh;
+  if (cons.length>=2){
+    mx=0.25*cons[0][0]+0.5*cxp+0.25*cons[1][0];
+    my=0.25*cons[0][1]+0.5*(cyp-dh)+0.25*cons[1][1];
+  }
+  const legHalf=W*0.72, baseY=cyp+1.5*z;
+  cx.strokeStyle='#56506b'; cx.lineWidth=Math.max(1,1.8*z);
+  cx.beginPath();
+  for (const s of [1,-1]){
+    const lx=mx+nmx*legHalf*s, topY=my+nmy*legHalf*s;
+    cx.moveTo(lx, baseY); cx.lineTo(lx, topY);
+  }
+  cx.stroke();
+  cx.fillStyle='rgba(10,16,28,.20)';
+  cx.beginPath(); cx.ellipse(mx, cyp+2.5*z, 7*z, 2.6*z, 0, 0, 7); cx.fill();
+  const deckFill='#6e6886', deckEdge='#4c4660', railCol='#d8d4e8';
+  // a straight deck strip from P to Q (half-width W), with side edges + two rails
+  const strip=(P,Q)=>{
+    let vx=Q[0]-P[0], vy=Q[1]-P[1]; const m=Math.hypot(vx,vy)||1; vx/=m; vy/=m;
+    const px=-vy, py=vx;
+    cx.fillStyle=deckFill;
+    cx.beginPath();
+    cx.moveTo(P[0]+px*W,P[1]+py*W); cx.lineTo(Q[0]+px*W,Q[1]+py*W);
+    cx.lineTo(Q[0]-px*W,Q[1]-py*W); cx.lineTo(P[0]-px*W,P[1]-py*W); cx.closePath(); cx.fill();
+    cx.strokeStyle=deckEdge; cx.lineWidth=Math.max(.7,.9*z);
+    cx.beginPath();
+    cx.moveTo(P[0]+px*W,P[1]+py*W); cx.lineTo(Q[0]+px*W,Q[1]+py*W);
+    cx.moveTo(P[0]-px*W,P[1]-py*W); cx.lineTo(Q[0]-px*W,Q[1]-py*W); cx.stroke();
+    cx.strokeStyle=railCol; cx.lineWidth=Math.max(.6,.8*z);
+    cx.beginPath();
+    cx.moveTo(P[0]+px*rr,P[1]+py*rr); cx.lineTo(Q[0]+px*rr,Q[1]+py*rr);
+    cx.moveTo(P[0]-px*rr,P[1]-py*rr); cx.lineTo(Q[0]-px*rr,Q[1]-py*rr); cx.stroke();
+  };
+  if (cons.length===2){
+    // straight-through or a turn: one continuous deck curving A->C->B
+    const A=cons[0], B=cons[1];
+    const dO=railLane(A,C,B,W,1), dI=railLane(A,C,B,W,-1);
+    cx.fillStyle=deckFill;
+    cx.beginPath();
+    cx.moveTo(dO.PA[0],dO.PA[1]); cx.quadraticCurveTo(dO.C[0],dO.C[1],dO.PB[0],dO.PB[1]);
+    cx.lineTo(dI.PB[0],dI.PB[1]); cx.quadraticCurveTo(dI.C[0],dI.C[1],dI.PA[0],dI.PA[1]);
+    cx.closePath(); cx.fill();
+    cx.strokeStyle=deckEdge; cx.lineWidth=Math.max(.7,.9*z);
+    cx.beginPath();
+    cx.moveTo(dO.PA[0],dO.PA[1]); cx.quadraticCurveTo(dO.C[0],dO.C[1],dO.PB[0],dO.PB[1]);
+    cx.moveTo(dI.PA[0],dI.PA[1]); cx.quadraticCurveTo(dI.C[0],dI.C[1],dI.PB[0],dI.PB[1]); cx.stroke();
+    cx.strokeStyle=railCol; cx.lineWidth=Math.max(.6,.8*z);
+    for (const s of [1,-1]){
+      const r=railLane(A,C,B,rr,s);
+      cx.beginPath(); cx.moveTo(r.PA[0],r.PA[1]); cx.quadraticCurveTo(r.C[0],r.C[1],r.PB[0],r.PB[1]); cx.stroke();
+    }
+  } else if (cons.length){
+    // dead-end or junction: straight stubs to the centre
+    for (const M of cons) strip(C,M);
+  } else {
+    cx.fillStyle=deckFill;
+    cx.beginPath(); cx.ellipse(C[0],C[1], 4.2*z, 1.9*z, 0, 0, 7); cx.fill();
   }
 }
 function stepPlanes(dt){
@@ -5431,7 +5620,7 @@ function refreshOrientChip(){
 { const ch=document.getElementById('orientChip');
   if (ch) ch.onclick=()=>{ S.bOrient=!S.bOrient; refreshOrientChip(); }; }
 const tipEl=document.getElementById('tip');
-const NAMES={grass:'Open land',tree:'Woodland',water:'River',road:'Road',avenue:'Avenue',res:'Residential',com:'Commercial',ind:'Industrial',park:'Park',power:'Power plant',pump:'Water pump',tower:'Water tower',police:'Police station',fire:'Fire station',school:'School',hospital:'Hospital',rubble:'Burned ruins',garden:'Garden',pool:'Public pool',stadium:'Stadium',solar:'Solar farm',nuclear:'Nuclear plant',highschool:'High school',university:'University',clinic:'Clinic',medcenter:'Medical center',playground:'Playground',plaza:'Plaza',arena:'Arena',path:'Footpath',cityhall:'City Hall',monument:'Monument',botanic:'Botanic Gardens',museum:'Grand Museum',titan:'Titan Tower',airport:'Airport'};
+const NAMES={grass:'Open land',tree:'Woodland',water:'River',road:'Road',avenue:'Avenue',res:'Residential',com:'Commercial',ind:'Industrial',park:'Park',power:'Power plant',pump:'Water pump',tower:'Water tower',police:'Police station',fire:'Fire station',school:'School',hospital:'Hospital',rubble:'Burned ruins',garden:'Garden',pool:'Public pool',stadium:'Stadium',solar:'Solar farm',nuclear:'Nuclear plant',highschool:'High school',university:'University',clinic:'Clinic',medcenter:'Medical center',playground:'Playground',plaza:'Plaza',arena:'Arena',path:'Footpath',cityhall:'City Hall',monument:'Monument',botanic:'Botanic Gardens',museum:'Grand Museum',titan:'Titan Tower',airport:'Airport',rstation:'Rail station'};
 /* ---------- land value breakdown (mirrors recomputeFields) ---------- */
 function lvBreak(x,y){
   const pol = Math.min(45, pollution[idx(x,y)]);
@@ -5490,7 +5679,7 @@ function showTip(x,y,force,light){
   if (!inB(x,y)){ tipEl.style.display='none'; return; }
   let c=map[y][x];
   if (c.grp){ c = map[c.grp[1]][c.grp[0]]; }   // tower footprint resolves to its root
-  if (light && !ZONE[c.t] && !SVC[c.t] && !ROADTYPE[c.t]){ tipEl.style.display='none'; commuteViz=null; return; }
+  if (light && !ZONE[c.t] && !SVC[c.t] && !ROADTYPE[c.t] && c.t!=='rstation'){ tipEl.style.display='none'; commuteViz=null; return; }
   const i=idx(x,y);
   const tower = c.grp && c.lv>=4;
   const biz = bizName(c);
@@ -5521,6 +5710,25 @@ function showTip(x,y,force,light){
     html+=`<div class="row"><span>Load</span><span>${Math.round(traffic[i])} / ${ROAD_CAP[c.t]}</span></div>`;
     if (c.bus) html+=`<div class="row"><span>🚏 Bus stop</span><span>homes within 4 tiles drive 45% less</span></div>`;
     html+=`<div class="row"><span>Status</span><span style="color:${cg>1?'var(--red)':cg>.6?'var(--amber)':'var(--green)'}">${cg>1?'gridlock':cg>.6?'busy':'flowing'}</span></div>`;
+  }
+  if (c.t==='rstation'){
+    const live = railStations.some(st=>st[0]===x&&st[1]===y);
+    html+=`<div class="row"><span>Line</span><span style="color:${live?'var(--green)':'var(--amber)'}">${live?'connected ✓':'needs a 2nd station'}</span></div>`;
+    // catchment: homes within 6 tiles that ride instead of drive
+    let homes=0, residents=0; const seen=new Set(), R=6;
+    for (let dy=-R;dy<=R;dy++) for (let dx=-R;dx<=R;dx++){
+      const nx=x+dx, ny=y+dy; if(!inB(nx,ny)||dx*dx+dy*dy>R*R+1) continue;
+      const n=map[ny][nx];
+      if (n.t==='res' && (n.lv>0||n.part)){
+        const root=n.grp?n.grp:[nx,ny], key=root[0]+','+root[1];
+        if (seen.has(key)) continue; seen.add(key);
+        homes++; residents+=CAP.res[map[root[1]][root[0]].lv]||0;
+      }
+    }
+    html+=`<div class="row"><span>Catchment</span><span>${R} tiles · ${homes} home${homes===1?'':'s'}</span></div>`;
+    html+=`<div class="row"><span>Riders served</span><span>${live?'≈'+fmt(residents):'<span style="color:var(--dim)">line idle</span>'}</span></div>`;
+    html+=`<div class="row"><span>Traffic relief</span><span style="color:${live?'var(--green)':'var(--dim)'}">${live?'up to 75% fewer car trips':'—'}</span></div>`;
+    html+=`<div class="row"><span>Maintenance</span><span>${fmt(Math.round(8.0*DIFF[S.diff].up))} / month</span></div>`;
   }
   commuteViz=null;
   if (force && ZONE[c.t] && c.t==='res' && (c.lv>0)){
@@ -6234,7 +6442,7 @@ function musicLoop(){
       if (now>AU.shufAt){
         const pool=['classical','ambient','dynamic','lofi','chiptune','synthwave','aegean'].filter(x=>x!==AU.shufCur);
         AU.shufCur=pool[Math.random()*pool.length|0];
-        AU.shufAt=now+(150+Math.random()*120)*1000;       // next change in 2.5–4.5 min
+        AU.shufAt=now+(105+Math.random()*90)*1000;         // next change in 1.75–3.25 min
         bar=0;                                            // fresh phrase for the new style
       }
       st=AU.shufCur;
@@ -7030,13 +7238,13 @@ function loop(now){
   const interacting = dragging || painting || pend || pinch;
   const minGap = S.speed>0 ? (PERF.saver?30:0) : (interacting?0:78);   // 30 aligns with 16.7ms frames → a true 30fps
   if (now-lastR < minGap){
-    if (S.msgT && now-S.msgT>9000){ const tk=document.getElementById('ticker'); tk.style.opacity=0; tk.style.display='none'; }
+    if (S.msgT && now-S.msgT>9000){ const tk=document.getElementById('ticker'); tk.style.opacity=0; tk.style.display='none'; S.msgT=0; if (document.body.classList.contains('mob')) bbarMeasure(); }
     return;
   }
   lastR=now;
   if (S.started && S.speed>0){ stepCars(carAcc); stepPlanes(carAcc*(S.speed||1)); stepTrains(carAcc*(S.speed||1)); }
   carAcc=0;
-  if (S.msgT && now-S.msgT>9000){ const tk=document.getElementById('ticker'); tk.style.opacity=0; tk.style.display='none'; }
+  if (S.msgT && now-S.msgT>9000){ const tk=document.getElementById('ticker'); tk.style.opacity=0; tk.style.display='none'; S.msgT=0; if (document.body.classList.contains('mob')) bbarMeasure(); }
   if (S.started) stepDisaster(now);
   render(now);
 }
