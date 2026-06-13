@@ -203,7 +203,11 @@
 
   /* save/load modal */
   #saveModal,#catModal,#advModal,#statsModal,#mapModal,#helpModal{position:fixed;inset:0;z-index:30;background:rgba(5,10,18,.7);display:none;align-items:center;justify-content:center;padding:18px}
-  #mapModal .inner{max-width:760px;width:94vw;text-align:center;max-height:94vh;overflow-y:auto;padding:16px 20px 14px}
+  #mapModal .inner{max-width:940px;width:94vw;text-align:center;max-height:94vh;overflow-y:auto;padding:16px 20px 14px}
+  #mapBody{display:flex;gap:16px;align-items:stretch;margin-top:10px;text-align:left}
+  #mapBody #mapGrid{flex:1.35;margin-top:0;align-content:start}
+  #mapBody #mapOpts{flex:1;margin-top:0;grid-template-columns:1fr;align-content:start}
+  @media (max-width:760px){ #mapBody{flex-direction:column} }
   #helpModal .inner{max-width:720px;width:94vw;max-height:90vh;overflow-y:auto}
   #helpCols{display:grid;grid-template-columns:1fr 1fr;gap:22px;text-align:left;margin-top:8px}
   #helpCols h4{font-family:'Chakra Petch';font-size:11px;color:var(--dim);letter-spacing:.12em;margin:0 0 10px}
@@ -213,14 +217,14 @@
   #helpCols p{font-size:12.5px;color:var(--dim);line-height:1.55;margin:0 0 10px}
   #helpCols p b{color:var(--ink)}
   @media (max-width:640px){ #helpCols{grid-template-columns:1fr} }
-  #mapGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
-  @media (max-width:700px){ #mapGrid{grid-template-columns:1fr 1fr} }
+  #mapGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:10px}
+  @media (max-width:520px){ #mapGrid{grid-template-columns:1fr} }
   .mapCard{position:relative;border-radius:12px;border:2px solid var(--line);background:linear-gradient(170deg,#15202f,#0d1622);cursor:pointer;padding:6px 6px 5px;transition:transform .15s, border-color .15s, box-shadow .15s}
   .mapCard:hover{transform:translateY(-3px);border-color:#5a7290}
   .mapCard.sel{border-color:var(--amber);box-shadow:0 6px 26px rgba(255,180,84,.18)}
   .mapCard.sel::after{content:'✓';position:absolute;top:6px;right:7px;width:18px;height:18px;border-radius:50%;background:var(--amber);color:#1a1206;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center}
   .mapCard canvas{width:100%;height:auto;border-radius:9px;display:block}
-  .mapCard .mname{font-family:'Chakra Petch';font-size:10px;color:var(--dim);letter-spacing:.08em;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mapCard .mname{font-family:'Chakra Petch';font-size:11.5px;color:var(--dim);letter-spacing:.08em;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #mapBtns{display:flex;gap:10px;justify-content:center;margin-top:12px}
   #mapBtns button{padding:10px 22px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer;font-family:'Chakra Petch';font-size:13px}
   #mapBtns #mapBegin{background:var(--amber);color:#1a1206;border:none;font-weight:700;letter-spacing:.06em;padding:10px 34px}
@@ -756,6 +760,7 @@
   <div class="panel inner">
     <h3>CHOOSE YOUR LAND</h3>
     <p style="font-size:12px;color:var(--dim);margin:3px 0 0">Each map has its own river and forests. Pick one, or roll new lands.</p>
+    <div id="mapBody">
     <div id="mapGrid"></div>
     <div id="mapOpts">
       <div class="opt">
@@ -778,6 +783,7 @@
         <div class="optLabel">Weather</div>
         <div id="wxRow"><input type="checkbox" id="wxToggle"><label for="wxToggle">Seasonal — autumn &amp; winter, rain and snow</label></div>
       </div>
+    </div>
     </div>
     <div id="mapBtns">
       <button id="mapCancel" style="display:none">Cancel</button>
@@ -5550,9 +5556,19 @@ function pinchInfo(e){
   return { d:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)||1, cx:(a.clientX+b.clientX)/2, cy:(a.clientY+b.clientY)/2 };
 }
 window.addEventListener('keydown', e=>{
+  const typing = e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA' || e.target.isContentEditable);
+  if (e.key==='Escape'){
+    if (closeAnyModal()) return;        // ESC closes any open modal first
+    if (typing){ e.target.blur(); return; }
+    cancelPending();
+    hideFly && hideFly();
+    if (modal.classList.contains('open')) modal.classList.remove('open');
+    setTool('pan');                     // always drop back to pan so the map is draggable
+    return;
+  }
+  if (typing) return;                   // never hijack keys while typing in a field
   if (e.code==='Space'){ e.preventDefault(); setSpeed(S.speed?0:1); }
-  const typing = e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA');
-  if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && S.started){
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && S.started){
     const KEYTOOL={ r:'res', c:'com', i:'ind', t:'road', x:'bulldoze', p:'police', f:'fire', g:'park', h:'hospital', u:'busstop', n:'inspect' };
     const k=e.key.toLowerCase();
     if (k==='?'){ e.preventDefault(); document.getElementById('helpModal').classList.add('open'); return; }
@@ -5569,14 +5585,6 @@ window.addEventListener('keydown', e=>{
     return;
   }
   if ((e.ctrlKey||e.metaKey) && (e.key==='y'||e.key==='Y')){ e.preventDefault(); doRedo(); return; }
-  if (e.key==='Escape'){
-    if (closeAnyModal()) return;        // ESC closes any open modal first
-    cancelPending();
-    hideFly && hideFly();
-    if (modal.classList.contains('open')) modal.classList.remove('open');
-    setTool('pan');                     // always drop back to pan so the map is draggable
-    return;
-  }
   const pan=24;
   if (e.key==='ArrowUp'||e.key==='w') S.oy+=pan;
   if (e.key==='ArrowDown'||e.key==='s') S.oy-=pan;
@@ -7148,7 +7156,7 @@ function drawIsoPreview(cv2, seed, N){
   N=N||G;
   const T=genTerrain(seed, N);
   const dpr=Math.min(3, window.devicePixelRatio||1);
-  const cw=252, ch=150;
+  const cw=360, ch=214;
   cv2.width=cw*dpr; cv2.height=ch*dpr;
   const cc=cv2.getContext('2d');
   cc.setTransform(dpr,0,0,dpr,0,0);
