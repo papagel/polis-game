@@ -356,9 +356,9 @@
   body.mob #menuRow .mbtn{border:none;background:none;box-shadow:none;width:40px;height:46px;display:flex;align-items:center;justify-content:center;margin:0}
   body.mob #rci{flex:0 0 auto;transform:scale(.82);transform-origin:left center;margin:0 -4px}
   body.mob #top button{flex:0 0 auto}
-  body.mob #footer{left:0;right:54px;bottom:var(--bbarh,58px);padding:0 0 6px;flex-direction:column;align-items:stretch;gap:6px}
+  body.mob #footer{left:auto;right:calc(8px + env(safe-area-inset-right));bottom:calc(var(--bbarh,58px) + 8px);width:auto;padding:0;flex-direction:column;align-items:flex-end;gap:6px;pointer-events:none}
   #bbar{display:none}
-  body.mob #bbar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:9;border-radius:14px 14px 0 0;border-bottom:none;padding:6px calc(6px + env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) calc(6px + env(safe-area-inset-left))}
+  body.mob #bbar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:9;border:none;border-radius:14px 14px 0 0;padding:6px calc(6px + env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) calc(6px + env(safe-area-inset-left))}
   body.mob #tools{display:none}
   #bcats{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   #bcats::-webkit-scrollbar{display:none}
@@ -379,6 +379,8 @@
   #bsub .bchip.locked .ic{filter:grayscale(1) brightness(.75)}
   body.mob #ticker{order:0;width:auto;max-width:none;margin:0;font-size:11.5px;padding:7px 12px}
   body.mob #views{display:none}
+  body.mob #flatBtn{pointer-events:auto;background:rgba(16,26,38,.92);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:13px;padding:0 14px;height:46px;color:var(--ink);box-shadow:0 6px 24px rgba(0,0,0,.35);white-space:nowrap;font-size:12px}
+  body.mob #flatBtn.on{border-color:var(--amber);color:var(--amber)}
   #viewsBtn{display:none;position:fixed;left:8px;bottom:calc(var(--bbarh,58px) + 56px);z-index:8;width:46px;height:46px;align-items:center;justify-content:center;border-radius:13px;color:var(--ink)}
   body.mob #viewsBtn{display:flex;gap:7px;padding:0 13px;width:auto;min-width:46px;left:calc(8px + env(safe-area-inset-left))}
   #viewsBtn.on{border-color:var(--amber);color:var(--amber);box-shadow:0 0 0 1px rgba(232,176,74,.25), 0 6px 24px rgba(0,0,0,.35)}
@@ -605,6 +607,17 @@
     <div class="modalBtns"><button id="setClose" class="ghostBtn">Done</button></div>
   </div>
 </div>
+<div id="renameModal" class="modalWrap" style="z-index:60">
+  <div class="modal" style="max-width:380px">
+    <h2 style="font-size:16px">RENAME CITY</h2>
+    <p class="modalSub">Give your settlement a new name.</p>
+    <div id="nameRow"><input type="text" id="renameIn" maxlength="24" placeholder="Polis" spellcheck="false"></div>
+    <div class="modalBtns">
+      <button id="renameCancel" class="ghostBtn">Cancel</button>
+      <button id="renameOk" class="primary">Rename</button>
+    </div>
+  </div>
+</div>
 <div id="confirmModal" class="modalWrap" style="z-index:60">
   <div class="modal" style="max-width:400px">
     <h2 id="cfmT" style="font-size:16px"></h2>
@@ -751,7 +764,7 @@
       <div class="opt">
         <div class="optLabel">Difficulty</div>
         <div id="diffRow">
-          <input type="range" id="diffSlider" min="0" max="3" value="1">
+          <input type="range" id="diffSlider" min="0" max="4" value="1">
           <b id="diffLbl">Normal</b>
         </div>
         <div id="diffHint">§20,000 start · balanced income, upkeep &amp; fire risk</div>
@@ -1014,6 +1027,11 @@ function applyCityName(){
   const rs=document.querySelector('#rank span');
   if (rs) rs.textContent=S.cityName||'Polis';
   document.title=(S.cityName&&S.cityName!=='Polis'?S.cityName+' — ':'')+'POLIS';
+  // Kirk's solution: reprogram the test. Name the city "Kobayashi" and the no-win ramp freezes.
+  const wasCheat=S.kmCheat;
+  S.kmCheat = /^kobayashi$/i.test((S.cityName||'').trim());
+  if (S.kmCheat && !wasCheat && DIFF[S.diff] && DIFF[S.diff].km)
+    msg('<b>You reprogrammed the simulation.</b> \u201cI don\u2019t believe in the no-win scenario.\u201d The escalation halts \u2014 well played.');
 }
 function showBanner(m){
   const b=document.getElementById('milesBanner');
@@ -1041,11 +1059,26 @@ function refreshLocks(){
 }
 /* grow: how readily lots densify · crime: how fast trouble breeds · grant: milestone reward scale */
 const DIFF=[
-  {n:'Easy',      money:30000, inc:1.15, up:0.85, fire:0.5, grow:1.10, crime:0.80, grant:1.25, loanR:0.04},
-  {n:'Normal',    money:20000, inc:0.95, up:1.05, fire:1.1, grow:1.00, crime:1.00, grant:1.00, loanR:0.06},
-  {n:'Hard',      money:11000, inc:0.70, up:1.60, fire:2.0, grow:0.82, crime:1.35, grant:0.60, loanR:0.10},
-  {n:'Very hard', money:6500,  inc:0.52, up:2.10, fire:3.2, grow:0.66, crime:1.75, grant:0.35, loanR:0.14},
+  {n:'Easy',      money:30000, inc:1.15, up:0.85, fire:0.5, grow:1.10, crime:0.80, grant:1.25, loanR:0.04, dem:1.05},
+  {n:'Normal',    money:20000, inc:0.95, up:1.05, fire:1.1, grow:1.00, crime:1.00, grant:1.00, loanR:0.06, dem:1.00},
+  {n:'Hard',      money:11000, inc:0.70, up:1.60, fire:2.0, grow:0.82, crime:1.35, grant:0.60, loanR:0.10, dem:0.88},
+  {n:'Very hard', money:6500,  inc:0.52, up:2.10, fire:3.2, grow:0.66, crime:1.75, grant:0.35, loanR:0.14, dem:0.78},
+  {n:'Kobayashi Maru', money:7000, inc:0.62, up:1.90, fire:2.6, grow:0.78, crime:1.55, grant:0.45, loanR:0.12, dem:0.85, km:true},
 ];
+// Kobayashi Maru — the no-win scenario. A fair-ish start that escalates every year until
+// the city can no longer be sustained. You don't win; you see how long you hold the line.
+function kmRamp(){
+  if (!(DIFF[S.diff] && DIFF[S.diff].km)) return {up:1, inc:1, dis:1};
+  if (S.kmCheat) return {up:1, inc:1, dis:1};   // the test has been beaten by changing its rules
+  const yr = S.day / YEAR_DAYS;
+  // upkeep compounds (a bigger city is a bigger liability); income decays toward a hard floor;
+  // disasters intensify. Tuned so even a strong economy is overtaken — the scenario is no-win by design.
+  return {
+    up:  1.25 * Math.pow(1.22, yr),             // maintenance crisis: starts elevated, compounds hard
+    inc: Math.max(0.25, 1 - 0.075*yr),          // revenue bleeds out faster, toward a low floor
+    dis: 1 + 0.22*yr                            // ever more frequent catastrophe
+  };
+}
 const TOOLDEF={};
 for (const t of TOOLS){ if (t.id) TOOLDEF[t.id]=t; if (t.sub) for (const o of t.sub) TOOLDEF[o.id]=o; }
 TOOLDEF.cityhall.lockAt=3; TOOLDEF.monument.lockAt=5;
@@ -1633,10 +1666,11 @@ function computeBudget(){
     const st=blockStat(ax,ay);
     if (st.pw && st.road){ tourism += Math.min(1200, 150 + pop*0.06); airports++; }
   }
-  tourism *= d.inc;
-  const income = (resTax + jobTax) * d.inc + tourism;
-  const roadCost = (roads*0.95 + aves*2.4 + paths*0.18 + busStops*3.0 + rails*0.55 + rstations*8.0) * d.up;
-  const svcCost = svcBase * 2.6 * d.up;
+  const km = kmRamp();
+  tourism *= d.inc * km.inc;
+  const income = ((resTax + jobTax) * d.inc + tourism) * km.inc;
+  const roadCost = (roads*0.95 + aves*2.4 + paths*0.18 + busStops*3.0 + rails*0.55 + rstations*8.0) * d.up * km.up;
+  const svcCost = svcBase * 2.6 * d.up * km.up;
   return { income, tourism, roadCost, svcCost,
            pop, jobs, tax:S.tax, resTax, jobTax, dInc:d.inc, dUp:d.up, dName:d.n,
            roads, aves, paths, busStops, airports, svcBase };
@@ -1652,8 +1686,14 @@ function projectBudget(){
 }
 function simTick(){
   S.day++;
-  if (DISRND && !DIS && S.day%MONTH_DAYS===0 && Math.random()<0.035 && typeof triggerDisaster==='function')
-    triggerDisaster(['quake','typhoon','flood'][Math.random()*3|0]);  let pop=0, comJ=0, indJ=0, unp=0, dry=0, congested=0;
+  if (DIFF[S.diff] && DIFF[S.diff].km){
+    S.kmPeakPop = Math.max(S.kmPeakPop||0, S.pop||0);
+    S.kmYears = (S.day/YEAR_DAYS);
+  }
+  { const _km=DIFF[S.diff]&&DIFF[S.diff].km;
+    if ((DISRND||_km) && !DIS && S.day%MONTH_DAYS===0 && typeof triggerDisaster==='function'
+        && Math.random() < 0.035*(_km?kmRamp().dis:1))
+      triggerDisaster(['quake','typhoon','flood'][Math.random()*3|0]); }  let pop=0, comJ=0, indJ=0, unp=0, dry=0, congested=0;
   const D = S.demand;
   // traffic decays each day
   for (let i=0;i<traffic.length;i++) traffic[i]*=0.80;
@@ -1777,9 +1817,11 @@ function simTick(){
 
   // demand
   const taxDrag = (S.tax - 9) * 0.045;
-  D.r = clamp(( (S.jobs*1.15 - pop) / (40 + pop*0.35) ) + 0.35 - taxDrag, -1, 1);
-  D.c = clamp(( (pop*0.40 - comJ) / (30 + pop*0.25) ) - taxDrag, -1, 1);
-  D.i = clamp(( (pop*0.55 - indJ) / (30 + pop*0.25) ) + 0.15 - taxDrag, -1, 1);
+  const demK = (DIFF[S.diff] && DIFF[S.diff].dem) || 1;
+  const scaleDem = v => v > 0 ? v * demK : v;   // harder difficulty cools hot demand; gluts stay as bad
+  D.r = clamp(scaleDem(( (S.jobs*1.15 - pop) / (40 + pop*0.35) ) + 0.35 - taxDrag), -1, 1);
+  D.c = clamp(scaleDem(( (pop*0.40 - comJ) / (30 + pop*0.25) ) - taxDrag), -1, 1);
+  D.i = clamp(scaleDem(( (pop*0.55 - indJ) / (30 + pop*0.25) ) + 0.15 - taxDrag), -1, 1);
 
   // happiness
   let lvAvg=55, n=0, lvSum=0;
@@ -5219,6 +5261,7 @@ function eventPos(e){ const r=cv.getBoundingClientRect(); return [e.clientX-r.le
 cv.addEventListener('contextmenu', e=>e.preventDefault());
 cv.addEventListener('pointerdown', e=>{
   if (ROTA) return;
+  if (touches.size>=2 || pinch) return;          // ignore pointer events during a pinch
   cv.setPointerCapture(e.pointerId);
   const [px,py]=eventPos(e);
   if (e.button===2 || e.button===1 || S.tool==='pan'){ cancelPending(); dragging=true; lastP=[px,py]; return; }
@@ -5254,6 +5297,7 @@ cv.addEventListener('pointerdown', e=>{
   painting=true;
 });
 cv.addEventListener('pointermove', e=>{
+  if (touches.size>=2 || pinch){ dragging=false; return; }   // pinch owns the gesture
   const [px,py]=eventPos(e);
   if (dragging && lastP){ S.ox+=px-lastP[0]; S.oy+=py-lastP[1]; lastP=[px,py]; return; }
   const [gx,gy]=toGrid(px,py);
@@ -5290,7 +5334,15 @@ function zoomAt(px,py,f){
 }
 // touch pinch
 const touches=new Map();
-cv.addEventListener('touchstart', e=>{ for(const t of e.changedTouches) touches.set(t.identifier,[t.clientX,t.clientY]); if(touches.size===2){ cancelPending(); pinch=pinchInfo(e); } },{passive:true});
+cv.addEventListener('touchstart', e=>{
+  for(const t of e.changedTouches) touches.set(t.identifier,[t.clientX,t.clientY]);
+  if(touches.size>=2){
+    // a second finger means a pinch — abort any in-progress paint/drag so they don't fight
+    cancelPending();
+    painting=false; dragging=false; pend=null;
+    pinch=pinchInfo(e);
+  }
+},{passive:true});
 cv.addEventListener('touchmove', e=>{
   if (touches.size===2 && e.touches.length===2){
     e.preventDefault();
@@ -5330,8 +5382,10 @@ window.addEventListener('keydown', e=>{
   if (e.key==='Escape'){
     if (closeAnyModal()) return;        // ESC closes any open modal first
     cancelPending();
+    hideFly && hideFly();
     if (modal.classList.contains('open')) modal.classList.remove('open');
-    else setTool('pan');
+    setTool('pan');                     // always drop back to pan so the map is draggable
+    return;
   }
   const pan=24;
   if (e.key==='ArrowUp'||e.key==='w') S.oy+=pan;
@@ -7607,6 +7661,7 @@ const DIFF_HINTS=[
   '§20,000 start · balanced income, upkeep & fire risk',
   '§11,000 start · lean income, pricey upkeep, slower growth, bolder crime, smaller rewards',
   '§6,500 start · brutal: thin income, costly services, frequent fires, restless streets',
+  '§7,000 start · THE NO-WIN SCENARIO — a fair beginning that escalates every year until no city can survive. You don\'t win. You see how long you last.',
 ];
 diffSlider.oninput=(e)=>{
   S.diff=+e.target.value;
@@ -8381,6 +8436,29 @@ function applyMob(){
 }
 applyMob();
 document.getElementById('statXp').onclick=()=>document.body.classList.toggle('statx');
+{ const rk=document.getElementById('rank');
+  if (rk){
+    rk.style.cursor='pointer';
+    rk.title='Rename city';
+    rk.onclick=()=>{
+      const inp=document.getElementById('renameIn');
+      inp.value=S.cityName||'';
+      document.getElementById('renameModal').classList.add('open');
+      setTimeout(()=>{ inp.focus(); inp.select(); }, 30);
+    };
+  }
+  const doRename=()=>{
+    const inp=document.getElementById('renameIn');
+    const nm=(inp.value||'').trim().slice(0,24);
+    S.cityName = nm || 'Polis';
+    applyCityName();
+    document.getElementById('renameModal').classList.remove('open');
+  };
+  document.getElementById('renameOk').onclick=doRename;
+  document.getElementById('renameCancel').onclick=()=>document.getElementById('renameModal').classList.remove('open');
+  document.getElementById('renameModal').onclick=(e)=>{ if (e.target.id==='renameModal') e.target.classList.remove('open'); };
+  document.getElementById('renameIn').addEventListener('keydown', e=>{ if (e.key==='Enter') doRename(); });
+}
 window.addEventListener('resize', applyMob);
 window.addEventListener('orientationchange', applyMob);
 </script>
