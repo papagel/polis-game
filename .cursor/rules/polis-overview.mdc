@@ -1,0 +1,48 @@
+---
+description: POLIS project orientation — what it is, file layout, how to run and deploy
+alwaysApply: true
+---
+
+# POLIS — Project Overview
+
+POLIS is an isometric **city-builder game** that lives entirely in a single
+self-contained file: `index.html` (~8500 lines). No build step, no
+dependencies, no framework — vanilla JS + Canvas 2D. The only external
+resources are Google Fonts (loaded via CDN `<link>`).
+
+## File layout (all in `index.html`)
+
+| Lines | Section |
+|-------|---------|
+| `1`–`415` | `<head>` + all CSS (custom-property design tokens at `:root`) |
+| `415`–`811` | `<body>` — the DOM: canvas `#c`, HUD, panels, modals |
+| `811`–`8485` | `<script>` — the entire game engine |
+
+Because everything is global and in one file, **use line ranges and symbol
+names to navigate** rather than expecting modules. Key entry points:
+`loop()` (~7016, the rAF frame loop), `simTick()` (~1688, one game day),
+`render()` (~4565, draws a frame).
+
+## Run locally
+
+Just open `index.html` in a browser, or:
+
+```bash
+python3 -m http.server 8000   # then visit http://localhost:8000
+```
+
+There is nothing to compile or install. Changes are live on reload.
+
+## Deploy
+
+Hosted on **GitHub Pages** at **polis-game.com** (repo `papagel/polis-game`,
+branch `main`, served from root). The `CNAME` file pins the custom domain.
+Deployment = `git commit` + `git push`; the live site updates within ~1 minute.
+Do not rename `index.html` (it is the Pages document root) or delete `CNAME`.
+
+## Working style for this project
+
+- This is a polished, hand-tuned game. Prefer **surgical edits**; preserve the
+  terse existing style and the extensive balance-tuning comments.
+- See `polis-simulation` for the gameplay/economy model and `polis-conventions`
+  for editing rules (save format, redraw flags, balance tables).

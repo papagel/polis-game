@@ -1,0 +1,84 @@
+---
+description: POLIS simulation, economy, and rendering model — the gameplay mental model
+alwaysApply: true
+---
+
+# POLIS — Simulation Model
+
+All line numbers refer to `index.html` and are approximate.
+
+## Core data
+
+- **Grid**: `G` = grid size (selectable 30/40/52/64/96 via `WORLD_SIZES`).
+  `map[y][x]` is a **cell**: `{ t:type, lv:level 0–7, dev:growth progress,
+  pw:powered, wt:watered, fire, vary:render noise, grp:[rootX,rootY],
+  part:bool, bld:construction%, bridge, bus, rail, rz:rubble-origin type }`.
+  Helpers: `idx(x,y)=y*G+x`, `inB(x,y)` bounds check.
+- **Scalar fields** (Float32Array, length G*G), recomputed in
+  `recomputeFields()` (~1358): `pollution`, `leisure`, `crime`, `landVal`,
+  and `cover.{police,fire,school,health,transit}`. `splat()` paints a radial
+  falloff. Land value blends pollution, traffic, service coverage, leisure,
+  nearby water/trees, and crime.
+- **Global state `S`** (~825): `money, tax, day, speed, diff, pop, jobs,
+  happy, demand{r,c,i}, zoom/ox/oy (camera), tool, overlay, rot, milestone,
+  fund{police,fire,school,health}, power/water caps`.
+
+## The tick loop
+
+`loop()` (~7016) runs on `requestAnimationFrame`. A fixed-step accumulator
+calls `simTick()` per game day; speed → step from `TICK_MS=[∞,560,280,130]`.
+**Rendering is decoupled** from the sim and throttled by a frame governor
+(`PERF.saver`); the simulation always runs at full fidelity regardless of FPS.
+
+`simTick()` (~1688) each day: fire spread + rubble cleanup → per-cell zone
+**growth/decay**, then aggregates education & crime, recomputes demand &
+happiness, and every 30 days runs the **monthly budget** + autosave.
+
+## Growth model (the heart of the game)
+
+A zoned lot (`res`/`com`/`ind`) levels up only when gated by:
+**adjacent road** (`roadAdj`), **power** (`pw`), **water** (`wt`), positive
+**demand**, **land value** thresholds, and for high tiers **education**
+(`S.edu`) and **leisure**. Levels 1→7; mature lv3 lots `tryMerge()` four
+neighbors into a 2×2 **tower** (`grp`/`part`), which can rise to skyscraper /
+highrise / megatower. Unpowered/unwanted lots decay and downgrade; `unmerge()`
+breaks towers back down (or to `rubble` after fire).
+
+`CAP` (~1573) = population/jobs per type per level. `D = S.demand` is recomputed
+from the jobs↔pop↔commerce↔industry balance minus a tax drag.
+
+## Economy
+
+`computeBudget()` (~1644), applied monthly in `simTick`:
+- **Income** = (`resTax = pop*tax*0.26` + `jobTax = jobs*tax*0.36`) × difficulty
+  `d.inc` + **tourism** (from working airports), all × `kmRamp()`.
+- **Costs** = road/avenue/path/busstop/rail upkeep + service `svcCost`
+  (`UPKEEP` × per-service funding sliders `S.fund` × 2.6 × difficulty).
+- `S.net = income − roadCost − svcCost − loanPay`; added to `S.money`.
+- **Difficulty** `DIFF` (~1062) scales growth/income/upkeep/disaster rates.
+  **Loans**: `LOAN_OFFERS`, `takeLoan`/`repayLoan`, amortized monthly.
+
+## Networks (power, water, traffic)
+
+Roads carry **cars, power, and water**. `recomputePower()` (~1193) and
+`recomputeWater()` (~1281) flood-fill conductivity (`CONDUCT`) from plants
+(`PLANT`) / sources (`WSRC`) across roads + buildings; call both via
+`recomputeNets()`. Traffic is a Float32Array decayed each day; `congestion()`
+= traffic / `ROAD_CAP`; gridlock chokes growth and land value.
+
+## Agents & rendering
+
+- Agents: `cars[]` (`stepCars` ~1923), `peds[]` (~2025), `planes[]`, `trains[]`.
+- **Isometric renderer**: `isoX/isoY/toScreen` (~2286), tile `TW=64,TH=32`,
+  4 rotations (`rotate`, `rotC/rotD`), painter's-algorithm in `render()` (~4565).
+  Per-type draw fns: `drawZone`, `drawRes/drawCom/drawInd`, `drawBigBuilding`,
+  `drawVenue`, `drawTowerTile`, `civic`, `drawAirport`. Buildings are procedural
+  geometry (`box`/`vol`/`cyl`/`windows`/`gable`). Day/night (`duskAmt`),
+  weather (`WX`, `drawPrecip`), and seasons (`SEAS`/`updateSeason`) modulate it.
+
+## Other systems
+
+Disasters (`triggerDisaster`/`stepDisaster`), scenarios (`SCEN`,
+`startScenario`), milestones/ranks (`MILESTONES`), undo/redo (`undoStack`),
+generative WebAudio music + SFX (`audioInit`, `musicLoop`, multiple styles),
+and PWA install (`pwaInit`, procedurally-drawn app icon).
