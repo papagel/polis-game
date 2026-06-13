@@ -116,7 +116,7 @@
 #mapOpts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:12px;text-align:left}
   @media (max-width:640px){ #mapOpts{grid-template-columns:1fr} }
   #mapOpts .opt{background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:11px;padding:9px 12px 10px;min-width:0;overflow:hidden}
-  #scenChip{display:none;position:fixed;top:52px;left:50%;transform:translateX(-50%);z-index:40;background:rgba(14,20,32,.92);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:12px;color:var(--ink);font-family:'Chakra Petch';letter-spacing:.03em;pointer-events:none;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+  #scenChip{display:none;position:fixed;top:calc(52px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:40;background:rgba(14,20,32,.92);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:12px;color:var(--ink);font-family:'Chakra Petch';letter-spacing:.03em;pointer-events:none;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.35)}
   #scenChip b{color:var(--amber)}
   .dIc{color:var(--amber)}
   .dIc svg{width:24px;height:24px}
@@ -326,13 +326,13 @@
   body.mob.mAll #views .madv{display:inline-block}
   body.mob #tools{top:56px;gap:3px;padding:6px;max-height:calc(100vh - 56px - 148px);scrollbar-width:none}
   body.mob #tools::-webkit-scrollbar{display:none}
-  body.mob #hdr{top:env(safe-area-inset-top);left:env(safe-area-inset-left);right:env(safe-area-inset-right);gap:6px}
+  body.mob #hdr{top:0;left:0;right:0;gap:6px}
   body.mob #top{border-radius:0 0 12px 12px;border-top:none;border-left:none}
   body.mob #zin, body.mob #zout{display:none}
   body.mob #corner{bottom:calc(var(--bbarh, 58px) + 14px)}
   body.mob #tools{left:0;border-radius:0 12px 12px 0;border-left:none}
   html,body{overscroll-behavior:none}
-  body.mob #top{gap:10px;padding:6px 10px;scrollbar-width:none}
+  body.mob #top{gap:10px;padding:calc(6px + env(safe-area-inset-top)) 10px 6px calc(10px + env(safe-area-inset-left));scrollbar-width:none}
   body.mob #top::-webkit-scrollbar{display:none}
   body.mob .stat{min-width:0;flex:0 0 auto}
   body.mob .stat b{font-size:13.5px}
@@ -352,7 +352,7 @@
   body.mob #spdTgl{display:flex;align-items:center;justify-content:center;flex:0 0 auto;width:32px;height:30px;border-radius:8px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--amber);align-self:center;margin-left:auto}
   body.mob #hdr{gap:0;align-items:stretch}
   body.mob #top{border-radius:0 0 0 14px;border-right:none}
-  body.mob #menuRow{background:rgba(16,26,38,.92);backdrop-filter:blur(6px);box-shadow:0 6px 24px rgba(0,0,0,.35);border:1px solid var(--line);border-top:none;border-left:none;border-radius:0 0 14px 0;padding:0 4px;pointer-events:auto;display:flex;align-items:flex-start}
+  body.mob #menuRow{background:rgba(16,26,38,.92);backdrop-filter:blur(6px);box-shadow:0 6px 24px rgba(0,0,0,.35);border:1px solid var(--line);border-top:none;border-left:none;border-radius:0 0 14px 0;padding:env(safe-area-inset-top) calc(4px + env(safe-area-inset-right)) 0 4px;pointer-events:auto;display:flex;align-items:flex-start}
   body.mob #menuRow .mbtn{border:none;background:none;box-shadow:none;width:40px;height:46px;display:flex;align-items:center;justify-content:center;margin:0}
   body.mob #rci{flex:0 0 auto;transform:scale(.82);transform-origin:left center;margin:0 -4px}
   body.mob #top button{flex:0 0 auto}
@@ -377,8 +377,8 @@
   #bsub .bchip.on{border-color:var(--amber)}
   #bsub .bchip.locked{opacity:.45}
   #bsub .bchip.locked .ic{filter:grayscale(1) brightness(.75)}
-  body.mob #ticker{position:fixed;left:8px;right:8px;bottom:calc(var(--bbarh,58px) + 8px);width:auto;max-width:none;margin:0;font-size:11.5px;padding:8px 14px;text-align:center;z-index:8;pointer-events:none}
-  body.mob #ticker:empty, body.mob #ticker[style*="opacity: 0"]{display:none}
+  body.mob #ticker{position:static;width:auto;max-width:none;margin:0 0 6px;font-size:11.5px;padding:7px 12px;text-align:center;background:rgba(255,255,255,.04);border:none;box-shadow:none;border-radius:8px}
+  body.mob #ticker:empty{display:none}
   body.mob #views{display:none}
   body.mob #flatBtn{pointer-events:auto;background:rgba(16,26,38,.92);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:13px;padding:0 14px;height:46px;color:var(--ink);box-shadow:0 6px 24px rgba(0,0,0,.35);white-space:nowrap;font-size:12px}
   body.mob #flatBtn.on{border-color:var(--amber);color:var(--amber)}
@@ -1187,7 +1187,7 @@ function adjCongested(x,y){
   return false;
 }
 function fmt(n){ return '§' + Math.round(n).toLocaleString('en-US'); }
-function msg(t){ const el=document.getElementById('ticker'); el.innerHTML=t; el.style.opacity=1; S.msgT = performance.now(); }
+function msg(t){ const el=document.getElementById('ticker'); el.innerHTML=t; el.style.opacity=1; el.style.display=''; S.msgT = performance.now(); }
 
 /* ---------- power, water, pollution, coverage ---------- */
 function recomputePower(){
@@ -7030,13 +7030,13 @@ function loop(now){
   const interacting = dragging || painting || pend || pinch;
   const minGap = S.speed>0 ? (PERF.saver?30:0) : (interacting?0:78);   // 30 aligns with 16.7ms frames → a true 30fps
   if (now-lastR < minGap){
-    if (S.msgT && now-S.msgT>9000) document.getElementById('ticker').style.opacity=.35;
+    if (S.msgT && now-S.msgT>9000){ const tk=document.getElementById('ticker'); tk.style.opacity=0; tk.style.display='none'; }
     return;
   }
   lastR=now;
   if (S.started && S.speed>0){ stepCars(carAcc); stepPlanes(carAcc*(S.speed||1)); stepTrains(carAcc*(S.speed||1)); }
   carAcc=0;
-  if (S.msgT && now-S.msgT>9000) document.getElementById('ticker').style.opacity=.35;
+  if (S.msgT && now-S.msgT>9000){ const tk=document.getElementById('ticker'); tk.style.opacity=0; tk.style.display='none'; }
   if (S.started) stepDisaster(now);
   render(now);
 }
@@ -8433,9 +8433,17 @@ updateHUD();
    and stat labels shrink so they can't collide */
 const MOB_LBL={funds:['Treasury ▾','FUNDS ▾'], pchip:['⚡ Power','⚡ PWR'], wchip:['💧 Water','💧 H₂O'],
                net:['Monthly','NET'], pop:['Population','POP'], jobs:['Jobs','JOBS'], happy:['Happiness','MOOD']};
+let _tickerHome=null, _tickerParent=null;
 function applyMob(){
   const mob = window.innerWidth < 900;
   document.body.classList.toggle('mob', mob);
+  // reparent ticker into the toolbar on mobile (contiguous flex layout, no --bbarh math)
+  const tk=document.getElementById('ticker'), bb=document.getElementById('bbar');
+  if (tk && bb){
+    if (!_tickerParent){ _tickerParent=tk.parentNode; _tickerHome=tk.nextSibling; }
+    if (mob && tk.parentNode!==bb){ bb.insertBefore(tk, bb.firstChild); }
+    else if (!mob && tk.parentNode===bb){ _tickerParent.insertBefore(tk, _tickerHome); }
+  }
   for (const [id,[full,short]] of Object.entries(MOB_LBL)){
     const el=document.getElementById(id);
     const sp=el && el.querySelector('span');
