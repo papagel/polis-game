@@ -7006,12 +7006,6 @@ async function renderSlots(mode){
       }catch(err){ statusEl.textContent=err.message; }
     };
     row.appendChild(lb);
-    if (mode==='save' && S.started && id!=='auto'){
-      const ob=document.createElement('button'); ob.textContent='⟳';
-      ob.title='Overwrite with the current city';
-      ob.onclick=async()=>{ ob.disabled=true; await svWrite(id); statusEl.textContent='Overwritten.'; renderSlots(mode); };
-      row.appendChild(ob);
-    }
     if (id!=='auto'){
       const db=document.createElement('button'); db.className='del'; db.textContent='✕';
       db.onclick=()=>gameConfirm('Delete this save?', (m.cn||'Polis')+' · Year '+svYear(m.day)+' — this cannot be undone.', 'Delete', async()=>{ await svDelete(id); renderSlots(mode); });
@@ -7026,12 +7020,12 @@ function openModal(mode){
   const saving = mode==='save';
   document.getElementById('saveTitle').textContent = saving?'SAVE CITY':'LOAD CITY';
   document.getElementById('saveHint').textContent = saving
-    ? (store.available() ? 'Or use a portable save code — copy it to share or back up your city anywhere.'
-                         : 'Copy this save code and keep it somewhere safe. Paste it back here any time to restore your city.')
+    ? (store.available() ? 'Or use a portable save code — copy it to back up your city, or paste one in and press Load this code to restore.'
+                         : 'Copy this save code and keep it somewhere safe, or paste one in and press Load this code to restore your city.')
     : 'Or paste a save code below and press Load code.';
   copyBtn.style.display = saving?'':'none';
-  applyBtn.style.display = saving?'none':'';
-  codeBox.readOnly = saving;
+  applyBtn.style.display = '';
+  codeBox.readOnly = false;
   codeBox.value = saving ? makeSave() : '';
   renderSlots(mode);
   if (!saving && !store.available()) setTimeout(()=>codeBox.focus(),50);
