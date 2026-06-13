@@ -8017,8 +8017,10 @@ function doInstall(){
 pwaInit();
 function bbarMeasure(){
   const bb=document.getElementById('bbar');
-  if (bb && document.body.classList.contains('mob'))
-    document.documentElement.style.setProperty('--bbarh', (bb.offsetHeight||58)+'px');
+  if (!bb) return;
+  // offsetHeight is 0 when the bar is display:none (desktop) — only measure when it's laid out
+  const h = bb.offsetHeight;
+  if (h > 0) document.documentElement.style.setProperty('--bbarh', h+'px');
 }
 function buildBBar(){
   const cats=document.getElementById('bcats'), sub=document.getElementById('bsub');
@@ -8438,6 +8440,11 @@ function applyMob(){
     const el=document.getElementById(id);
     const sp=el && el.querySelector('span');
     if (sp) sp.textContent = mob ? short : full;
+  }
+  if (mob && typeof bbarMeasure==='function'){
+    bbarMeasure();
+    requestAnimationFrame(bbarMeasure);          // re-measure after layout/safe-area settle
+    setTimeout(bbarMeasure, 250);                // and once more after PWA chrome stabilises
   }
 }
 applyMob();
