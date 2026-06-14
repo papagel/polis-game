@@ -1177,6 +1177,7 @@ function setWorldSize(n){
   map.length=0;
   allocFields();
   traffic = new Float32Array(G*G);
+  jobDist = new Float32Array(G*G);
   cars.length=0; peds.length=0; smoke.length=0;
   cachedRoads=[]; dirtyRoads=true; cachedWalk=[]; dirtyWalk=true;
   S.hover=null;
@@ -1205,6 +1206,15 @@ const CAR_HL = { bus:0.40, truck:0.31, van:0.26, car:0.23, taxi:0.23, bike:0.12,
 let carOid=0; const carPairOrd=new Map();   // pairwise paint-order memory (hysteresis)
 function isRoad(x,y){ return inB(x,y) && ROADTYPE[map[y][x].t]; }
 function roadAdj(x,y){ return isRoad(x+1,y)||isRoad(x-1,y)||isRoad(x,y+1)||isRoad(x,y-1)||isRoad(x+1,y+1)||isRoad(x-1,y-1)||isRoad(x+1,y-1)||isRoad(x-1,y+1); }
+// Frontage for zone growth: direct road access, OR a road within ~2 tiles. The shallow-interior
+// allowance lets the centre of a road-ringed 3x3 (and up-to-4-deep blocks) develop instead of
+// staying a permanent dead lot — which in a 3x3 also blocks every 2x2 merge, since the centre is
+// the shared cell of all four candidate towers. Blocks 5+ deep still keep an undeveloped core.
+function hasFrontage(x,y){
+  if (roadAdj(x,y)) return true;
+  for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++) if (isRoad(x+dx,y+dy)) return true;
+  return false;
+}
 function congestion(x,y){ const c=map[y][x]; if(!ROADTYPE[c.t]) return 0; return traffic[idx(x,y)] / ROAD_CAP[c.t]; }
 function adjCongested(x,y){
   for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
@@ -1724,10 +1734,11 @@ function simTick(){
   { const _km=DIFF[S.diff]&&DIFF[S.diff].km;
     if ((DISRND||_km) && !DIS && S.day%MONTH_DAYS===0 && typeof triggerDisaster==='function'
         && Math.random() < 0.035*(_km?kmRamp().dis:1))
-      triggerDisaster(['quake','typhoon','flood'][Math.random()*3|0]); }  let pop=0, comJ=0, indJ=0, unp=0, dry=0, congested=0;
+      triggerDisaster(['quake','typhoon','flood'][Math.random()*3|0]); }  let pop=0, comJ=0, indJ=0, unp=0, dry=0, congested=0, strandedPop=0;
   const D = S.demand;
   // traffic decays each day
   for (let i=0;i<traffic.length;i++) traffic[i]*=0.80;
+  recomputeCommute();   // job-access field for spatial unemployment (see below)
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     const c = map[y][x];
     if (c.fire>0){
@@ -1758,7 +1769,7 @@ function simTick(){
     if (c.bld>0) c.bld=Math.max(0, c.bld-0.07);   // construction progress
     const isTower = c.grp && !c.part;
     const st = isTower ? blockStat(c.grp[0], c.grp[1]) : null;
-    const hasRoad = isTower ? st.road : roadAdj(x,y);
+    const hasRoad = isTower ? st.road : hasFrontage(x,y);
     const cellPw = isTower ? st.pw : c.pw;
     const cellWt = isTower ? st.wt : c.wt;
     const jam = adjCongested(x,y);
@@ -1830,6 +1841,9 @@ function simTick(){
     if (c.lv>0 && !cellWt) dry++;
     if (jam && c.lv>0) congested++;
     if (c.t==='res') pop  += CAP.res[c.lv];
+    // homes that exist but can't reach any job by road are stranded labour — only
+    // meaningful once the city actually has jobs somewhere (commuteJobs>0)
+    if (c.t==='res' && commuteJobs && jobReach(x,y)===Infinity) strandedPop += CAP.res[c.lv]||0;
     if (c.t==='com') comJ += CAP.com[c.lv];
     if (c.t==='ind') indJ += CAP.ind[c.lv];
     // every developed lot sends commuters onto nearby streets
@@ -1871,13 +1885,16 @@ function simTick(){
   if (n) lvAvg = lvSum/n;
   const jobBal = pop>0 ? clamp(S.jobs/Math.max(1,pop*.55),0,1.2) : 1;
   const crimeDrag = Math.min(10, (S.crimeAvg||0)*0.45);
-  S.happyParts = { base:30, lv:lvAvg*.5, jobs:jobBal*18, tax:-(S.tax-9)*2.2, power:-unp*1.5, water:-dry*0.8, traffic:-congested*0.7, crime:-crimeDrag };
-  S.happy = Math.round(clamp(30 + lvAvg*.5 + jobBal*18 - (S.tax-9)*2.2 - unp*1.5 - dry*0.8 - congested*0.7 - crimeDrag, 0, 100));
+  const access = pop>0 ? clamp(strandedPop/pop,0,1) : 0;   // share of residents cut off from jobs by road
+  S.strandedPop = strandedPop;
+  S.happyParts = { base:30, lv:lvAvg*.5, jobs:jobBal*18, tax:-(S.tax-9)*2.2, power:-unp*1.5, water:-dry*0.8, traffic:-congested*0.7, crime:-crimeDrag, access:-access*12 };
+  S.happy = Math.round(clamp(30 + lvAvg*.5 + jobBal*18 - (S.tax-9)*2.2 - unp*1.5 - dry*0.8 - congested*0.7 - crimeDrag - access*12, 0, 100));
   S.demParts = { pop, jobs:S.jobs, comJ, indJ, taxDrag };
 
   if (unp>3 && S.day%17===0) msg('<b>Blackouts.</b> Parts of the city have no power — extend roads from a plant or build another.');
   if (dry>5 && S.day%23===0) msg('<b>Water shortage.</b> Lots without water are stuck at level 1 — add a riverbank pump or a water tower.');
   if (congested>6 && S.day%19===0) msg('<b>Gridlock.</b> Citizens are stuck in traffic and growth has stalled — upgrade busy streets to avenues or add parallel routes.');
+  if (access>0.15 && S.day%21===0) msg('<b>Stranded neighborhoods.</b> Some homes have no road route to any jobs — connect them to your commercial and industrial districts.');
 
   // periodic land value refresh so traffic effects propagate
   if (S.day % 8 === 0) recomputeFields();
@@ -1926,6 +1943,44 @@ function simTick(){
     if (S.started && store.available()) writeSlot('auto');   // quiet monthly autosave
   }
   updateHUD();
+}
+/* commute access: multi-source BFS over the road graph from every job lot's
+   frontage. jobDist[roadtile] = shortest road-steps to a job; Infinity = the
+   street can't reach any job. Lets a stranded suburb suffer real unemployment
+   instead of teleporting its labour. Cheap: one O(roads) FIFO sweep per tick. */
+let jobDist = new Float32Array(G * G);
+let commuteJobs = 0;            // job-frontage road tiles seeded this pass (0 ⇒ no jobs yet)
+function recomputeCommute(){
+  jobDist.fill(Infinity);
+  const q=[]; let head=0;
+  for (let y=0;y<G;y++) for (let x=0;x<G;x++){
+    const c=map[y][x];
+    // a job tile = a developed com/ind lot, OR any footprint cell of a com/ind tower.
+    // tower parts keep their type but have lv=0, and a 2x2's road frontage often touches
+    // only a part cell — seeding from the whole footprint avoids stranding such employers.
+    if (!((c.t==='com'||c.t==='ind') && (c.lv>0 || c.part))) continue;
+    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx, ny=y+dy;
+      if (isRoad(nx,ny) && jobDist[idx(nx,ny)]===Infinity){ jobDist[idx(nx,ny)]=0; q.push([nx,ny]); }
+    }
+  }
+  commuteJobs=q.length;
+  while (head<q.length){                     // FIFO ⇒ correct shortest road-step distances
+    const [x,y]=q[head++]; const d=jobDist[idx(x,y)]+1;
+    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx, ny=y+dy;
+      if (isRoad(nx,ny) && jobDist[idx(nx,ny)]===Infinity){ jobDist[idx(nx,ny)]=d; q.push([nx,ny]); }
+    }
+  }
+}
+/* shortest job distance among the road tiles a lot fronts (hasFrontage's 5x5 window) */
+function jobReach(x,y){
+  let best=Infinity;
+  for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++){
+    const nx=x+dx, ny=y+dy;
+    if (isRoad(nx,ny)){ const d=jobDist[idx(nx,ny)]; if (d<best) best=d; }
+  }
+  return best;
 }
 /* a lot's commuters take a short random drive from its driveway, loading streets */
 function emitTraffic(x,y,lv){
@@ -6023,10 +6078,15 @@ let commuteViz=null;
 function findWorkplaces(hx,hy){
   const dist=new Int16Array(G*G).fill(-1);
   const q=[];
-  for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-    const nx=hx+dx, ny=hy+dy;
-    if (inB(nx,ny) && isRoad(nx,ny)){ dist[idx(nx,ny)]=1; q.push([nx,ny]); }
-  }
+  // seed from roads fronting the home's WHOLE footprint — a 2x2 tower's road access
+  // often touches a part cell, not the root corner, so seeding the root alone misses it
+  const root=map[hy][hx];
+  const cells = root.grp ? grpCells(root) : [[hx,hy]];
+  for (const [cx,cy] of cells)
+    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=cx+dx, ny=cy+dy;
+      if (inB(nx,ny) && isRoad(nx,ny) && dist[idx(nx,ny)]<0){ dist[idx(nx,ny)]=1; q.push([nx,ny]); }
+    }
   const found=[], seenB=new Set();
   let qi=0;
   while(qi<q.length && found.length<3){
@@ -6074,7 +6134,9 @@ function showTip(x,y,force,light){
     html+=`<div class="row"><span>${c.t==='res'?'Residents':'Jobs'}</span><span>${cap}</span></div>`;
     html+=`<div class="row"><span>Power</span><span>${c.pw?'✓ on':'✗ none'}</span></div>`;
     html+=`<div class="row"><span>Water</span><span>${c.wt?'✓ on':'✗ none'}</span></div>`;
-    html+=`<div class="row"><span>Road access</span><span>${roadAdj(x,y)?'✓':'✗'}</span></div>`;
+    const acc = tower ? (blockStat(c.grp[0],c.grp[1]).road?'direct':'none')
+                      : (roadAdj(x,y)?'direct' : hasFrontage(x,y)?'nearby':'none');
+    html+=`<div class="row"><span>Road access</span><span${acc==='none'?' style="color:var(--red)"':acc==='nearby'?' style="color:var(--dim)"':''}>${acc==='direct'?'✓':acc==='nearby'?'✓ via nearby road':'✗'}</span></div>`;
     if (adjCongested(x,y)) html+=`<div class="row"><span>Traffic</span><span style="color:var(--red)">gridlocked</span></div>`;
     const cr=crime[i];
     if (cr>2) html+=`<div class="row"><span>Crime</span><span style="color:${cr>10?'var(--red)':cr>5?'var(--amber)':'var(--dim)'}">${cr>10?'high':cr>5?'moderate':'low'}</span></div>`;
@@ -8136,7 +8198,7 @@ function bindStatTip(el, build){
   el.addEventListener('pointerleave', ()=>{ statTip.style.display='none'; });
 }
 bindStatTip(document.getElementById('happy'), ()=>{
-  const h=S.happyParts||{base:30,lv:27,jobs:18,tax:0,power:0,water:0,traffic:0};
+  const h=S.happyParts||{base:30,lv:27,jobs:18,tax:0,power:0,water:0,traffic:0,access:0};
   return `<h4>HAPPINESS — HOW IT'S SCORED</h4>`
     + statRow('Base mood', h.base)
     + statRow('Avg land value ÷ 2', h.lv, true)
@@ -8146,6 +8208,7 @@ bindStatTip(document.getElementById('happy'), ()=>{
     + statRow('Water shortages', h.water, true)
     + statRow('Traffic', h.traffic, true)
     + statRow('Crime', h.crime||0, true)
+    + statRow('Job access', h.access||0, true)
     + `<div class="row" style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px"><span><b>Total</b></span><span><b>${S.happy}%</b></span></div>`;
 });
 bindStatTip(document.getElementById('rci'), ()=>{
