@@ -6173,8 +6173,10 @@ function commuteSearch(sx,sy, want, lim){
   const q=[];
   const root=map[sy][sx];
   const cells = root.grp ? grpCells(root) : [[sx,sy]];
+  // seed from any road in the same ~2-tile frontage window the game uses to grant road access
+  // (hasFrontage / jobReach), so a lot served by a nearby road also finds its commute
   for (const [cx,cy] of cells)
-    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++){
       const nx=cx+dx, ny=cy+dy;
       if (inB(nx,ny) && isRoad(nx,ny) && dist[idx(nx,ny)]<0){ dist[idx(nx,ny)]=1; q.push([nx,ny]); }
     }
@@ -6275,7 +6277,8 @@ function showTip(x,y,force,light){
     const jobs=offices.concat(factories).sort((a,b)=>a.d-b.d);
     const shops=commuteSearch(hX,hY,isShopCell), fun=commuteSearch(hX,hY,isLeisCell);
     if (jobs.length){ cmHdr('Work'); cmDest(jobs); }
-    else html+=`<div class="row"><span>Work</span><span style="color:var(--red)">no jobs reachable</span></div>`;
+    else { const roaded = tower ? blockStat(c.grp[0],c.grp[1]).road : hasFrontage(x,y);
+      html+=`<div class="row"><span>Work</span><span style="color:var(--${roaded?'amber':'red'})">${roaded?'no jobs within reach':'connect a road first'}</span></div>`; }
     if (shops.length){ cmHdr('Shopping'); cmDest(shops); }
     if (fun.length){ cmHdr('Leisure'); cmDest(fun); }
     const to=jobs.concat(shops, fun);
