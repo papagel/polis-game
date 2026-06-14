@@ -130,6 +130,9 @@
   #flyout .ftxt{flex:1;display:flex;flex-direction:column;line-height:1.25}
   #flyout .ftxt b{font-size:12px}
   #flyout .ftxt i{font-size:10px;color:var(--dim);font-style:normal}
+  #flyout .ftxt i.lockmsg{color:var(--amber)}
+  #flyout button.locked .cost{opacity:.45}
+  #flyout button.locked:hover{background:none;cursor:not-allowed}
   #flyout .cost{font-size:11px;color:var(--amber)}
   .frow{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:11px}
   .frow span:first-child{width:48px;color:var(--dim)}
@@ -182,9 +185,11 @@
   /* tooltip */
   #tip{pointer-events:none;padding:9px 12px;font-size:12px;line-height:1.55;display:none;max-width:230px;z-index:9}
   #statTip{pointer-events:none;position:fixed;padding:9px 12px;font-size:12px;line-height:1.6;display:none;max-width:250px;z-index:26}
-  #statTip h4{font-family:'Chakra Petch';color:var(--amber);font-size:11px;margin-bottom:5px;letter-spacing:.06em}
-  #statTip .row{display:flex;justify-content:space-between;gap:14px}
-  #statTip .row span:first-child{color:var(--dim)}
+  #catTip{pointer-events:none;position:fixed;padding:9px 12px;font-size:12px;line-height:1.6;display:none;max-width:346px;z-index:40}
+  #catTip .ctpv{display:block;width:320px;margin:-2px -2px 8px;border-radius:7px;background:radial-gradient(125% 95% at 50% 34%, #1b2c41, #0a1422)}
+  #statTip h4,#catTip h4{font-family:'Chakra Petch';color:var(--amber);font-size:11px;margin-bottom:5px;letter-spacing:.06em}
+  #statTip .row,#catTip .row{display:flex;justify-content:space-between;gap:14px}
+  #statTip .row span:first-child,#catTip .row span:first-child{color:var(--dim)}
   #tip h4{font-family:'Chakra Petch';font-size:13px;color:var(--amber);margin-bottom:2px}
   #tip .row{display:flex;justify-content:space-between;gap:14px}
   #tip .row span:last-child{font-family:'Chakra Petch'}
@@ -379,8 +384,9 @@
   #bsub .bchip .bl{font-size:8.5px;font-family:'Chakra Petch';letter-spacing:.02em;white-space:nowrap;max-width:62px;overflow:hidden;text-overflow:ellipsis}
   #bsub .bchip .bc{font-size:8px;color:var(--dim)}
   #bsub .bchip.on{border-color:var(--amber)}
-  #bsub .bchip.locked{opacity:.45}
+  #bsub .bchip.locked{opacity:.55}
   #bsub .bchip.locked .ic{filter:grayscale(1) brightness(.75)}
+  #bsub .bchip .bc.lockbc{color:var(--amber);font-size:7.5px}
   body.mob #ticker{position:static;width:auto;max-width:none;margin:0 0 6px;font-size:11.5px;padding:7px 12px;text-align:center;background:rgba(255,255,255,.04);border:none;box-shadow:none;border-radius:8px}
   body.mob #ticker:empty{display:none}
   body.mob #views{display:none}
@@ -529,6 +535,7 @@
 
 <div id="tip" class="hud panel"></div>
 <div id="statTip" class="hud panel"></div>
+<div id="catTip" class="hud panel"></div>
 <div id="milesBanner"></div>
 
 <div id="corner" class="hud">
@@ -1053,6 +1060,18 @@ function showBanner(m){
 function lockReason(d){
   const m=MILESTONES[d.lockAt];
   return m ? 'Locked — reach '+m.name+' ('+m.pop.toLocaleString()+' residents) to unlock' : 'Locked';
+}
+/* compact inline note for the sidebar — short enough to sit under a tool name */
+function lockNote(d){
+  const m=MILESTONES[d.lockAt];
+  return m ? 'Unlocks at '+m.name+' · '+m.pop.toLocaleString()+' pop' : 'Locked';
+}
+function isToolLocked(id){ const d=TOOLDEF[id]; return !!(d && d.lockAt!==undefined && S.milestone<d.lockAt); }
+/* ultra-short pop threshold for the cramped mobile chip footer, e.g. 6k / 15k / 1M */
+function lockPopShort(d){
+  const m=MILESTONES[d.lockAt]; if (!m) return '';
+  const p=m.pop;
+  return p>=1000000 ? (p/1000000)+'M' : p>=1000 ? (p/1000)+'k' : ''+p;
 }
 function refreshLocks(){
   document.querySelectorAll('.tool, #flyout button, #bsub .bchip').forEach(el=>{
@@ -1582,7 +1601,7 @@ function place(x, y, quiet){
 const CAP = {
   res:[0, 8, 22, 48, 210, 380, 700, 1200],
   com:[0, 6, 16, 36, 160, 310, 560, 950],
-  ind:[0, 9, 24, 42, 185, 185, 185, 185],
+  ind:[0, 9, 24, 42, 185, 300, 460, 460],   // lv5/6 = heavy-industry complexes (megaplants); lv7 unreached
 };
 /* ---------- multi-tile footprints ---------- */
 /* base [w,h]; non-square types can be rotated at placement (R / the ↻ chip) */
@@ -1622,7 +1641,9 @@ function tryMerge(bx,by){
     if (c.t!==t || c.lv<2 || c.grp || c.part || c.fire>0 || !c.pw || !c.wt) return false;
   }
   if (!blockStat(bx,by).road) return false;
-  if (landVal[idx(bx,by)] <= (t==='ind' ? 30 : 55)) return false;
+  // industry is exempt from the land-value gate (same reason it's exempt when leveling 1→3):
+  // its own pollution tanks land value, which would otherwise lock factories below the complex tier.
+  if (t!=='ind' && landVal[idx(bx,by)] <= 55) return false;
   for (const [x,y] of blockCells(bx,by)){
     const c=map[y][x];
     c.grp=[bx,by];
@@ -1773,6 +1794,16 @@ function simTick(){
       if (c.lv===6 && c.t!=='ind' && c.dev>720 && lvReq>88 && (S.edu||0)>=0.92 && leisure[idx(x,y)]>=10 && cellWt && !jam && Math.random()<0.008){
         c.lv=7; c.bld=1; c.dev=780; dirty=true; recomputeFields();
         msg(`<b>A megatower pierces the clouds.</b> ${c.t==='res'?'Twelve hundred residents':'A vertical district of jobs'} in one block — the city's new crown.`);
+      }
+      // industry scales vertically into heavy complexes — no land-value/leisure gate (it makes its own smog),
+      // but the upper tiers need a skilled, educated workforce. Tops out at lv6 (megaplant), never a glass megatower.
+      if (c.lv===4 && c.t==='ind' && c.dev>460 && cellWt && !jam && (S.edu||0)>=0.30 && Math.random()<0.02){
+        c.lv=5; c.bld=1; c.dev=540; dirty=true; recomputeFields();
+        msg(`<b>An industrial complex scales up to heavy industry.</b> Hundreds more jobs in one block.`);
+      }
+      if (c.lv===5 && c.t==='ind' && c.dev>640 && cellWt && !jam && (S.edu||0)>=0.55 && Math.random()<0.012){
+        c.lv=6; c.bld=1; c.dev=700; dirty=true; recomputeFields();
+        msg(`<b>A heavy-industry megaplant comes online.</b> A vertical district of jobs.`);
       }
       // mature lv3 lots try to merge with three matching neighbors into a tower
       if (c.lv===3 && !c.grp && c.dev>260 && dem>-0.3 && Math.random()<0.08){
@@ -2353,6 +2384,7 @@ function diamond(sx,sy,s=1,z=S.zoom){
 }
 /* iso box: footprint scale s, pixel height hp (at zoom1), base color */
 function box(sx,sy,s,hp,col,opts={}){
+  if(BLD_TINT){ col=tintHex(col); if(opts.roof) opts={...opts,roof:tintHex(opts.roof)}; }
   const z=S.zoom, w=TW/2*s*z, h=TH/2*s*z, cxp=sx, cyp=sy+TH/2*z, H=hp*z;
   // soft ground shadow, scaled by building height
   if (H>4*z){
@@ -2812,13 +2844,45 @@ function drawCell(x,y,now){
       }
       break; }
     case 'pump': {
-      diamond(sx,sy); cx.fillStyle='#7da3b5'; cx.fill();
-      const f=box(sx,sy,.6,12,'#2e7fb8',{roof:'#205d88',line:true});
-      // intake pipe toward the river side
-      cx.fillStyle='#4a98c9';
-      cx.fillRect(sx-3*z, sy+TH/2*z-f.H-7*z, 6*z, 7*z);
-      cx.fillStyle='#cfe8f5'; cx.font=`${8*z}px 'Chakra Petch'`; cx.textAlign='center';
-      cx.fillText('◉', sx, sy+TH/2*z - f.H/2 + 2*z);
+      const cyp=sy+TH/2*z, ph=now/700, on=c.pw;
+      // concrete pad
+      diamond(sx,sy); cx.fillStyle='#8497a3'; cx.fill();
+      diamond(sx,sy,.92); cx.strokeStyle='rgba(38,54,64,.35)'; cx.lineWidth=Math.max(.7,.9*z); cx.stroke();
+      // intake basin cut into the river-facing front corner
+      cx.fillStyle='#3f5c69';
+      cx.beginPath();
+      cx.moveTo(sx, cyp+TH*.10*z); cx.lineTo(sx+TW*.30*z, cyp+TH*.42*z);
+      cx.lineTo(sx, cyp+TH*.74*z); cx.lineTo(sx-TW*.30*z, cyp+TH*.42*z); cx.closePath(); cx.fill();
+      // shimmering water + ripple, livelier when the pump is powered
+      const wob = on ? 1 : .35;
+      cx.fillStyle=`rgba(150,212,242,${.30+.16*Math.sin(ph*2.1)*wob})`;
+      cx.beginPath(); cx.ellipse(sx, cyp+TH*.42*z, 7.2*z, 2.9*z, 0, 0, 7); cx.fill();
+      cx.fillStyle='rgba(235,250,255,.55)';
+      cx.beginPath(); cx.ellipse(sx-2*z, cyp+TH*.40*z+Math.sin(ph*3)*.7*z*wob, 2.2*z, .9*z, 0, 0, 7); cx.fill();
+
+      // grid-offset → screen, so sub-structures sit correctly in iso
+      const at=(ox,oy)=>[sx+(ox-oy)*TW/2*z, sy+(ox+oy)*TH/2*z];
+
+      // pump house (set back, top of the tile)
+      const [bx,by]=at(-.16,-.16);
+      const f=box(bx,by,.5,15,'#3f8fc4',{roof:'#ccd8df',line:true});
+      // ridge cap + a short exhaust vent
+      cx.fillStyle='#aab9c2'; cx.fillRect(f.T[0]-2.5*z, f.T[1]-2.5*z, 5*z, 3*z);
+      cx.fillStyle='#5d6e78'; cx.fillRect(f.T[0]+3.5*z, f.T[1]-6*z, 2.4*z, 6*z);
+      // service door + a window that lights up at night while running
+      faceDoor(f,'R',.66,'#27566f',.5);
+      paneWin(f.L, f.B, f.H, .34, .12, .26, .60, night && on, false);
+
+      // cylindrical storage tank (front-right) with a domed cap + water-drop emblem
+      const tk=cyl(sx,sy,.2,.04,.34,18,'#56a3d2');
+      cx.fillStyle=shade('#56a3d2',1.22);
+      cx.beginPath(); cx.ellipse(tk.cx, tk.cy-tk.H-tk.ry*.5, tk.rx*.92, tk.ry*1.2, 0, 0, 7); cx.fill();
+      cx.fillStyle='rgba(225,245,255,.92)';
+      cx.beginPath();
+      cx.moveTo(tk.cx, tk.cy-tk.H*.58-3*z);
+      cx.bezierCurveTo(tk.cx+2.6*z, tk.cy-tk.H*.58, tk.cx+2.2*z, tk.cy-tk.H*.58+3*z, tk.cx, tk.cy-tk.H*.58+3*z);
+      cx.bezierCurveTo(tk.cx-2.2*z, tk.cy-tk.H*.58+3*z, tk.cx-2.6*z, tk.cy-tk.H*.58, tk.cx, tk.cy-tk.H*.58-3*z);
+      cx.closePath(); cx.fill();
       break; }
     case 'tower': {
       diamond(sx,sy); cx.fillStyle='#8ba398'; cx.fill();
@@ -2846,23 +2910,52 @@ function drawCell(x,y,now){
       break;
     case 'park': {
       diamond(sx,sy); cx.fillStyle='#7cbf67'; cx.fill();
-      cx.fillStyle='#cfe3a8'; cx.beginPath(); cx.ellipse(sx, sy+TH*.55*z, 9*z,4.5*z,0,0,7); cx.fill();
-      tree(sx-10*z,sy-2*z,.65,v); tree(sx+9*z,sy+1*z,.6,1-v);
+      const cy2=sy+TH/2*z;
+      // mown lighter clearing
+      cx.fillStyle='#a9d98a'; cx.beginPath(); cx.ellipse(sx, cy2+1*z, 16*z, 8*z, 0, 0, 7); cx.fill();
+      // winding gravel path
+      cx.strokeStyle='#d8caa0'; cx.lineWidth=2.6*z; cx.lineCap='round';
+      cx.beginPath(); cx.moveTo(sx-16*z, cy2+4*z); cx.quadraticCurveTo(sx-2*z, cy2-2*z, sx+15*z, cy2+5*z); cx.stroke();
+      cx.lineCap='butt';
+      // small pond with a glint
+      cx.fillStyle='#5aa7c9'; cx.beginPath(); cx.ellipse(sx+8*z, cy2+5*z, 6*z, 2.8*z, 0, 0, 7); cx.fill();
+      cx.fillStyle='rgba(220,245,255,.4)'; cx.beginPath(); cx.ellipse(sx+6*z, cy2+4.4*z, 2*z, .8*z, 0, 0, 7); cx.fill();
+      // bench + a dab of flowers
+      cx.fillStyle='#6b5a42'; cx.fillRect(sx-3*z, cy2+5*z, 4*z, 1.2*z);
+      cx.fillStyle='#e87fa0'; cx.beginPath(); cx.arc(sx+1.5*z, cy2-1*z, 1.2*z, 0, 7); cx.fill();
+      cx.fillStyle='#f2c14e'; cx.beginPath(); cx.arc(sx+3.6*z, cy2-.2*z, 1.1*z, 0, 7); cx.fill();
+      // trees of varied size — base kept near the tile centre so the canopies stay inside the tile
+      tree(sx-9*z, sy-1*z, .55, v);
+      tree(sx-2*z, sy-4*z, .5,  1-v);
+      tree(sx+9*z, sy-1*z, .5,  v*.6+.2);
       break; }
     case 'garden': {
       diamond(sx,sy); cx.fillStyle='#6db872'; cx.fill();
+      const cy2=sy+TH/2*z;
       // hedge ring
       diamond(sx,sy,.85); cx.strokeStyle='#3f7a4a'; cx.lineWidth=2.4*z; cx.stroke();
-      // flower beds
+      // gravel cross paths along the iso axes
+      cx.strokeStyle='#d8caa0'; cx.lineWidth=2*z;
+      cx.beginPath();
+      cx.moveTo(sx-TW*.34*z, cy2); cx.lineTo(sx+TW*.34*z, cy2);
+      cx.moveTo(sx, cy2-TH*.34*z); cx.lineTo(sx, cy2+TH*.34*z);
+      cx.stroke();
+      // four quadrant flower beds
       const cols=['#e87fa0','#f2c14e','#9a7fe8','#ef8a5a'];
-      for (let i=0;i<5;i++){
-        const a=v*7+i*1.256, r=(5+(i%2)*3)*z;
-        cx.fillStyle=cols[(i+ (v*4|0))%4];
-        cx.beginPath(); cx.arc(sx+Math.cos(a)*r, sy+TH/2*z+Math.sin(a)*r*.5, 1.6*z, 0, 7); cx.fill();
-      }
-      // fountain
-      cx.fillStyle='#bcd9e8'; cx.beginPath(); cx.ellipse(sx, sy+TH/2*z, 3.4*z, 1.9*z, 0, 0, 7); cx.fill();
-      cx.fillStyle='rgba(255,255,255,.8)'; cx.fillRect(sx-.5*z, sy+TH/2*z-4*z+Math.sin(now/300)*0.6*z, 1*z, 4*z);
+      [[-9,-3],[9,-3],[-9,3],[9,3]].forEach((b,i)=>{
+        for (let k=0;k<4;k++){
+          cx.fillStyle=cols[(i+k+(v*4|0))%4];
+          const a=v*7+k*1.6;
+          cx.beginPath(); cx.arc(sx+b[0]*z+Math.cos(a)*2.3*z, cy2+b[1]*z+Math.sin(a)*1.1*z, 1.3*z, 0, 7); cx.fill();
+        }
+      });
+      // clipped topiary bushes at the path ends
+      cx.fillStyle='#3f7a4a';
+      for (const [bx2,by2] of [[-15,0],[15,0],[0,-7],[0,7]]){ cx.beginPath(); cx.ellipse(sx+bx2*z, cy2+by2*z, 2.2*z, 1.5*z, 0,0,7); cx.fill(); }
+      // central tiered fountain
+      cx.fillStyle='#9ab0bc'; cx.beginPath(); cx.ellipse(sx, cy2, 4.2*z, 2.3*z, 0, 0, 7); cx.fill();
+      cx.fillStyle='#bcd9e8'; cx.beginPath(); cx.ellipse(sx, cy2, 3*z, 1.6*z, 0, 0, 7); cx.fill();
+      cx.fillStyle='rgba(255,255,255,.85)'; cx.fillRect(sx-.5*z, cy2-4.5*z+Math.sin(now/300)*0.6*z, 1*z, 4.5*z);
       break; }
     case 'pool': case 'stadium': case 'arena': {
       diamond(sx,sy);
@@ -2902,23 +2995,33 @@ function drawCell(x,y,now){
         drawNuclearCampus(amx,amy,S.zoom,night,now);
       }
       break;
-    } else { // legacy 1×1 nuclear
+    } else { // legacy 1×1 nuclear (catalog representative) — a grand cooling tower + reactor dome
       diamond(sx,sy); cx.fillStyle='#9aa3a0'; cx.fill();
       const cy2=sy+TH/2*z;
+      const E2=(x2,y2,rx,ry,fill)=>{ cx.fillStyle=fill; cx.beginPath(); cx.ellipse(x2,y2,rx,ry,0,0,7); cx.fill(); };
+      // reactor containment dome (left)
+      cx.fillStyle='#e2e7ec';
+      cx.beginPath(); cx.ellipse(sx-10*z, cy2+1*z, 6.4*z, 7*z, 0, Math.PI, 0); cx.fill();
+      cx.fillStyle='rgba(20,28,40,.10)';
+      cx.beginPath(); cx.ellipse(sx-7.6*z, cy2-1.6*z, 3*z, 4.4*z, 0, Math.PI, 0); cx.fill();
+      cx.fillStyle='#c4ccd4'; cx.beginPath(); cx.ellipse(sx-10*z, cy2+1*z, 6.4*z, 2*z, 0, 0, Math.PI); cx.fill();
+      cx.fillStyle='#e0a23a'; cx.fillRect(sx-15.5*z, cy2+0.3*z, 11*z, 1.5*z);
+      // big hyperboloid cooling tower (right) rising off the ground + billowing steam
+      const bx=sx+6*z, base=cy2+6*z, Ht=32*z;
+      cx.fillStyle='#aeb4ba'; cx.beginPath(); cx.ellipse(bx, base, 7.5*z, 2.6*z, 0, 0, 7); cx.fill();   // rounded ground foot
       cx.fillStyle='#c8ccd2';
       cx.beginPath();
-      cx.moveTo(sx-2*z, cy2);
-      cx.quadraticCurveTo(sx+1*z, cy2-11*z, sx-1*z, cy2-20*z);
-      cx.lineTo(sx+8*z, cy2-20*z);
-      cx.quadraticCurveTo(sx+6*z, cy2-11*z, sx+9*z, cy2);
+      cx.moveTo(bx-7.5*z, base);
+      cx.quadraticCurveTo(bx-2.8*z, base-Ht*0.55, bx-4.8*z, base-Ht);
+      cx.lineTo(bx+4.8*z, base-Ht);
+      cx.quadraticCurveTo(bx+2.8*z, base-Ht*0.55, bx+7.5*z, base);
       cx.closePath(); cx.fill();
-      cx.fillStyle='#aab2b8';
-      cx.beginPath(); cx.ellipse(sx+3.5*z, cy2-20*z, 4.5*z, 1.8*z, 0, 0, 7); cx.fill();
-      cx.fillStyle='#39434f';
-      cx.beginPath(); cx.ellipse(sx+3.5*z, cy2-20*z, 3.2*z, 1.2*z, 0, 0, 7); cx.fill();
-      cx.fillStyle='#d8dde3';
-      cx.beginPath(); cx.ellipse(sx-9*z, cy2-2*z, 4.5*z, 5*z, 0, Math.PI, 0); cx.fill();
-      cx.fillStyle='#e0a23a'; cx.fillRect(sx-12*z, cy2-1*z, 6*z, 1.2*z);
+      cx.fillStyle='rgba(22,30,42,.14)';
+      cx.beginPath(); cx.moveTo(bx, base); cx.quadraticCurveTo(bx+2.8*z, base-Ht*0.55, bx+4.8*z, base-Ht); cx.lineTo(bx, base-Ht); cx.closePath(); cx.fill();
+      cx.fillStyle='#9aa3ab'; cx.beginPath(); cx.ellipse(bx, base-Ht, 4.8*z, 1.8*z, 0,0,7); cx.fill();
+      cx.fillStyle='#39434f'; cx.beginPath(); cx.ellipse(bx, base-Ht, 3.2*z, 1.2*z, 0,0,7); cx.fill();
+      for (let k=0;k<4;k++){ const ph=((now/900)+k*0.25)%1; E2(bx+Math.sin((ph+k)*6)*2.2*z, base-Ht-(2+ph*11)*z, (2.8+ph*4.4)*z, (1.7+ph*2.6)*z, 'rgba(240,246,250,'+(0.32*(1-ph)).toFixed(3)+')'); }
+      if (night){ cx.fillStyle=(now/700|0)%2?'#ff5a5a':'rgba(255,90,90,.3)'; cx.beginPath(); cx.arc(bx, base-Ht-1*z, 1.1*z, 0, 7); cx.fill(); }
       break;
     }
     case 'power': {
@@ -2974,16 +3077,19 @@ function drawCell(x,y,now){
         cx.lineTo(px+w*0.2*z, py-(h*0.58)*z);
         cx.closePath(); cx.fill();
       };
-      panel(sx-11*z, cy2+0.5*z, 7.5, 5.4);
-      panel(sx-2.5*z, cy2+3.6*z, 7.5, 5.4);
-      panel(sx-7*z,  cy2+6.4*z, 7.5, 5.4);
-      // inverter cabinet with vents
-      cx.fillStyle=shade('#aab2bc',.95); cx.fillRect(sx+8.6*z, cy2-2.4*z, 4.4*z, 3.6*z);
-      cx.fillStyle=shade('#7e8893',.9); cx.fillRect(sx+8.6*z, cy2-2.4*z, 4.4*z, 1*z);
+      // a full photovoltaic array — rows of panels laid across the whole field on the ground plane
+      const pw=4.8, ph=3.4, scols=4, srows=4;
+      for (let rv=0; rv<srows; rv++) for (let cu=0; cu<scols; cu++){
+        const uu=0.20+cu*0.20, vv=0.20+rv*0.20;             // grid coords spanning the tile
+        const gx=sx + (uu-vv)*30*z, gyv=sy + (uu+vv)*15*z;  // tile-plane → screen (back rows drawn first)
+        panel(gx - pw*0.5*z, gyv, pw, ph);
+      }
+      // inverter cabinet tucked at the right corner, clear of the array
+      cx.fillStyle=shade('#aab2bc',.95); cx.fillRect(sx+21*z, cy2+0.6*z, 4*z, 3.4*z);
+      cx.fillStyle=shade('#7e8893',.9); cx.fillRect(sx+21*z, cy2+0.6*z, 4*z, 1*z);
       cx.strokeStyle=shade('#5d6671',.9); cx.lineWidth=Math.max(.5,.4*z);
       cx.beginPath();
-      cx.moveTo(sx+9.3*z, cy2-0.8*z); cx.lineTo(sx+12.3*z, cy2-0.8*z);
-      cx.moveTo(sx+9.3*z, cy2+0.1*z); cx.lineTo(sx+12.3*z, cy2+0.1*z);
+      cx.moveTo(sx+21.6*z, cy2+2.2*z); cx.lineTo(sx+24.4*z, cy2+2.2*z);
       cx.stroke();
       break; }
     case 'highschool': { // two-storey block + gym wing + court
@@ -3053,39 +3159,60 @@ function drawCell(x,y,now){
         }
       } else art(sx,sy);
       break; }
-    case 'playground': { // sand pit, slide, swing frame
+    case 'playground': { // sand pit, slide, swings, seesaw, spring rider
       diamond(sx,sy); cx.fillStyle='#8fbf72'; cx.fill();
       const cy2=sy+TH/2*z;
       cx.fillStyle='#e0d3a8';
-      cx.beginPath(); cx.ellipse(sx, cy2+1*z, 9*z, 4.5*z, 0, 0, 7); cx.fill();
-      // slide
+      cx.beginPath(); cx.ellipse(sx, cy2+1*z, 10*z, 5*z, 0, 0, 7); cx.fill();
+      // slide (left)
       cx.fillStyle='#e0784a';
-      cx.beginPath(); cx.moveTo(sx-7*z,cy2-7*z); cx.lineTo(sx-4.6*z,cy2-7*z); cx.lineTo(sx-1*z,cy2+1*z); cx.lineTo(sx-3.4*z,cy2+1*z); cx.closePath(); cx.fill();
+      cx.beginPath(); cx.moveTo(sx-9*z,cy2-7*z); cx.lineTo(sx-6.6*z,cy2-7*z); cx.lineTo(sx-3*z,cy2+1*z); cx.lineTo(sx-5.4*z,cy2+1*z); cx.closePath(); cx.fill();
       cx.strokeStyle='#b85a32'; cx.lineWidth=1*z;
-      cx.beginPath(); cx.moveTo(sx-6*z,cy2-7*z); cx.lineTo(sx-6*z,cy2+1*z); cx.stroke();
-      // swings
+      cx.beginPath(); cx.moveTo(sx-8*z,cy2-7*z); cx.lineTo(sx-8*z,cy2+1*z); cx.stroke();
+      // swings (right)
       cx.strokeStyle='#3a77b8'; cx.lineWidth=1.1*z;
-      cx.beginPath(); cx.moveTo(sx+3*z,cy2+1*z); cx.lineTo(sx+5.5*z,cy2-6*z); cx.lineTo(sx+10*z,cy2-6*z); cx.lineTo(sx+12.5*z,cy2+1*z); cx.stroke();
+      cx.beginPath(); cx.moveTo(sx+4*z,cy2+1*z); cx.lineTo(sx+6.5*z,cy2-6*z); cx.lineTo(sx+11*z,cy2-6*z); cx.lineTo(sx+13.5*z,cy2+1*z); cx.stroke();
       const sw2=Math.sin(now/400)*1.4*z;
       cx.strokeStyle='#5d6b7d'; cx.lineWidth=.6*z;
-      cx.beginPath(); cx.moveTo(sx+7.7*z,cy2-6*z); cx.lineTo(sx+7.7*z+sw2,cy2-1.5*z); cx.stroke();
-      cx.fillStyle='#d23b3b'; cx.fillRect(sx+6.9*z+sw2, cy2-1.6*z, 1.6*z, .9*z);
+      cx.beginPath(); cx.moveTo(sx+8.7*z,cy2-6*z); cx.lineTo(sx+8.7*z+sw2,cy2-1.5*z); cx.stroke();
+      cx.fillStyle='#d23b3b'; cx.fillRect(sx+7.9*z+sw2, cy2-1.6*z, 1.6*z, .9*z);
+      // seesaw (front), gently rocking
+      const tilt=Math.sin(now/500)*1.8*z;
+      cx.fillStyle='#caa84a'; cx.beginPath(); cx.moveTo(sx-2.4*z,cy2+5*z); cx.lineTo(sx-1*z,cy2+5*z); cx.lineTo(sx-1.4*z,cy2+7*z); cx.lineTo(sx-2.8*z,cy2+7*z); cx.closePath(); cx.fill();
+      cx.strokeStyle='#4a8a3a'; cx.lineWidth=1.4*z;
+      cx.beginPath(); cx.moveTo(sx-6*z, cy2+5*z+tilt); cx.lineTo(sx+2*z, cy2+5*z-tilt); cx.stroke();
+      // spring rider (front-left)
+      cx.strokeStyle='#9a7fe8'; cx.lineWidth=1*z;
+      cx.beginPath(); cx.moveTo(sx-12*z,cy2+4*z); cx.lineTo(sx-12*z,cy2+1.6*z); cx.stroke();
+      cx.fillStyle='#3a77b8'; cx.beginPath(); cx.arc(sx-12*z, cy2+.8*z, 1.6*z, 0, 7); cx.fill();
       break; }
-    case 'plaza': { // paved square, fountain, benches, lamp
+    case 'plaza': { // paved square, tiered fountain, planters, benches, lamps, strollers
       diamond(sx,sy); cx.fillStyle=shade('#b8b0a0',.96+v*.06); cx.fill();
       cx.strokeStyle='rgba(90,85,70,.35)'; cx.lineWidth=.7;
       diamond(sx,sy,.72); cx.stroke(); diamond(sx,sy,.45); cx.stroke();
       const cy2=sy+TH/2*z;
-      cx.fillStyle='#8fb8c9';
-      cx.beginPath(); cx.ellipse(sx, cy2, 4*z, 2*z, 0, 0, 7); cx.fill();
-      cx.fillStyle='rgba(255,255,255,.85)';
-      cx.fillRect(sx-.5*z, cy2-5*z+Math.sin(now/280)*0.7*z, 1*z, 5*z);
+      // planter trees flanking the square — base near the tile centre so they stay on the paving
+      for (const px of [-13,13]) tree(sx+px*z, sy-1*z, .4, v);
+      // benches around the square
       cx.fillStyle='#6b5a42';
-      cx.fillRect(sx-10*z, cy2+1*z, 4*z, 1.2*z); cx.fillRect(sx+7*z, cy2-4*z, 4*z, 1.2*z);   // benches
-      cx.strokeStyle='#444'; cx.lineWidth=.8*z;
-      cx.beginPath(); cx.moveTo(sx+10*z,cy2+3*z); cx.lineTo(sx+10*z,cy2-5*z); cx.stroke();
-      cx.fillStyle = night?'#ffe9a8':'#c8ccd2';
-      cx.beginPath(); cx.arc(sx+10*z, cy2-5.5*z, 1.2*z, 0, 7); cx.fill();
+      cx.fillRect(sx-10*z, cy2+3*z, 4*z, 1.2*z); cx.fillRect(sx+6*z, cy2+3*z, 4*z, 1.2*z);
+      cx.fillRect(sx-2*z, cy2-6*z, 4*z, 1.1*z);
+      // central tiered fountain with a jet
+      cx.fillStyle='#9aa0a6'; cx.beginPath(); cx.ellipse(sx, cy2, 5*z, 2.6*z, 0, 0, 7); cx.fill();
+      cx.fillStyle='#8fb8c9'; cx.beginPath(); cx.ellipse(sx, cy2, 3.6*z, 1.9*z, 0, 0, 7); cx.fill();
+      cx.fillStyle='#9aa0a6'; cx.beginPath(); cx.ellipse(sx, cy2-1.6*z, 1.5*z, .8*z, 0, 0, 7); cx.fill();
+      cx.fillStyle='rgba(255,255,255,.85)'; cx.fillRect(sx-.5*z, cy2-6.5*z+Math.sin(now/280)*0.7*z, 1*z, 5*z);
+      // twin lamp posts (kept inboard of the planter trees)
+      for (const lx of [-8, 8]){
+        cx.strokeStyle='#444'; cx.lineWidth=.8*z;
+        cx.beginPath(); cx.moveTo(sx+lx*z,cy2-3*z); cx.lineTo(sx+lx*z,cy2-8*z); cx.stroke();
+        cx.fillStyle = night?'#ffe9a8':'#c8ccd2';
+        cx.beginPath(); cx.arc(sx+lx*z, cy2-8.5*z, 1.2*z, 0, 7); cx.fill();
+      }
+      // a couple of strollers crossing the square
+      cx.fillStyle='rgba(60,70,80,.7)';
+      cx.beginPath(); cx.arc(sx-3*z+Math.sin(now/900)*2*z, cy2+1*z, .9*z, 0, 7); cx.fill();
+      cx.beginPath(); cx.arc(sx+5*z, cy2-1*z, .9*z, 0, 7); cx.fill();
       break; }
     case 'cityhall': { // domed civic hall: wide stately block, columned portico, gold dome, flag
       const f=vol(sx,sy,0,.04,.38,.28,14,'#ded2b0',{roof:'#b8ac8a'});
@@ -3353,7 +3480,7 @@ function drawTowerTile(c,x,y,sx,sy,night,now){
     const [vcx,vcy]=rotC(bx+1,by+1);
     const [msx,msy]=toScreen(vcx-.5,vcy-.5);
     const hf = root.bld>0 ? 0.18+0.82*(1-root.bld) : 1;
-    drawBigBuilding(root.t, msx, msy, hf, night, root.lv, c.vary);
+    drawBigBuilding(root.t, msx, msy, hf, night, root.lv, root.vary);
     if (root.bld>0) drawCrane(msx, msy, towerHeight(root.t, root.lv)*hf, now);
   }
 }
@@ -3516,6 +3643,63 @@ function drawVenue(t, mx, my, u, night, now, vary){
     }
   }
 }
+/* per-tower palette jitter: while BLD_TINT is set, box/cyl/vol shift the building's
+   hue/lightness/saturation — same silhouettes, different colors → varied skylines.
+   null everywhere except mid-draw of one tower, so other buildings pay nothing. */
+let BLD_TINT=null;
+function tintHex(hex){
+  if(!BLD_TINT || typeof hex!=='string' || hex[0]!=='#') return hex;
+  const n=parseInt(hex.slice(1),16);
+  let r=((n>>16)&255)/255, g=((n>>8)&255)/255, b=(n&255)/255;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn;
+  let h=0, s=0, l=(mx+mn)/2;
+  if(d){
+    s = l>0.5 ? d/(2-mx-mn) : d/(mx+mn);
+    h = mx===r ? (g-b)/d+(g<b?6:0) : mx===g ? (b-r)/d+2 : (r-g)/d+4;
+    h/=6;
+  }
+  h=(h+BLD_TINT.dh)%1; if(h<0) h+=1;
+  s=clamp(s*BLD_TINT.ms,0,1);
+  l=clamp(l*BLD_TINT.ml,0,1);
+  let R,Gr,B2;
+  if(s===0){ R=Gr=B2=l; }
+  else{
+    const q=l<0.5?l*(1+s):l+s-l*s, p=2*l-q;
+    const hue=(t)=>{ if(t<0)t+=1; if(t>1)t-=1; if(t<1/6)return p+(q-p)*6*t; if(t<1/2)return q; if(t<2/3)return p+(q-p)*(2/3-t)*6; return p; };
+    R=hue(h+1/3); Gr=hue(h); B2=hue(h-1/3);
+  }
+  const hx=v=>(clamp(v*255,0,255)|0).toString(16).padStart(2,'0');
+  return '#'+hx(R)+hx(Gr)+hx(B2);
+}
+/* decorrelated pseudo-randoms from one stable per-block noise value (so silhouette,
+   color and rooftop props don't all move together) */
+function towerRnd(vary, salt){ const x=Math.sin(((vary||0)+salt)*97.13)*43758.5453; return x-Math.floor(x); }
+/* one or two small props on a tower's flat top. (msx,top) is the roof's apex; hw/hd are the
+   roof's screen half-width/half-depth. Props are placed on the FRONT half of the iso roof
+   diamond — each prop's base y is offset by its depth so it sits on the slanted plane and
+   never floats. Footprint is kept narrow so props stay inside even slim crown roofs. */
+function roofProps(msx, top, hw, hd, r, night){
+  const z=S.zoom, n=1+((r*1.9)|0);                       // 1..2 props — restrained
+  const spots=[[0,0.34],[-0.30,0.20],[0.28,0.44]];       // all on the visible front-of-roof, inside the diamond
+  for(let i=0;i<n;i++){
+    const [a,b]=spots[(i+((r*5)|0))%spots.length];
+    const px=msx+a*hw, py=top+b*hd;                       // py follows the roof slope (depth → screen-y)
+    const kind=((r*7+i*5)|0)%3;
+    if(kind===0){            // mechanical / AC unit
+      cx.fillStyle='#7f868d'; cx.fillRect(px-3*z, py-3.2*z, 6*z, 3.2*z);
+      cx.fillStyle='#9aa1a8'; cx.fillRect(px-3*z, py-3.9*z, 6*z, 0.8*z);
+      cx.strokeStyle='rgba(18,26,36,.4)'; cx.lineWidth=Math.max(.5,.6*z); cx.strokeRect(px-3*z, py-3.2*z, 6*z, 3.2*z);
+    } else if(kind===1){     // small water tank on a low stand
+      cx.fillStyle='#6e7682'; cx.fillRect(px-1.5*z, py-1.3*z, 3*z, 1.3*z);
+      cx.fillStyle='#9a948a'; cx.fillRect(px-2.1*z, py-5.2*z, 4.2*z, 4*z);
+      cx.fillStyle='#aaa498'; cx.beginPath(); cx.ellipse(px, py-5.2*z, 2.1*z, 0.95*z, 0,0,7); cx.fill();
+    } else {                 // slim antenna mast with a night beacon
+      cx.strokeStyle = night?'#ff8a72':'#b8c0c8'; cx.lineWidth=Math.max(.7,1*z);
+      cx.beginPath(); cx.moveTo(px, py-1*z); cx.lineTo(px, py-9*z); cx.stroke();
+      if(night){ cx.fillStyle='#ff6a5a'; cx.beginPath(); cx.arc(px, py-9*z, 1.2*z, 0,7); cx.fill(); }
+    }
+  }
+}
 function towerHeight(t, lv){
   if (lv>=7) return t==='res'?134:162;
   if (lv===6) return t==='res'?106:128;
@@ -3524,7 +3708,10 @@ function towerHeight(t, lv){
 }
 function drawBigBuilding(t, msx, msy, hf, night, lv, vary){
   const z=S.zoom, H=towerHeight(t,lv)*hf, gy=msy+TH/2*z;
-  const vk=Math.min(2,((vary||0)*3)|0);          // three distinct silhouettes per type & level
+  const vk=Math.min(3,((vary||0)*4)|0);          // four distinct silhouettes per type & level
+  // per-tower palette jitter (decorrelated from the silhouette) so same shapes vary in color
+  const tintR=towerRnd(vary,0.21), satR=towerRnd(vary,0.43), propR=towerRnd(vary,0.67);
+  BLD_TINT={ dh:(tintR-0.5)*0.11, ml:0.90+satR*0.18, ms:0.80+tintR*0.40 };
   const spire=(x2,top,len,col)=>{
     cx.strokeStyle=col||'#3a4a5c'; cx.lineWidth=1.4*z;
     cx.beginPath(); cx.moveTo(x2, top); cx.lineTo(x2, top-len*z); cx.stroke();
@@ -3552,15 +3739,43 @@ function drawBigBuilding(t, msx, msy, hf, night, lv, vary){
         }
       }
     };
-    const f1=box(msx,msy,1.58,H*0.42,c1,{roof:res?'#8a7452':'#1d3a55',line:true});
-    floorLines(f1, H*0.42);
-    const f2=box(msx,msy,1.06,H*0.74,c2,{roof:res?'#7c6848':'#1a3550',line:true});
-    floorLines(f2, H*0.74);
-    const f3=box(msx,msy,0.60,H,c3,{roof:res?'#6e5c40':'#16304a',line:true});
-    windows(f3, Math.max(4, Math.round(H*hf/9.5)), 2, night);
-    cx.fillStyle='#d8b558';
-    cx.fillRect(msx-4.5*z, gy-H*z-3*z, 9*z, 3*z);
-    spire(msx, gy-H*z-3*z, 14, '#caa84e');
+    if (vk===2){            // two slim megatowers side by side, linked by a sky-bridge
+      const rowsA=Math.max(6, Math.round(H*hf/10));
+      const fA=box(msx-16*z,msy,0.50,H,c2,{roof:res?'#7c6848':'#1a3550',line:true});       // taller back-left tower
+      windows(fA, rowsA, 2, night);
+      cx.fillStyle='#d8b558'; cx.fillRect(msx-19.5*z, gy-H*z-2.5*z, 7*z, 2.5*z);            // its crown
+      spire(msx-16*z, gy-H*z-2.5*z, 13, '#caa84e');
+      const fB=box(msx+16*z,msy,0.50,H*0.86,c1,{roof:res?'#8a7452':'#1d3a55',line:true});   // shorter front-right tower
+      windows(fB, Math.max(5,Math.round(rowsA*0.86)), 2, night);
+      cx.fillStyle = night?'rgba(255,232,150,.7)':shade(tintHex(c3),1.06);
+      cx.fillRect(msx-8*z, gy-H*z*0.6, 16*z, 3*z);                                          // skybridge
+    } else if (vk===1){     // slim two-section shaft with a stepped crown
+      const f1=box(msx,msy,1.0,H*0.86,c2,{roof:res?'#7c6848':'#1a3550',line:true});
+      floorLines(f1,H*0.86);
+      const f2=box(msx,msy,0.62,H,c3,{roof:res?'#6e5c40':'#16304a',line:true});
+      windows(f2, Math.max(4,Math.round(H*hf/9)), 2, night);
+      cx.fillStyle='#d8b558'; cx.fillRect(msx-3.5*z, gy-H*z-3*z, 7*z, 3*z);
+      spire(msx, gy-H*z-3*z, 15, '#caa84e');
+    } else if (vk===3){     // cylindrical drum megatower with a crowned ring
+      cyl(msx,msy,0,0,.82,H*0.5,c1);
+      const k=cyl(msx,msy,0,0,.54,H,c3);
+      for(let r=0;r<Math.max(4,Math.round(H*hf/11));r++){
+        cx.fillStyle = night&&(r%2===0)?'rgba(255,238,170,.8)':'rgba(20,30,44,.5)';
+        cx.fillRect(k.cx-k.rx*0.9, k.cy-H*z*(0.12+r*0.10), k.rx*1.8, 1.3*z);
+      }
+      cx.fillStyle='#d8b558'; cx.beginPath(); cx.ellipse(msx, gy-H*z, 5.5*z, 2.4*z, 0,0,7); cx.fill();
+      spire(msx, gy-H*z, 15, '#caa84e');
+    } else {                // classic three-section wedding-cake (vk 0/1)
+      const f1=box(msx,msy,1.58,H*0.42,c1,{roof:res?'#8a7452':'#1d3a55',line:true});
+      floorLines(f1, H*0.42);
+      const f2=box(msx,msy,1.06,H*0.74,c2,{roof:res?'#7c6848':'#1a3550',line:true});
+      floorLines(f2, H*0.74);
+      const f3=box(msx,msy,0.60,H,c3,{roof:res?'#6e5c40':'#16304a',line:true});
+      windows(f3, Math.max(4, Math.round(H*hf/9.5)), 2, night);
+      cx.fillStyle='#d8b558';
+      cx.fillRect(msx-4.5*z, gy-H*z-3*z, 9*z, 3*z);
+      spire(msx, gy-H*z-3*z, 14, '#caa84e');
+    }
   } else if (lv>=5){
     if (t==='res'){
       if (vk===0){            // slim warm monolith with crown garden
@@ -3575,16 +3790,23 @@ function drawBigBuilding(t, msx, msy, hf, night, lv, vary){
         const f=box(msx,msy,0.74,H,'#b9a98f',{roof:'#8a795f',line:true});
         windows(f, Math.max(2, Math.round(5*hf)), 3, night);
         spire(msx, gy-H*z, 12);
-      } else {                // twin residential towers with a skybridge
-        const fA=box(msx-8*z,msy,0.92,H*0.94,'#c2ab8d',{roof:'#8a7458',line:true});
-        const fB=box(msx+8*z,msy,0.92,H,'#b39a7c',{roof:'#7c6850',line:true});
-        windows(fA, Math.max(3, Math.round(7*hf)), 3, night);
-        windows(fB, Math.max(3, Math.round(7*hf)), 3, night);
-        cx.fillStyle='#9a8a70';
-        cx.fillRect(msx-7*z, gy-H*z*0.55, 14*z, 3.2*z);
-        spire(msx+8*z, gy-H*z, 9);
+      } else if (vk===2){     // two slim residential towers, side by side, linked by a skybridge
+        // each tower draws its own windows immediately so the front tower occludes cleanly
+        const rowsA=Math.max(5, Math.round(H*hf/9));
+        const fA=box(msx-15*z,msy,0.52,H,'#c2ab8d',{roof:'#8a7458',line:true});
+        windows(fA, rowsA, 2, night);
+        const fB=box(msx+15*z,msy,0.52,H*0.92,'#b39a7c',{roof:'#7c6850',line:true});
+        windows(fB, Math.max(4,Math.round(rowsA*0.92)), 2, night);
+        cx.fillStyle='#9a8a70'; cx.fillRect(msx-7*z, gy-H*z*0.55, 14*z, 3*z);   // skybridge across the gap
+        spire(msx-15*z, gy-H*z, 8);
+      } else {                // 4th: terraced eco-tower with stepped sky-gardens
+        const f=box(msx,msy,1.5,H,'#bcae93',{roof:'#7e6e54',line:true});
+        windows(f, Math.max(3, Math.round(8*hf)), 5, night);
+        cx.fillStyle='#5f9c6b';
+        for (let i=1;i<=3;i++){ const yy=gy-H*z*(i/4); cx.beginPath(); cx.ellipse(msx, yy, 9*z*(1-i*0.12), 2.6*z, 0,0,7); cx.fill(); }
+        spire(msx, gy-H*z-2*z, 9);
       }
-    } else {
+    } else if (t==='com'){
       if (vk===0){            // glass monolith + spire (the classic)
         const f=box(msx,msy,1.45,H,'#86c3e8',{roof:'#23415c',line:true});
         const gl=cx.createLinearGradient(msx-14*z, gy-H*z, msx+14*z, gy);
@@ -3602,13 +3824,51 @@ function drawBigBuilding(t, msx, msy, hf, night, lv, vary){
         cx.strokeStyle = night?'#ffe9a0':'#cfe2f0'; cx.lineWidth=1.6*z;
         cx.beginPath(); cx.ellipse(k.cx, k.cy-H*z, k.rx*0.9, k.ry*0.9, 0, 0, 7); cx.stroke();
         spire(k.cx, k.cy-H*z, 10);
-      } else {                // dark glass ziggurat with twin corner antennas
+      } else if (vk===2){     // dark glass ziggurat with twin corner antennas
         box(msx,msy,1.66,H*0.42,'#5d83a4',{roof:'#324b62',line:true});
         box(msx,msy,1.2,H*0.74,'#54789a',{roof:'#2c4258',line:true});
         const f=box(msx,msy,0.78,H,'#4a6e90',{roof:'#243a4e',line:true});
         windows(f, Math.max(2, Math.round(5*hf)), 3, night);
         spire(msx-6*z, gy-H*z*0.74, 8);
         spire(msx+7*z, gy-H*z, 11);
+      } else {                // 4th: tapered teal tower with a lit sky-lobby band + crown
+        const f=box(msx,msy,1.4,H,'#8fb6cf',{roof:'#2c4a60',line:true});
+        windows(f, Math.max(3, Math.round(8*hf)), 6, night);
+        cx.fillStyle = night?'#ffe28a':'#3a5a72'; cx.fillRect(msx-13*z, gy-H*z*0.5, 26*z, 2.4*z);
+        cx.fillStyle='#cfe2f0'; cx.fillRect(msx-4*z, gy-H*z-3*z, 8*z, 3*z);
+        spire(msx, gy-H*z-3*z, 13);
+      }
+    } else {
+      // HEAVY INDUSTRY — concrete plants, stacks, silos & flares (never glass towers)
+      if (vk===0){            // refinery: concrete hall + distillation columns + flare stack
+        const f=box(msx,msy,1.5,H*0.55,'#9aa0a8',{roof:'#6e747c',line:true});
+        windows(f, 1, 5, night);
+        for (const [ox,hh] of [[-9,0.96],[-1,0.80],[6,0.90]]) cyl(msx+ox*z, msy, 0,0, .12, H*hh, '#c2c6cc');
+        cx.fillStyle='#7a808a'; cx.fillRect(msx-15*z, gy-H*z*0.34, 30*z, 1.8*z);     // pipe rack
+        cx.fillStyle='#5a5f66'; cx.fillRect(msx+11*z, gy-H*z, 2.6*z, H*z);           // flare stack
+        cx.fillStyle = night?'#ffb14a':'#e8853a';
+        cx.beginPath(); cx.ellipse(msx+12.3*z, gy-H*z, 2.4*z, 4*z, 0,0,7); cx.fill();
+      } else if (vk===1){     // silo cluster: tall storage cylinders + control house + conveyor
+        for (let i=0;i<4;i++) cyl(msx+(-13+i*8)*z, msy, 0,0, .15, H*(0.72+(i%2)*0.16), '#d8d2c0');
+        box(msx+2*z,msy,0.66,H*0.40,'#b0b6bc',{roof:'#80868e'});
+        cx.fillStyle='#8a8276'; cx.fillRect(msx-14*z, gy-H*z*0.42, 28*z, 1.6*z);     // conveyor
+      } else if (vk===2){     // stacked megafactory: wide concrete tiers + twin smokestacks
+        box(msx,msy,1.7,H*0.5,'#8a9098',{roof:'#646a72',line:true});
+        const f=box(msx,msy,1.14,H*0.86,'#969ca4',{roof:'#70767e',line:true});
+        windows(f, Math.max(2,Math.round(4*hf)), 5, night);
+        cx.fillStyle='#4d4538'; cx.fillRect(msx-12*z, gy-H*z-16*z, 5*z, 16*z);
+        cx.fillStyle='#564c40'; cx.fillRect(msx+6*z,  gy-H*z-12*z, 5*z, 12*z);
+        if (night){ cx.fillStyle='rgba(255,150,90,.45)'; cx.fillRect(msx-11.6*z, gy-H*z-16*z, 3.8*z, 2*z); }
+      } else {                // logistics megahub: long shed + gantry crane + container stacks
+        box(msx,msy,1.9,H*0.5,'#aab2bc',{roof:'#7a8590',line:true});
+        cx.strokeStyle='#e0a23a'; cx.lineWidth=1.6*z;
+        cx.beginPath();
+        cx.moveTo(msx-17*z,gy-H*z*0.5-8*z); cx.lineTo(msx+17*z,gy-H*z*0.5-8*z);
+        cx.moveTo(msx-15*z,gy); cx.lineTo(msx-15*z,gy-H*z*0.5-8*z);
+        cx.moveTo(msx+15*z,gy); cx.lineTo(msx+15*z,gy-H*z*0.5-8*z); cx.stroke();
+        for (const [ox,oy2,col] of [[-9,-2,'#c0563f'],[-2,-4,'#3f7fae'],[5,-2,'#caa84a']]){
+          cx.fillStyle=col; cx.fillRect(msx+ox*z, gy-H*z*0.5+oy2*z, 6*z, 3.2*z);
+        }
       }
     }
   } else {
@@ -3618,19 +3878,25 @@ function drawBigBuilding(t, msx, msy, hf, night, lv, vary){
       windows(f, Math.max(2, Math.round(5*hf)), 6, night);
       cx.fillStyle='#5f9c6b';
       cx.beginPath(); cx.ellipse(msx, gy-H*z-1*z, 9*z, 4*z, 0, 0, 7); cx.fill();
-    } else if (vk===1){       // two offset slabs round a courtyard
-      const fA=box(msx-7*z,msy,1.0,H,'#b8927a',{roof:'#7c5a48',line:true});
-      const fB=box(msx+8*z,msy,0.94,H*0.82,'#d3b694',{roof:'#9a7c5e',line:true});
-      windows(fA, Math.max(2, Math.round(5*hf)), 3, night);
-      windows(fB, Math.max(2, Math.round(4*hf)), 3, night);
+    } else if (vk===1){       // two residential slabs flanking a courtyard
+      const fA=box(msx-14*z,msy,0.56,H,'#b8927a',{roof:'#7c5a48',line:true});
+      windows(fA, Math.max(2, Math.round(5*hf)), 2, night);
+      const fB=box(msx+14*z,msy,0.56,H*0.84,'#d3b694',{roof:'#9a7c5e',line:true});
+      windows(fB, Math.max(2, Math.round(4*hf)), 2, night);
       cx.fillStyle='#6da06a';
-      cx.beginPath(); cx.ellipse(msx+1*z, gy+2*z, 5*z, 2.2*z, 0, 0, 7); cx.fill();
-    } else {                  // stepped terrace block, balconies down the front
+      cx.beginPath(); cx.ellipse(msx, gy+1.5*z, 4.5*z, 2*z, 0, 0, 7); cx.fill();   // courtyard greenery
+    } else if (vk===2){       // stepped terrace block, balconies down the front
       box(msx,msy,1.8,H*0.55,'#cdb091',{roof:'#a3886a',line:true});
       const f=box(msx,msy,1.2,H,'#c19a78',{roof:'#86644c',line:true});
       windows(f, Math.max(2, Math.round(5*hf)), 4, night);
       cx.strokeStyle='#efe6d4'; cx.lineWidth=1*z;
       for (let i=1;i<4;i++){ cx.beginPath(); cx.moveTo(msx-16*z, gy-H*z*0.55+i*2.6*z); cx.lineTo(msx-2*z, gy-H*z*0.55+i*2.6*z+7*z); cx.stroke(); }
+    } else {                  // 4th: slab block with a taller corner stair-tower + roof garden
+      const f=box(msx,msy,1.6,H,'#cab39a',{roof:'#86694e',line:true});
+      windows(f, Math.max(2, Math.round(6*hf)), 5, night);
+      const s=box(msx+9*z,msy,0.5,H*1.12,'#b89878',{roof:'#7c5e44',line:true});
+      windows(s, Math.max(2, Math.round(6*hf)), 1, night);
+      cx.fillStyle='#5f9c6b'; cx.beginPath(); cx.ellipse(msx-4*z, gy-H*z-1*z, 6*z, 2.6*z, 0,0,7); cx.fill();
     }
   } else if (t==='com'){
     if (vk===0){              // blue glass slab + antenna
@@ -3643,12 +3909,19 @@ function drawBigBuilding(t, msx, msy, hf, night, lv, vary){
       windows(f, Math.max(2, Math.round(5*hf)), 4, night);
       cx.fillStyle = night ? '#ffd23f' : '#caa84a';
       cx.fillRect(msx-7*z, gy-H*z-3*z, 14*z, 2.2*z);
-    } else {                  // hotel slab: porte-cochère + rooftop pool
+    } else if (vk===2){       // hotel slab: porte-cochère + rooftop pool
       const f=box(msx,msy,1.66,H,'#9fc4d8',{roof:'#5a7e92',line:true});
       windows(f, Math.max(2, Math.round(6*hf)), 6, night);
       cx.fillStyle='#7a96a8'; cx.fillRect(msx-18*z, gy-5*z, 10*z, 1.6*z);
       cx.fillStyle='#3fa0d8';
       cx.beginPath(); cx.ellipse(msx+4*z, gy-H*z-1*z, 5*z, 2.2*z, 0, 0, 7); cx.fill();
+    } else {                  // 4th: two slim green-glass office slabs, side by side + sky-bridge
+      const rowsA=Math.max(3, Math.round(H*hf/8));
+      const fA=box(msx-13*z,msy,0.54,H,'#86c0b0',{roof:'#2c4a44',line:true});
+      windows(fA, rowsA, 2, night);
+      const fB=box(msx+13*z,msy,0.54,H*0.86,'#9ad0bf',{roof:'#33564e',line:true});
+      windows(fB, Math.max(2,Math.round(rowsA*0.86)), 2, night);
+      cx.fillStyle = night?'#ffe28a':'#5a8a7e'; cx.fillRect(msx-6*z, gy-H*z*0.52, 12*z, 2.2*z);
     }
   } else {
     if (vk===0){              // dark plant with twin stacks
@@ -3665,7 +3938,7 @@ function drawBigBuilding(t, msx, msy, hf, night, lv, vary){
       cx.beginPath(); cx.moveTo(msx-17*z,gy-H*z*0.8-8*z); cx.lineTo(msx+17*z,gy-H*z*0.8-8*z);
       cx.moveTo(msx-15*z,gy); cx.lineTo(msx-15*z,gy-H*z*0.8-8*z);
       cx.moveTo(msx+15*z,gy); cx.lineTo(msx+15*z,gy-H*z*0.8-8*z); cx.stroke();
-    } else {                  // high-tech fab: white hall, blue band, rooftop plant
+    } else if (vk===2){       // high-tech fab: white hall, blue band, rooftop plant
       const f=box(msx,msy,1.85,H*0.9,'#e8ebef',{roof:'#c2c8d0',line:true});
       cx.fillStyle='#3f7fbf';
       cx.fillRect(msx-16*z, gy-H*z*0.55, 32*z, 2.4*z);
@@ -3673,27 +3946,47 @@ function drawBigBuilding(t, msx, msy, hf, night, lv, vary){
       cx.fillStyle='#9aa6b2';
       cx.fillRect(msx-8*z, gy-H*z*0.9-4*z, 6*z, 4*z);
       cx.fillRect(msx+3*z, gy-H*z*0.9-5*z, 5*z, 5*z);
+    } else {                  // 4th: tank farm — boiler house with a centred rooftop tank cluster + stack
+      const f=box(msx,msy,1.5,H*0.7,'#9a9486',{roof:'#6e685a',line:true});
+      windows(f, 1, 4, night);
+      const rcy=gy-f.H;                                                   // screen-y of the roof-top centre
+      cx.fillStyle='#5a5246'; cx.fillRect(msx-1.5*z, rcy-H*z*0.34, 3*z, H*z*0.34);   // central stack (behind tanks)
+      for (const ox of [-7,0,7]) cyl(msx+ox*z, rcy-TH/2*z+1.5*z, 0,0, .15, H*0.26, '#c8c0ac');  // centred tank cluster
     }
   }
   }
-  // the supertall tiers wear their rank
-  if (lv===6){
-    cx.fillStyle = night ? 'rgba(255,232,150,.85)' : 'rgba(62,82,102,.95)';
-    cx.fillRect(msx-9*z, gy-H*z+H*z*0.10, 18*z, 1.8*z);
-  }
-  if (lv>=6){
-    const top=gy-H*z;
-    spire(msx-4*z, top+1*z, lv>=7?10:7, '#46566a');
-    spire(msx+5*z, top+2.5*z, lv>=7?15:9);
-  }
-  if (lv>=7){
-    cx.strokeStyle = night ? 'rgba(255,210,90,.9)' : 'rgba(125,145,165,.8)';
-    cx.lineWidth=1.6*z;
-    cx.beginPath(); cx.ellipse(msx, gy-H*z+4*z, 7.5*z, 3*z, 0, 0, 7); cx.stroke();
-    if (night){
-      const g3=cx.createRadialGradient(msx, gy-H*z, 1, msx, gy-H*z, 16*z);
-      g3.addColorStop(0,'rgba(255,214,63,.35)'); g3.addColorStop(1,'rgba(255,214,63,0)');
-      cx.fillStyle=g3; cx.beginPath(); cx.arc(msx, gy-H*z, 16*z, 0, 7); cx.fill();
+  BLD_TINT=null;   // stop tinting — crowns, spires and rooftop props keep their own colors
+  // rooftop props only suit towers with a single flat centred top reaching full height H.
+  // skip: industry (its own stacks/silos + short halls), the twin variants (no centred roof),
+  // and the round-topped commercial tower (vk1 at lv5+). footprint kept narrow so props sit
+  // well inside even the slim crown roofs of the setback variants.
+  const flatTop = t==='res' ? vk!==2
+                : t==='com' ? !((lv<5 && vk===3) || (lv>=5 && vk===1))
+                : false;
+  if (flatTop && lv>=4 && lv<7 && hf>0.85)
+    roofProps(msx, gy-H*z, 0.5*TW/2*z, 0.5*TH/2*z, propR, night);
+  // the supertall tiers wear their rank — but only the glass/stone skyscrapers. heavy industry
+  // carries its own stacks, flares and silos, so the ornamental rank bar, beacon spires and
+  // halo would float above its irregular roofline and read as out of place. skip it for ind.
+  if (t!=='ind'){
+    if (lv===6){
+      cx.fillStyle = night ? 'rgba(255,232,150,.85)' : 'rgba(62,82,102,.95)';
+      cx.fillRect(msx-9*z, gy-H*z+H*z*0.10, 18*z, 1.8*z);
+    }
+    if (lv>=6){
+      const top=gy-H*z;
+      spire(msx-4*z, top+1*z, lv>=7?10:7, '#46566a');
+      spire(msx+5*z, top+2.5*z, lv>=7?15:9);
+    }
+    if (lv>=7){
+      cx.strokeStyle = night ? 'rgba(255,210,90,.9)' : 'rgba(125,145,165,.8)';
+      cx.lineWidth=1.6*z;
+      cx.beginPath(); cx.ellipse(msx, gy-H*z+4*z, 7.5*z, 3*z, 0, 0, 7); cx.stroke();
+      if (night){
+        const g3=cx.createRadialGradient(msx, gy-H*z, 1, msx, gy-H*z, 16*z);
+        g3.addColorStop(0,'rgba(255,214,63,.35)'); g3.addColorStop(1,'rgba(255,214,63,0)');
+        cx.fillStyle=g3; cx.beginPath(); cx.arc(msx, gy-H*z, 16*z, 0, 7); cx.fill();
+      }
     }
   }
 }
@@ -3724,37 +4017,58 @@ function drawUniversityCampus(mx,my,z,night,now){
     cx.beginPath(); cx.arc(mx, gy, 1.2*z, 0, 7); cx.fill(); }
 }
 function drawNuclearCampus(mx,my,z,night,now){
-  const u=z;
+  const u=z, cy=my+TH/2*u;
   const E=(x2,y2,rx,ry,fill)=>{ cx.fillStyle=fill; cx.beginPath(); cx.ellipse(x2,y2,rx,ry,0,0,7); cx.fill(); };
-  // turbine hall
-  const f=vol(mx,my,-0.55,0.55,.68,.38,13,'#cdd2d8',{roof:'#aab2ba'});
-  faceWin(f,1,5,night);
-  // containment dome
-  cx.fillStyle='#e2e7ec';
-  cx.beginPath(); cx.ellipse(mx+12*u, my+TH/2*u-2*u, 9.5*u, 11*u, 0, Math.PI, 0); cx.fill();
-  cx.fillStyle='#c4ccd4';
-  cx.beginPath(); cx.ellipse(mx+12*u, my+TH/2*u-2*u, 9.5*u, 3.2*u, 0, 0, Math.PI); cx.fill();
-  cx.fillStyle='#e0a23a'; cx.fillRect(mx+4*u, my+TH/2*u-1*u, 16*u, 1.6*u);
-  // twin flared cooling towers + drifting steam
-  for (const [ox,sc] of [[-19,1.18],[-4,1.0]]){
-    const bx2=mx+ox*u, by2=my+TH/2*u-10*u, H=31*u*sc;
+  // grid offset (in tiles from the block centre) → screen point ON the 2×2 ground plane.
+  // keeping every structure anchored this way means it sits on the lawn and stays inside the footprint.
+  const P=(gx,gy)=>[mx+(gx-gy)*TW/2*u, cy+(gx+gy)*TH/2*u];
+  const dome=(gx,gy,r)=>{                                   // a containment dome with shading + warning band
+    const [cxp,cyp]=P(gx,gy);
+    cx.fillStyle='rgba(10,16,28,.18)'; cx.beginPath(); cx.ellipse(cxp+r*0.2*u, cyp+1.4*u, r*1.04*u, r*0.4*u, 0, 0, 7); cx.fill();   // ground shadow
+    cx.fillStyle='#e2e7ec'; cx.beginPath(); cx.ellipse(cxp, cyp, r*u, r*1.12*u, 0, Math.PI, 0); cx.fill();
+    cx.fillStyle='rgba(20,28,40,.10)'; cx.beginPath(); cx.ellipse(cxp+r*0.34*u, cyp-r*0.42*u, r*0.46*u, r*0.66*u, 0, Math.PI, 0); cx.fill();
+    cx.fillStyle='#c4ccd4'; cx.beginPath(); cx.ellipse(cxp, cyp, r*u, r*0.32*u, 0, 0, Math.PI); cx.fill();
+    cx.fillStyle='#e0a23a'; cx.fillRect(cxp-r*0.86*u, cyp-1*u, r*1.72*u, 1.6*u);
+  };
+  // H0 = tower height, rw0 = base radius (both in tile units). Each tower casts a ground
+  // shadow + rounded foot so it reads as firmly planted on the lawn.
+  const tower=(gx,gy,H0,rw0)=>{
+    const [bx2,base]=P(gx,gy), H=H0*u, rw=rw0*u;
+    cx.fillStyle='rgba(10,16,28,.22)'; cx.beginPath(); cx.ellipse(bx2+rw*0.22, base+1.6*u, rw*1.18, rw*0.44, 0, 0, 7); cx.fill();   // ground shadow
+    cx.fillStyle='#aeb4ba'; cx.beginPath(); cx.ellipse(bx2, base, rw, rw*0.34, 0, 0, 7); cx.fill();                                // rounded foot
     cx.fillStyle='#c8ccd2';
     cx.beginPath();
-    cx.moveTo(bx2-5.5*u*sc, by2+9*u);
-    cx.quadraticCurveTo(bx2-2*u*sc, by2+9*u-H*0.55, bx2-3.5*u*sc, by2+9*u-H);
-    cx.lineTo(bx2+3.5*u*sc, by2+9*u-H);
-    cx.quadraticCurveTo(bx2+2*u*sc, by2+9*u-H*0.55, bx2+5.5*u*sc, by2+9*u);
+    cx.moveTo(bx2-rw, base);
+    cx.quadraticCurveTo(bx2-rw*0.38, base-H*0.55, bx2-rw*0.62, base-H);
+    cx.lineTo(bx2+rw*0.62, base-H);
+    cx.quadraticCurveTo(bx2+rw*0.38, base-H*0.55, bx2+rw, base);
     cx.closePath(); cx.fill();
-    cx.fillStyle='#9aa3ab';
-    cx.beginPath(); cx.ellipse(bx2, by2+9*u-H, 3.5*u*sc, 1.3*u*sc, 0, 0, 7); cx.fill();
+    cx.fillStyle='rgba(22,30,42,.14)';                      // shaded right half
+    cx.beginPath(); cx.moveTo(bx2, base); cx.quadraticCurveTo(bx2+rw*0.38, base-H*0.55, bx2+rw*0.62, base-H); cx.lineTo(bx2, base-H); cx.closePath(); cx.fill();
+    cx.fillStyle='#9aa3ab'; cx.beginPath(); cx.ellipse(bx2, base-H, rw*0.62, rw*0.26, 0, 0, 7); cx.fill();
+    cx.fillStyle='#39434f'; cx.beginPath(); cx.ellipse(bx2, base-H, rw*0.42, rw*0.17, 0, 0, 7); cx.fill();
     for (let k=0;k<3;k++){
-      const ph=((now/900)+k*0.33)%1;
-      E(bx2+Math.sin((ph+k)*6)*2*u, by2+9*u-H-(2+ph*9)*u, (2.2+ph*3.4)*u*sc, (1.4+ph*2)*u*sc, 'rgba(240,246,250,'+(0.30*(1-ph)).toFixed(3)+')');
+      const ph=((now/1100)+k*0.34)%1;
+      E(bx2+Math.sin((ph+k)*5)*2*u, base-H-(2+ph*8)*u, rw*(0.5+ph*0.7), rw*(0.32+ph*0.42), 'rgba(240,246,250,'+(0.26*(1-ph)).toFixed(3)+')');
     }
-  }
+    return base-H;
+  };
+  // turbine hall (back, behind the towers)
+  const f=vol(mx,my,-0.3,-0.42,.52,.28,12,'#cdd2d8',{roof:'#aab2ba'});
+  faceWin(f,2,5,night);
+  // reactor containment dome (right)
+  dome(0.5,-0.05,10.5);
+  // two cooling towers spread across the lawn — a big one (left) and a smaller one (centre), both grounded
+  const topY=tower(-0.40,0.18, 38, 8);
+  tower(0.12,0.16, 27, 6);
+  // switchyard gantry (front)
+  cx.strokeStyle='#7a838d'; cx.lineWidth=Math.max(.7,.9*u);
+  const [gbx,gby]=P(0.34,0.52);
+  for (let i=0;i<3;i++){ const gx=gbx+i*4.5*u; cx.beginPath(); cx.moveTo(gx, gby); cx.lineTo(gx, gby-5.5*u); cx.stroke(); }
+  cx.beginPath(); cx.moveTo(gbx, gby-5.5*u); cx.lineTo(gbx+9*u, gby-5.5*u); cx.stroke();
   if (night){
     cx.fillStyle=(now/700|0)%2?'#ff5a5a':'rgba(255,90,90,.3)';
-    cx.beginPath(); cx.arc(mx-14*u, my+TH/2*u-35*u, 1.1*u, 0, 7); cx.fill();
+    const [bcx]=P(-0.40,0.18); cx.beginPath(); cx.arc(bcx, topY-1*u, 1.2*u, 0, 7); cx.fill();
   }
 }
 function drawAirport(mx,my,u,night,now, fw=2, fh=2){
@@ -3901,83 +4215,96 @@ function stepTrains(dt){
     if (tr.u>tr.path.length+1.4) trains.splice(i,1);
   }
 }
-function drawTrains(night){
+/* One train car (k: 0=lead, 1=mid, 2=tail). Drawn per-diagonal-band in render()
+   so nearer buildings on later diagonals correctly paint over it — a tall block
+   in front of the line now hides the train instead of the train floating on top. */
+function drawTrainCar(tr, k, night){
   const z=S.zoom, dy=RAIL_H*z;
   const quad=(a,b,c2,d2)=>{ cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.lineTo(c2[0],c2[1]); cx.lineTo(d2[0],d2[1]); cx.closePath(); cx.fill(); };
+  const uu=tr.u-k*0.34;   // tight coupling so the cars read as one train
+  if (uu<0 || uu>tr.path.length-1) return;
+  const i0=Math.min(tr.path.length-2, uu|0), f=uu-i0;
+  const [x0,y0]=tr.path[i0], [x1,y1]=tr.path[Math.min(tr.path.length-1,i0+1)];
+  const [sa,sb]=tileScreen(x0,y0), [sc,sd]=tileScreen(x1,y1);
+  const cx0=sa+(sc-sa)*f, cy0=(sb+TH/2*z)+((sd+TH/2*z)-(sb+TH/2*z))*f - dy;
+  let vx=sc-sa, vy=(sd-sb); const m=Math.hypot(vx,vy)||1; vx/=m; vy/=m;
+  const lead=(k===0), tailC=(k===2);
+  const hl=5.5*z, W=2.7*z, carH=5.4*z, px=-vy, py=vx;
+  const sgn = py>=0?1:-1, P=[px*sgn,py*sgn];            // P points toward camera (lower)
+  const ext = lead?2.0*z:0, fhw = lead?W*0.62:W;        // streamlined nose on the lead car
+  const frC=[cx0+vx*(hl+ext), cy0+vy*(hl+ext)], bkC=[cx0-vx*hl, cy0-vy*hl];
+  const UP=carH;                                        // body rises above the deck
+  // footprint corners on the deck (camera side uses +P), roof = footprint lifted UP
+  const fBL=[bkC[0]+P[0]*W,  bkC[1]+P[1]*W ],  rBL=[bkC[0]+P[0]*W,  bkC[1]+P[1]*W -UP];
+  const fFL=[frC[0]+P[0]*fhw,frC[1]+P[1]*fhw], rFL=[frC[0]+P[0]*fhw,frC[1]+P[1]*fhw-UP];
+  const fFR=[frC[0]-P[0]*fhw,frC[1]-P[1]*fhw], rFR=[frC[0]-P[0]*fhw,frC[1]-P[1]*fhw-UP];
+  const fBR=[bkC[0]-P[0]*W,  bkC[1]-P[1]*W ],  rBR=[bkC[0]-P[0]*W,  bkC[1]-P[1]*W -UP];
+  const bodyCol = lead?'#9a86ea':'#8472d6';
+  // soft shadow on the deck
+  cx.fillStyle='rgba(8,10,22,.20)';
+  cx.beginPath(); cx.ellipse(cx0, cy0+1.5*z, hl*1.15, W*1.25, 0,0,7); cx.fill();
+  // camera-facing side, from roof edge down to the deck
+  cx.fillStyle=shade(bodyCol,.62); quad(rBL,rFL,fFL,fBL);
+  // front end-cap (the nose)
+  cx.fillStyle=shade(bodyCol,.5); quad(rFL,rFR,fFR,fFL);
+  // side helpers: u along the car, v from roof(0) to deck(1)
+  const sp=(u,v)=>[ rBL[0]+(rFL[0]-rBL[0])*u, rBL[1]+(rFL[1]-rBL[1])*u + UP*v ];
+  // accent skirt stripe low on the side
+  cx.fillStyle=shade(lead?'#ffd36a':'#b9a6f4', .9);
+  quad(sp(0,0.66),sp(1,0.66),sp(1,0.84),sp(0,0.84));
+  // window band
+  const u0=lead?0.22:0.07, u1=0.94;
+  cx.fillStyle = night?'rgba(255,228,150,.95)':'rgba(150,185,215,.92)';
+  quad(sp(u0,0.22),sp(u1,0.22),sp(u1,0.5),sp(u0,0.5));
+  cx.strokeStyle='rgba(18,14,32,.55)'; cx.lineWidth=Math.max(.5,.6*z);
+  cx.beginPath();
+  for (let u=u0+0.12; u<u1-0.02; u+=0.16){ const a=sp(u,0.22), b=sp(u,0.5); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); }
+  cx.stroke();
+  // roof
+  cx.fillStyle=shade(bodyCol,1.05); quad(rBL,rFL,rFR,rBR);
+  cx.strokeStyle=shade(bodyCol,1.2); cx.lineWidth=Math.max(.5,.6*z);
+  cx.beginPath(); cx.moveTo(rBL[0],rBL[1]); cx.lineTo(rFL[0],rFL[1]); cx.stroke();
+  // roof AC unit + pantograph on the lead car
+  cx.fillStyle=shade(bodyCol,.8);
+  const rc=[cx0-vx*1.5*z, cy0-vy*1.5*z-UP];
+  cx.fillRect(rc[0]-1.6*z, rc[1]-1.1*z, 3.2*z, 2.2*z);
+  if (lead){
+    cx.strokeStyle='#3a3450'; cx.lineWidth=Math.max(.6,.7*z);
+    const pa=[cx0+vx*0.5*z, cy0+vy*0.5*z-UP];
+    cx.beginPath(); cx.moveTo(pa[0]-2*z, pa[1]); cx.lineTo(pa[0], pa[1]-2.6*z); cx.lineTo(pa[0]+2*z, pa[1]); cx.stroke();
+  }
+  // lamps
+  if (lead){
+    cx.fillStyle = night?'#fff6d2':'#ffe9a8';
+    const lp=[ (fFL[0]+fFR[0])/2, (fFL[1]+fFR[1])/2 - UP*0.32 ];
+    cx.beginPath(); cx.arc(lp[0], lp[1], 1.2*z, 0,7); cx.fill();
+    if (night){ cx.fillStyle='rgba(255,246,210,.35)'; cx.beginPath(); cx.arc(frC[0], frC[1]-UP*0.3, 4*z, 0,7); cx.fill(); }
+  }
+  if (tailC){
+    cx.fillStyle = night?'#ff6b5e':'#d8473b';
+    const tp=[ (fBL[0]+fBR[0])/2, (fBL[1]+fBR[1])/2 - UP*0.32 ];
+    cx.beginPath(); cx.arc(tp[0], tp[1], 1.1*z, 0,7); cx.fill();
+  }
+}
+/* Bucket every train car onto the diagonal band of the tile it sits over, so it
+   can be flushed mid-loop alongside cars/peds. key (view depth) orders cars that
+   share a band — the far car paints first, exactly like the old per-train pass. */
+function trainBandEntries(){
+  const m=new Map();
   for (const tr of trains){
-    // forward direction at the lead car decides paint order (far car first)
-    const luu=Math.max(0,Math.min(tr.path.length-1.001, tr.u));
-    const li=Math.min(tr.path.length-2, luu|0);
-    const [lp0,lp1]=[tr.path[li], tr.path[Math.min(tr.path.length-1,li+1)]];
-    const [la,lb]=tileScreen(lp0[0],lp0[1]), [lc,ld2]=tileScreen(lp1[0],lp1[1]);
-    const order = (ld2-lb)>=0 ? [2,1,0] : [0,1,2];   // descending screen-y painted last
-    for (const k of order){
-      const uu=tr.u-k*0.34;   // tight coupling so the cars read as one train
+    for (let k=0;k<3;k++){
+      const uu=tr.u-k*0.34;
       if (uu<0 || uu>tr.path.length-1) continue;
       const i0=Math.min(tr.path.length-2, uu|0), f=uu-i0;
       const [x0,y0]=tr.path[i0], [x1,y1]=tr.path[Math.min(tr.path.length-1,i0+1)];
-      const [sa,sb]=tileScreen(x0,y0), [sc,sd]=tileScreen(x1,y1);
-      const cx0=sa+(sc-sa)*f, cy0=(sb+TH/2*z)+((sd+TH/2*z)-(sb+TH/2*z))*f - dy;
-      let vx=sc-sa, vy=(sd-sb); const m=Math.hypot(vx,vy)||1; vx/=m; vy/=m;
-      const lead=(k===0), tailC=(k===2);
-      const hl=5.5*z, W=2.7*z, carH=5.4*z, px=-vy, py=vx;
-      const sgn = py>=0?1:-1, P=[px*sgn,py*sgn];            // P points toward camera (lower)
-      const ext = lead?2.0*z:0, fhw = lead?W*0.62:W;        // streamlined nose on the lead car
-      const frC=[cx0+vx*(hl+ext), cy0+vy*(hl+ext)], bkC=[cx0-vx*hl, cy0-vy*hl];
-      const UP=carH;                                        // body rises above the deck
-      // footprint corners on the deck (camera side uses +P), roof = footprint lifted UP
-      const fBL=[bkC[0]+P[0]*W,  bkC[1]+P[1]*W ],  rBL=[bkC[0]+P[0]*W,  bkC[1]+P[1]*W -UP];
-      const fFL=[frC[0]+P[0]*fhw,frC[1]+P[1]*fhw], rFL=[frC[0]+P[0]*fhw,frC[1]+P[1]*fhw-UP];
-      const fFR=[frC[0]-P[0]*fhw,frC[1]-P[1]*fhw], rFR=[frC[0]-P[0]*fhw,frC[1]-P[1]*fhw-UP];
-      const fBR=[bkC[0]-P[0]*W,  bkC[1]-P[1]*W ],  rBR=[bkC[0]-P[0]*W,  bkC[1]-P[1]*W -UP];
-      const bodyCol = lead?'#9a86ea':'#8472d6';
-      // soft shadow on the deck
-      cx.fillStyle='rgba(8,10,22,.20)';
-      cx.beginPath(); cx.ellipse(cx0, cy0+1.5*z, hl*1.15, W*1.25, 0,0,7); cx.fill();
-      // camera-facing side, from roof edge down to the deck
-      cx.fillStyle=shade(bodyCol,.62); quad(rBL,rFL,fFL,fBL);
-      // front end-cap (the nose)
-      cx.fillStyle=shade(bodyCol,.5); quad(rFL,rFR,fFR,fFL);
-      // side helpers: u along the car, v from roof(0) to deck(1)
-      const sp=(u,v)=>[ rBL[0]+(rFL[0]-rBL[0])*u, rBL[1]+(rFL[1]-rBL[1])*u + UP*v ];
-      // accent skirt stripe low on the side
-      cx.fillStyle=shade(lead?'#ffd36a':'#b9a6f4', .9);
-      quad(sp(0,0.66),sp(1,0.66),sp(1,0.84),sp(0,0.84));
-      // window band
-      const u0=lead?0.22:0.07, u1=0.94;
-      cx.fillStyle = night?'rgba(255,228,150,.95)':'rgba(150,185,215,.92)';
-      quad(sp(u0,0.22),sp(u1,0.22),sp(u1,0.5),sp(u0,0.5));
-      cx.strokeStyle='rgba(18,14,32,.55)'; cx.lineWidth=Math.max(.5,.6*z);
-      cx.beginPath();
-      for (let u=u0+0.12; u<u1-0.02; u+=0.16){ const a=sp(u,0.22), b=sp(u,0.5); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); }
-      cx.stroke();
-      // roof
-      cx.fillStyle=shade(bodyCol,1.05); quad(rBL,rFL,rFR,rBR);
-      cx.strokeStyle=shade(bodyCol,1.2); cx.lineWidth=Math.max(.5,.6*z);
-      cx.beginPath(); cx.moveTo(rBL[0],rBL[1]); cx.lineTo(rFL[0],rFL[1]); cx.stroke();
-      // roof AC unit + pantograph on the lead car
-      cx.fillStyle=shade(bodyCol,.8);
-      const rc=[cx0-vx*1.5*z, cy0-vy*1.5*z-UP];
-      cx.fillRect(rc[0]-1.6*z, rc[1]-1.1*z, 3.2*z, 2.2*z);
-      if (lead){
-        cx.strokeStyle='#3a3450'; cx.lineWidth=Math.max(.6,.7*z);
-        const pa=[cx0+vx*0.5*z, cy0+vy*0.5*z-UP];
-        cx.beginPath(); cx.moveTo(pa[0]-2*z, pa[1]); cx.lineTo(pa[0], pa[1]-2.6*z); cx.lineTo(pa[0]+2*z, pa[1]); cx.stroke();
-      }
-      // lamps
-      if (lead){
-        cx.fillStyle = night?'#fff6d2':'#ffe9a8';
-        const lp=[ (fFL[0]+fFR[0])/2, (fFL[1]+fFR[1])/2 - UP*0.32 ];
-        cx.beginPath(); cx.arc(lp[0], lp[1], 1.2*z, 0,7); cx.fill();
-        if (night){ cx.fillStyle='rgba(255,246,210,.35)'; cx.beginPath(); cx.arc(frC[0], frC[1]-UP*0.3, 4*z, 0,7); cx.fill(); }
-      }
-      if (tailC){
-        cx.fillStyle = night?'#ff6b5e':'#d8473b';
-        const tp=[ (fBL[0]+fBR[0])/2, (fBL[1]+fBR[1])/2 - UP*0.32 ];
-        cx.beginPath(); cx.arc(tp[0], tp[1], 1.1*z, 0,7); cx.fill();
-      }
+      const wx=x0+(x1-x0)*f, wy=y0+(y1-y0)*f;
+      const [rvx,rvy]=rotC(wx+.5, wy+.5);
+      const key=rvx+rvy, b=Math.max(0,Math.min(2*(G-1),Math.floor(key)));
+      if(!m.has(b)) m.set(b,[]);
+      m.get(b).push({tr,k,key});
     }
   }
+  return m;
 }
 const RAIL_H=13;
 /* offset endpoints for a rail lane A->C->B at perpendicular distance side*off.
@@ -4310,16 +4637,43 @@ const IND_NAMES={
   2:['Factory','Grain silos','Chemical plant','Textile mill','Food processing plant'],
   3:['Heavy manufacturing','Refinery','Logistics hub','Steelworks','Data center'],
 };
+/* named variants for the merged 2×2 towers (lv4–7) — one per silhouette, picked by c.vary,
+   so the name is stable and reads alongside the building's distinct shape */
+const TOWER_NAMES={
+  res:{
+    4:['Apartment Tower','Residential Block','Garden Tower','Terrace Tower'],
+    5:['Skyscraper Residences','Glass Sky Towers','Twin Residences','Pinnacle Apartments'],
+    6:['Residential Highrise','Panorama Highrise','Skybridge Residences','Crown Highrise'],
+    7:['Megatower Residences','The Residential Spire','Cloudtop Megatower','Zenith Residences'],
+  },
+  com:{
+    4:['Office Tower','Corporate Block','Trade Tower','Business Center'],
+    5:['Office Skyscraper','Corporate HQ','Grand Hotel','Glass Skyscraper'],
+    6:['Commercial Highrise','Finance Highrise','Skyline Offices','Tower Plaza'],
+    7:['Megatower Offices','The Exchange','Pinnacle Megatower','Apex Tower'],
+  },
+  ind:{
+    4:['Industrial Complex','Factory Complex','Manufacturing Works','Assembly Plant'],
+    5:['Heavy Industry Plant','Refinery Complex','Processing Plant','Steel Foundry'],
+    6:['Industrial Megaplant','Automated Megafactory','Logistics Megahub','Petrochemical Complex'],
+    7:['Industrial Megaplant','Automated Megafactory','Logistics Megahub','Petrochemical Complex'],
+  },
+};
 function bizName(c){
+  if (c.lv>=4){
+    const tt=TOWER_NAMES[c.t]; if (!tt) return null;
+    const list=tt[Math.min(c.lv,7)]; if (!list) return null;
+    return list[Math.min(list.length-1,(c.vary*list.length)|0)];
+  }
   const tab = c.t==='com'?COM_NAMES:c.t==='ind'?IND_NAMES:null;
   if (!tab || c.lv<1) return null;
-  if (c.lv>=4) return null;
   const list=tab[Math.min(c.lv,3)];
   return list[Math.min(list.length-1,(c.vary*list.length)|0)];
 }
 /* ---------- structural primitives for distinct buildings ---------- */
 /* rectangular-footprint prism, offset in grid units from the tile centre */
 function vol(sx,sy,ox,oy,ax,ay2,hp,col,opts={}){
+  if(BLD_TINT){ col=tintHex(col); if(opts.roof) opts={...opts,roof:tintHex(opts.roof)}; }
   const z=S.zoom;
   const cxp=sx+(ox-oy)*TW/2*z, cyp=sy+TH/2*z+(ox+oy)*TH/2*z, H=hp*z;
   const xw=ax*TW/2*z, xh=ax*TH/2*z, yw=ay2*TW/2*z, yh=ay2*TH/2*z;
@@ -4352,6 +4706,7 @@ function vol(sx,sy,ox,oy,ax,ay2,hp,col,opts={}){
 }
 /* vertical cylinder (silos, tanks, kiosks) */
 function cyl(sx,sy,ox,oy,r,hp,col){
+  if(BLD_TINT) col=tintHex(col);
   const z=S.zoom;
   const cxp=sx+(ox-oy)*TW/2*z, cyp=sy+TH/2*z+(ox+oy)*TH/2*z, H=hp*z;
   const rx=r*TW/2*z, ry=r*TH/2*z;
@@ -4570,11 +4925,13 @@ function drawCom(c,sx,sy,cyp,hf,night,z,pk,now){
         for(let i=0;i<3;i++){
           cx.beginPath(); cx.moveTo(f.L[0],f.L[1]+f.H*(0.22+i*0.26)); cx.lineTo(f.B[0],f.B[1]+f.H*(0.22+i*0.26)); cx.lineTo(f.B[0],f.B[1]+f.H*(0.22+i*0.26)+2.4*z); cx.lineTo(f.L[0],f.L[1]+f.H*(0.22+i*0.26)+2.4*z); cx.closePath(); cx.fill();
         }
+        const dcx=f.cx, dcy=f.cy-f.H;                 // centre of the flat roof, not the back corner
         cx.strokeStyle='#8b97a5'; cx.lineWidth=.8*z;
         for(let i=0;i<3;i++){
-          cx.beginPath(); cx.moveTo(f.T[0]-6*z+i*6*z, f.T[1]); cx.lineTo(f.T[0]-6*z+i*6*z, f.T[1]-5*z); cx.stroke();
+          const fx=dcx+(i-1)*5*z;                      // three flags straddling the roof centre
+          cx.beginPath(); cx.moveTo(fx, dcy); cx.lineTo(fx, dcy-6*z); cx.stroke();
           cx.fillStyle=['#d23b3b','#3a77b8','#e0a23a'][i];
-          cx.fillRect(f.T[0]-6*z+i*6*z, f.T[1]-5*z, 2.6*z, 1.6*z);
+          cx.fillRect(fx, dcy-6*z, 2.6*z, 1.6*z);
         }
         break; }
       case 3: { // SHOPPING MALL: long wings + glass barrel atrium spine + anchor
@@ -4585,10 +4942,11 @@ function drawCom(c,sx,sy,cyp,hf,night,z,pk,now){
         cx.fillStyle='#e06a2a'; cx.fillRect(sx-13*z, cyp-7*z, 7*z, 2.4*z);
         break; }
       default: { // TECH CAMPUS: two glass volumes joined by a skybridge
+        // draw each volume's windows immediately so the front block occludes the back one cleanly
         const a=vol(sx,sy,-.18,-.12,.20,.20,26*hf,'#6ec4b8',{roof:'#2e5b54'});
+        faceWin(a,Math.max(2,Math.round(6*hf)),2,night);
         const b2=vol(sx,sy,.20,.16,.18,.18,20*hf,'#7fd0c4',{roof:'#356b62'});
-        faceWin(a,Math.max(1,Math.round(4*hf)),2,night);
-        faceWin(b2,Math.max(1,Math.round(3*hf)),2,night);
+        faceWin(b2,Math.max(2,Math.round(5*hf)),2,night);
         cx.fillStyle='rgba(190,235,228,.85)';
         cx.beginPath();
         cx.moveTo(a.B[0],a.B[1]+a.H*0.35); cx.lineTo(b2.T[0],b2.T[1]+b2.H*0.25);
@@ -4758,6 +5116,7 @@ function drawInd(c,sx,sy,cyp,hf,night,z,pk,now){
   }
 }
 function render(now){
+  BLD_TINT=null;   // safety: never carry a tower tint across frames
   const W=cv.width/DPR, H=cv.height/DPR;
   updateSeason();
   WX.rain += (WX.target-WX.rain)*0.22;          // once per frame, not once per tile
@@ -4875,6 +5234,8 @@ function render(now){
     if(!pedBands.has(b)) pedBands.set(b,[]);
     pedBands.get(b).push([p,fx,fy]);
   }
+  const trainBands=trainBandEntries();
+  const trNight=dk>0.5;
   // analytic culling: only walk the diagonals and tiles that can touch the screen.
   // s = vx+vy maps linearly to py, d = vx-vy to px, so the visible window inverts exactly.
   // top margin 200·zoom clears the tallest megatower + crown glow.
@@ -4899,6 +5260,8 @@ function render(now){
     if (cb) for (const e of cb) drawVehicle(e.car, e.fx, e.fy);
     const pbd=pedBands.get(s);
     if (pbd) for (const [p] of pbd) drawPed(p,now);
+    const tbd=trainBands.get(s);
+    if (tbd){ tbd.sort((a,b)=>a.key-b.key); for (const e of tbd) drawTrainCar(e.tr, e.k, trNight); }
   }
   // smoke
   for (let i=smoke.length-1;i>=0;i--){
@@ -5035,7 +5398,6 @@ function render(now){
     }
   }
   // ambient flights soar above everything on the ground
-  drawTrains(dk>0.5);
   drawPlanes(dk>0.5, now);
   drawPlaceFX(now);
   if (__rotaOn){
@@ -5100,76 +5462,83 @@ function render(now){
       if (col){ diamond(px,py); cx.fillStyle=col; cx.fill(); }
     }
     /* every overlay marks the buildings that shape it: a dashed reach ring plus an icon badge */
-    const ring=(x,y,r,colr)=>{
-      const [px,py]=tileScreen(x,y);
+    // the building under the cursor gets a bold, solid, glowing ring so it stands out from its neighbours
+    const hovKey=(()=>{ if(!S.hover) return null; const hr=map[S.hover[1]]; const hc=hr&&hr[S.hover[0]]; if(!hc) return null; return hc.grp ? hc.grp[0]+','+hc.grp[1] : S.hover[0]+','+S.hover[1]; })();
+    // one marker per building (skip the footprint's part tiles), centred on its footprint.
+    // a single ring carries the "how powerful" cue: bigger reach → bolder line + larger icon, no concentric duplicates.
+    const marker=(x,y,r,icon,colr)=>{
+      const c=map[y][x], fw=c.fw||1, fh=c.fh||1;
+      const [px,py]=tileScreen(x+(fw-1)/2, y+(fh-1)/2);
+      const cyc=py+TH/2*S.zoom;
+      const em=clamp((r-3)/9,0,1);                         // 0 = small reach, 1 = far reach
+      const hot=hovKey && (c.grp ? c.grp[0]+','+c.grp[1] : x+','+y)===hovKey;
       if (r>0){
-        cx.strokeStyle=colr; cx.lineWidth=Math.max(1.2,1.6*S.zoom); cx.setLineDash([6,5]);
-        cx.beginPath(); cx.ellipse(px, py+TH/2*S.zoom, r*TW/2*S.zoom, r*TH/2*S.zoom, 0, 0, 7); cx.stroke();
-        cx.setLineDash([]);
+        const lw=Math.max(1.2,(1.3+1.7*em)*S.zoom);
+        cx.strokeStyle=colr; cx.lineWidth=hot?lw*1.7:lw; cx.setLineDash(hot?[]:[6,5]);
+        if (hot){ cx.shadowColor=colr; cx.shadowBlur=14; }
+        cx.beginPath(); cx.ellipse(px, cyc, r*TW/2*S.zoom, r*TH/2*S.zoom, 0, 0, 7); cx.stroke();
+        cx.shadowBlur=0; cx.setLineDash([]);
       }
       cx.fillStyle=colr;
-      cx.beginPath(); cx.arc(px, py+TH/2*S.zoom, 3.2, 0, 7); cx.fill();
-    };
-    const badge=(x,y,icon,colr)=>{
-      const [px,py]=tileScreen(x,y);
-      const bx2=px, by2=py-7*S.zoom;
+      cx.beginPath(); cx.arc(px, cyc, (hot?4.4:3.2)+em*1.2, 0, 7); cx.fill();
+      const br=(7.5+em*3)*(hot?1.12:1), bx2=px, by2=py-(7+em*4)*S.zoom;
       cx.fillStyle='rgba(14,22,34,.92)';
-      cx.beginPath(); cx.arc(bx2,by2,8,0,7); cx.fill();
-      cx.strokeStyle=colr; cx.lineWidth=1.6; cx.stroke();
-      cx.font='10px sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
+      cx.beginPath(); cx.arc(bx2,by2,br,0,7); cx.fill();
+      cx.strokeStyle=colr; cx.lineWidth=hot?2.4:1.6; cx.stroke();
+      cx.font=Math.round(9+em*4)+'px sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
       cx.fillStyle='#e9eef5'; cx.fillText(icon,bx2,by2+0.5);
       cx.textBaseline='alphabetic';
     };
     const fr2=(k)=>Math.max(2, Math.round(10*Math.sqrt(S.fund[k]/100)));
     if (S.overlay==='edu'){
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
-        const t2=map[y][x].t;
-        if (t2==='school'){ ring(x,y,Math.round(fr2('school')*0.8),'rgba(255,200,80,.9)'); badge(x,y,'✎','rgba(255,200,80,.95)'); }
-        else if (t2==='highschool'){ ring(x,y,fr2('school'),'rgba(255,180,60,.9)'); badge(x,y,'✐','rgba(255,180,60,.95)'); }
-        else if (t2==='university'){ ring(x,y,Math.round(fr2('school')*1.4),'rgba(255,160,40,.95)'); badge(x,y,'🎓','rgba(255,160,40,.95)'); }
+        const c2=map[y][x]; if (c2.part) continue; const t2=c2.t;
+        if (t2==='school') marker(x,y,Math.round(fr2('school')*0.8),'✎','rgba(255,200,80,.95)');
+        else if (t2==='highschool') marker(x,y,fr2('school'),'✐','rgba(255,180,60,.95)');
+        else if (t2==='university') marker(x,y,Math.round(fr2('school')*1.4),'🎓','rgba(255,160,40,.95)');
       }
     }
     else if (S.overlay==='health'){
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
-        const t2=map[y][x].t;
-        if (t2==='clinic'){ ring(x,y,Math.round(fr2('health')*0.6),'rgba(160,255,200,.85)'); badge(x,y,'+','rgba(160,255,200,.9)'); }
-        else if (t2==='hospital'){ ring(x,y,fr2('health'),'rgba(120,245,180,.9)'); badge(x,y,'✚','rgba(120,245,180,.95)'); }
-        else if (t2==='medcenter'){ ring(x,y,Math.round(fr2('health')*1.3),'rgba(90,235,160,.95)'); badge(x,y,'⚕','rgba(90,235,160,.95)'); }
+        const c2=map[y][x]; if (c2.part) continue; const t2=c2.t;
+        if (t2==='clinic') marker(x,y,Math.round(fr2('health')*0.6),'+','rgba(160,255,200,.9)');
+        else if (t2==='hospital') marker(x,y,fr2('health'),'✚','rgba(120,245,180,.95)');
+        else if (t2==='medcenter') marker(x,y,Math.round(fr2('health')*1.3),'⚕','rgba(90,235,160,.95)');
       }
     }
     else if (S.overlay==='crime'){
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
-        const t2=map[y][x].t;
-        if (t2==='police'){ ring(x,y,fr2('police'),'rgba(110,150,255,.9)'); badge(x,y,'☂','rgba(110,150,255,.95)'); }
-        else if (t2==='fire'){ ring(x,y,fr2('fire'),'rgba(255,110,90,.9)'); badge(x,y,'▲','rgba(255,110,90,.95)'); }
+        const c2=map[y][x]; if (c2.part) continue; const t2=c2.t;
+        if (t2==='police') marker(x,y,fr2('police'),'☂','rgba(110,150,255,.95)');
+        else if (t2==='fire') marker(x,y,fr2('fire'),'▲','rgba(255,110,90,.95)');
       }
     }
     else if (S.overlay==='power'){
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
-        const sp=PLANT[map[y][x].t];
-        if (sp){ ring(x,y,sp.r,'rgba(255,210,63,.85)'); badge(x,y,'⚡','rgba(255,210,63,.95)'); }
+        const c2=map[y][x]; if (c2.part) continue; const sp=PLANT[c2.t];
+        if (sp) marker(x,y,sp.r,'⚡','rgba(255,210,63,.95)');
       }
     }
     else if (S.overlay==='water'){
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
-        const sp=WSRC[map[y][x].t];
-        if (sp){ ring(x,y,sp.r,'rgba(90,200,255,.85)'); badge(x,y,'◉','rgba(90,200,255,.95)'); }
+        const c2=map[y][x]; if (c2.part) continue; const sp=WSRC[c2.t];
+        if (sp) marker(x,y,sp.r,'◉','rgba(90,200,255,.95)');
       }
     }
     else if (S.overlay==='traffic'){
       for (let y=0;y<G;y++) for (let x=0;x<G;x++)
-        if (map[y][x].bus){ ring(x,y,4,'rgba(58,166,160,.9)'); badge(x,y,'🚏','rgba(58,166,160,.95)'); }
+        if (map[y][x].bus) marker(x,y,4,'🚏','rgba(58,166,160,.95)');
     }
     else if (S.overlay==='value'){
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
         const c2=map[y][x], t2=c2.t;
-        if (LEIS[t2] && !ZONE[t2] && !c2.part){ ring(x,y,LEIS[t2][0],'rgba(127,224,160,.8)'); badge(x,y,'❀','rgba(127,224,160,.95)'); }
+        if (LEIS[t2] && !ZONE[t2] && !c2.part) marker(x,y,LEIS[t2][0],'❀','rgba(127,224,160,.95)');
       }
     }
     else if (S.overlay==='pollution'){
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
-        const sp=PLANT[map[y][x].t];
-        if (sp && sp.pol){ ring(x,y,sp.polR,'rgba(255,154,90,.85)'); badge(x,y,'🏭','rgba(255,154,90,.95)'); }
+        const c2=map[y][x]; if (c2.part) continue; const sp=PLANT[c2.t];
+        if (sp && sp.pol) marker(x,y,sp.polR,'🏭','rgba(255,154,90,.95)');
       }
     }
     cx.fillStyle='rgba(233,238,245,.9)'; cx.font="11px 'Chakra Petch'"; cx.textAlign='left';
@@ -5499,6 +5868,7 @@ cv.addEventListener('pointermove', e=>{
   const [gx,gy]=toGrid(px,py);
   const moved = !S.hover || S.hover[0]!==gx || S.hover[1]!==gy;
   S.hover=[gx,gy];
+  if (moved && S.overlay && S.overlay!=='none') dirty=true;   // refresh the bold reach ring under the cursor
   if (painting && pend){ pend.b=[gx,gy]; return; }
   if (e.pointerType!=='mouse' || painting) return;
   if (S.tool==='inspect'){ showTip(gx,gy,false); return; }      // inspect is immediate
@@ -5516,7 +5886,7 @@ cv.addEventListener('pointerup', ()=>{
   dragging=false; painting=false; lastP=null;
 });
 cv.addEventListener('pointercancel', ()=>cancelPending());
-cv.addEventListener('pointerleave', ()=>{ S.hover=null; tipEl.style.display='none'; commuteViz=null; });
+cv.addEventListener('pointerleave', ()=>{ S.hover=null; tipEl.style.display='none'; commuteViz=null; dirty=true; });
 cv.addEventListener('wheel', e=>{
   e.preventDefault();
   const [px,py]=eventPos(e);
@@ -5674,7 +6044,7 @@ function findWorkplaces(hx,hy){
         if (!seenB.has(key)){
           seenB.add(key);
           const rc=map[root[1]][root[0]];
-          const nm = rc.lv>=4 ? (NAMES[rc.t]+(rc.lv===5?' skyscraper':' tower')) : (bizName(rc)||NAMES[rc.t]);
+          const nm = bizName(rc)||NAMES[rc.t];
           found.push({x:root[0], y:root[1], d, name:nm});
           if (found.length>=3) break;
         }
@@ -5694,7 +6064,7 @@ function showTip(x,y,force,light){
   const head = c.bridge ? (c.t==='road'?'Road bridge':'Avenue bridge')
              : biz ? biz
              : (NAMES[c.t]||c.t);
-  const tier = c.lv>=7?' megatower' : c.lv===6?' highrise' : c.lv===5?' skyscraper' : tower?' tower':'';
+  const tier = biz ? '' : (c.lv>=7?' megatower' : c.lv===6?' highrise' : c.lv===5?' skyscraper' : tower?' tower':'');
   let html=`<h4>${head}${tier}${ZONE[c.t]&&c.lv?` · Lv ${c.lv}`:''}</h4>`;
   if (biz) html+=`<div class="row"><span>Zone</span><span>${NAMES[c.t]}</span></div>`;
   if (tower) html+=`<div class="row"><span>Footprint</span><span>2×2 block</span></div>`;
@@ -6524,9 +6894,12 @@ let flyFor=null;
 function hideFly(){ flyEl.style.display='none'; flyFor=null; }
 function showFly(btn, t){
   flyFor=t.id;
-  flyEl.innerHTML = `<div class="fhead">OPTIONS</div>` + t.sub.map(o=>
-    `<button data-id="${o.id}" class="${S.tool===o.id?'cur':''}"><span class="ic" style="color:${o.col}">${tintI(ICONS[o.id])||o.ic}</span>
-     <span class="ftxt"><b>${o.n}</b><i>${o.d||''}</i></span><span class="cost">§${o.c}</span></button>`).join('');
+  flyEl.innerHTML = `<div class="fhead">OPTIONS</div>` + t.sub.map(o=>{
+    const locked=isToolLocked(o.id);
+    const sub = locked ? `<i class="lockmsg">${lockNote(o)}</i>` : `<i>${o.d||''}</i>`;
+    return `<button data-id="${o.id}" class="${locked?'locked ':''}${S.tool===o.id?'cur':''}"><span class="ic" style="color:${o.col}">${tintI(ICONS[o.id])||o.ic}</span>
+     <span class="ftxt"><b>${o.n}</b>${sub}</span><span class="cost">§${o.c}</span></button>`;
+  }).join('');
   const r=btn.getBoundingClientRect();
   flyEl.style.display='block';
   const fw=flyEl.offsetWidth||260;
@@ -6534,6 +6907,7 @@ function showFly(btn, t){
   flyEl.style.left = onRight ? Math.max(8, r.left-8-fw)+'px' : (r.right+8)+'px';
   flyEl.style.top=Math.max(64, Math.min(r.top, window.innerHeight-flyEl.offsetHeight-68))+'px';
   flyEl.querySelectorAll('button').forEach(fb=>fb.onclick=(e)=>{ e.stopPropagation(); setTool(fb.dataset.id); hideFly(); });
+  refreshLocks();   // also set the full hover reason on each option
 }
 const groupBtns=[];   // [{btn, t}] — groups remember their last-used sub-tool
 const tintI=(svg)=>svg ? svg.replace(/#0d1420/g,'currentColor') : '';
@@ -6705,9 +7079,11 @@ function viewsBtnSync(){
   } else if (lbl) lbl.remove();
 }
 document.querySelectorAll('#views button[data-v]').forEach(b=>b.onclick=()=>{
-  S.overlay=b.dataset.v;
-  document.querySelectorAll('#views button[data-v]').forEach(o=>o.classList.toggle('on', o===b));
-  viewsBtnSync();
+  // clicking the already-active view turns it back off
+  const off = S.overlay===b.dataset.v;
+  S.overlay = off ? 'none' : b.dataset.v;
+  document.querySelectorAll('#views button[data-v]').forEach(o=>o.classList.toggle('on', !off && o===b));
+  viewsBtnSync(); dirty=true;
 });
 /* low-rise: flatten skyscrapers so streets and small buildings stay workable */
 S.flatten=false;
@@ -7538,44 +7914,102 @@ function closeAnyModal(){
    BUILDING CATALOG — every structure, organized by type
    ============================================================ */
 const catModal=document.getElementById('catModal');
+const catTipEl=document.getElementById('catTip');
+/* flat id→{cost,desc,capacity} map built from the TOOLS catalog, for catalog hover stats */
+const CAT_TOOLINFO=(()=>{ const m={}; const add=t=>{ if(t&&t.id) m[t.id]={c:t.c,d:t.d,cap:t.cap}; }; for(const t of TOOLS){ add(t); if(t.sub) t.sub.forEach(add); } return m; })();
+let catHits=[];   // [{x,y,w,h,tip}] hit-rects in CSS px, rebuilt each renderCatalog()
+function catTipHTML(it){
+  const t=it.c.t, lv=it.c.lv;
+  let h=`<h4>${(it.label||'').toUpperCase()}</h4>`;
+  if (ZONE[t]){
+    const zn = t==='res'?'Residential':t==='com'?'Commercial':'Industrial';
+    const cap=(CAP[t]&&CAP[t][lv])||0;
+    h+=`<div class="row"><span>Zone</span><span>${zn} · Lv ${lv}</span></div>`;
+    h+=`<div class="row"><span>${t==='res'?'Residents':'Jobs'}</span><span>${cap}</span></div>`;
+    h+=`<div class="row"><span>Needs</span><span>road · power · water</span></div>`;
+    if (t==='ind') h+=`<div class="row"><span>Pollution</span><span>${lv>=3?'heavy':lv===2?'moderate':'light'}</span></div>`;
+    h+=`<div style="font-size:10px;color:var(--dim);margin-top:4px">grows on its own as demand &amp; land value rise — can't be placed directly</div>`;
+  } else {
+    const inf=CAT_TOOLINFO[t]||{};
+    if (inf.c!=null) h+=`<div class="row"><span>Cost</span><span>$${inf.c}</span></div>`;
+    if (inf.cap) h+=`<div class="row"><span>Output</span><span>${inf.cap}</span></div>`;
+    if (inf.d) h+=`<div style="font-size:11px;color:var(--dim);margin-top:4px">${inf.d}</div>`;
+  }
+  return h;
+}
 function renderCatalog(){
   const cat=document.getElementById('catCv');
-  const COLS=6, CW=120, CH=118, PAD=14;
+  const COLS=6, CW=120, CH=100, PAD=14, HEAD=20, LEAD=18;   // HEAD: header band · LEAD: gap before each header so it groups with the items below it
+  catHits=[];
   const groups=[];
   const z1={lv:0,dev:0,pw:true,wt:true,fire:0,vary:0,grp:null,part:false,bld:0,bridge:false};
   const cell=(t,lv,vary)=>({...z1,t,lv,vary});
   const mk=(label,c,lval)=>({label,c,lval});
+  // res/com/ind levels 4+ are merge-grown 2×2 blocks — render them directly via drawBigBuilding.
+  // each tier has 4 silhouettes; these vary values map 1:1 to vk 0/1/2/3 and to the TOWER_NAMES index.
+  const TIER_NAMES={
+    res:{4:'Tower',5:'Skyscraper',6:'Highrise',7:'Megatower'},
+    com:{4:'Office Tower',5:'Skyscraper',6:'Highrise',7:'Megatower'},
+    ind:{4:'Complex',5:'Heavy Plant',6:'Megaplant'},
+  };
+  const VARY4=[0.10,0.35,0.60,0.85];
+  const towerVariant=(t,lv,vy,label)=>({ label, c:cell(t,lv,vy), draw:(px,py,zoom)=>{
+    const oldZ=S.zoom; S.zoom=zoom||0.58;
+    S.ox=px; S.oy=py-TH/2;
+    const [sx,sy]=tileScreen(0,0);
+    diamond(sx,sy); cx.fillStyle=shade('#a8adb5',.96); cx.fill();
+    cx.strokeStyle='rgba(70,80,92,.25)'; cx.lineWidth=1; diamond(sx,sy,.98); cx.stroke();
+    drawBigBuilding(t, sx, sy, 1, isNight(), lv, vy);
+    S.zoom=oldZ;
+  }});
+  const towerTier=(t,lv)=>VARY4.map((vy,i)=>{
+    const names=TOWER_NAMES[t]&&TOWER_NAMES[t][lv];
+    return towerVariant(t,lv,vy,(names&&names[i])||TIER_NAMES[t][lv]);
+  });
+  // one group per tier so its 4 variants sit together on one row
+  const towerGroups=(t,label)=>(t==='ind'?[4,5,6]:[4,5,6,7]).map(lv=>
+    [label+' — '+TIER_NAMES[t][lv].toUpperCase()+' (lv '+lv+')', towerTier(t,lv), 150]);
+  const airportItem={ label:'Airport', c:cell('airport',0), draw:(px,py,zoom)=>{
+    const oldZ=S.zoom; S.zoom=zoom||0.42;
+    S.ox=px; S.oy=py-TH/2;
+    const [sx,sy]=tileScreen(0,0);
+    diamond(sx,sy); cx.fillStyle=shade('#9aa3ad',.97); cx.fill();
+    drawAirport(sx, sy, S.zoom*0.5, isNight(), 5000, 4, 2);
+    S.zoom=oldZ;
+  }};
   groups.push(['RESIDENTIAL', [
     mk('Cottage',cell('res',1,.1)), mk('Ranch house',cell('res',1,.35)), mk('Cabin',cell('res',1,.6)), mk('Duplex',cell('res',1,.9)),
     mk('Townhouses',cell('res',2,.1)), mk('Brownstone',cell('res',2,.35)), mk('Garden flats',cell('res',2,.6)), mk('Stacked flats',cell('res',2,.9)),
     mk('Apartments',cell('res',3,.15)), mk('Condo',cell('res',3,.5)), mk('Mixed-use',cell('res',3,.85)), mk('Mansion',cell('res',3,.1),85),
   ]]);
+  towerGroups('res','RESIDENTIAL TOWERS').forEach(g=>groups.push(g));
   groups.push(['COMMERCIAL — SHOPS', COM_NAMES[1].map((n,i)=>mk(n,cell('com',1,(i+0.5)/10)))]);
   groups.push(['COMMERCIAL — MID', COM_NAMES[2].map((n,i)=>mk(n,cell('com',2,(i+0.5)/7)))]);
   groups.push(['COMMERCIAL — MAJOR', COM_NAMES[3].map((n,i)=>mk(n,cell('com',3,(i+0.5)/5)))]);
+  towerGroups('com','COMMERCIAL TOWERS').forEach(g=>groups.push(g));
   groups.push(['INDUSTRY — LIGHT', IND_NAMES[1].map((n,i)=>mk(n,cell('ind',1,(i+0.5)/5)))]);
   groups.push(['INDUSTRY — MID', IND_NAMES[2].map((n,i)=>mk(n,cell('ind',2,(i+0.5)/5)))]);
   groups.push(['INDUSTRY — HEAVY', IND_NAMES[3].map((n,i)=>mk(n,cell('ind',3,(i+0.5)/5)))]);
+  towerGroups('ind','INDUSTRY').forEach(g=>groups.push(g));
   groups.push(['CIVIC', [
     mk('Police',cell('police',0,.5)), mk('Fire station',cell('fire',0,.5)),
     mk('Primary school',cell('school',0,.5)), mk('High school',cell('highschool',0,.5)), mk('University',cell('university',0,.5)),
     mk('Clinic',cell('clinic',0,.5)), mk('Hospital',cell('hospital',0,.5)), mk('Medical center',cell('medcenter',0,.5)),
     mk('City Hall',cell('cityhall',0,.5)), mk('Monument',cell('monument',0,.5)),
+    mk('Botanic Gardens',cell('botanic',0,.5)), mk('Grand Museum',cell('museum',0,.5)), mk('Titan Tower',cell('titan',0,.5)),
   ]]);
   groups.push(['LEISURE', [
     mk('Park',cell('park',0,.5)), mk('Playground',cell('playground',0,.5)), mk('Plaza',cell('plaza',0,.5)),
     mk('Garden',cell('garden',0,.5)), mk('Public pool',cell('pool',0,.5)),
-    mk('Stadium',cell('stadium',0,.3)), mk('Arena',cell('arena',0,.7)),
+    mk('Stadium',cell('stadium',0,.3)), mk('Arena',cell('arena',0,.7)), airportItem,
   ]]);
   groups.push(['UTILITIES', [
     mk('Coal plant',cell('power',0,.5)), mk('Solar farm',cell('solar',0,.5)), mk('Nuclear plant',cell('nuclear',0,.5)),
     mk('Water pump',cell('pump',0,.5)), mk('Water tower',cell('tower',0,.5)),
   ]]);
   // layout
-  let rows=0;
-  for (const [,items] of groups) rows += 1 + Math.ceil(items.length/COLS)*0; // headers counted separately
   let totalH=PAD;
-  for (const [,items] of groups) totalH += 26 + Math.ceil(items.length/COLS)*CH;
+  groups.forEach(([,items,gh],gi)=>{ totalH += (gi?LEAD:0) + HEAD + Math.ceil(items.length/COLS)*(gh||CH); });
   const cssW=COLS*CW+PAD*2, cssH=totalH+PAD;
   const dpr=Math.min(3, window.devicePixelRatio||1);          // render at native resolution — crisp on retina
   cat.width=cssW*dpr; cat.height=cssH*dpr;
@@ -7588,28 +8022,101 @@ function renderCatalog(){
   const keep=map[0][0], keepLV=landVal[0];
   cx=cc; S.zoom=1.12; S.rot=0;   // a touch larger so details read clearly
   let yPos=PAD;
-  for (const [title,items] of groups){
+  groups.forEach(([title,items,gh],gi)=>{
+    const RH=gh||CH;
+    if (gi) yPos+=LEAD;
     cc.fillStyle='#ffb454'; cc.font="12px 'Chakra Petch'"; cc.textAlign='left';
     cc.fillText(title, PAD, yPos+12);
-    yPos+=26;
+    yPos+=HEAD;
     items.forEach((it,i)=>{
       const col=i%COLS, row=(i/COLS)|0;
-      const px=PAD+col*CW+CW/2, py=yPos+row*CH+CH-44;
-      S.ox=px; S.oy=py-TH/2;            // tile (0,0) top corner lands here
-      map[0][0]=it.c;
-      landVal[0]=it.lval||60;
-      try{ drawCell(0,0,5000); }catch(_){}
+      const px=PAD+col*CW+CW/2, py=yPos+row*RH+RH-44;
+      if (it.draw){
+        try{ it.draw(px,py); }catch(_){} BLD_TINT=null;
+      } else {
+        S.ox=px; S.oy=py-TH/2;            // tile (0,0) top corner lands here
+        map[0][0]=it.c;
+        landVal[0]=it.lval||60;
+        try{ drawCell(0,0,5000); }catch(_){}
+      }
       cc.fillStyle='#aeb8c2'; cc.font="10px Inter"; cc.textAlign='center';
-      cc.fillText(it.label, px, yPos+row*CH+CH-8);
+      cc.fillText(it.label, px, yPos+row*RH+RH-8);
+      catHits.push({x:PAD+col*CW, y:yPos+row*RH, w:CW, h:RH, tip:catTipHTML(it), it});
     });
-    yPos += Math.ceil(items.length/COLS)*CH;
-  }
-  // 2x2 specials drawn directly
+    yPos += Math.ceil(items.length/COLS)*RH;
+  });
   map[0][0]=keep; landVal[0]=keepLV;
   cx=oldCx; S.ox=oldS.ox; S.oy=oldS.oy; S.zoom=oldS.zoom; S.rot=oldS.rot;
 }
 document.getElementById('catBtn').onclick=()=>{ renderCatalog(); catModal.classList.add('open'); };
-catModal.onclick=(e)=>{ if(e.target===catModal) catModal.classList.remove('open'); };
+catModal.onclick=(e)=>{ if(e.target===catModal){ catModal.classList.remove('open'); catTipEl.style.display='none'; } };
+/* render a substantially-bigger portrait of a hovered catalog item into the hover card's canvas */
+function renderCatBig(it, pv){
+  const W=320, WORK=440, dpr=Math.min(3, window.devicePixelRatio||1);   // WORK: generous working height; the visible frame is cropped to fit
+  // render into an offscreen canvas first, then crop to the actual painted height
+  const tmp=document.createElement('canvas'); tmp.width=W*dpr; tmp.height=WORK*dpr;
+  const pc=tmp.getContext('2d'); pc.setTransform(dpr,0,0,dpr,0,0); pc.clearRect(0,0,W,WORK);
+  const oldCx=cx, oldS={ox:S.ox,oy:S.oy,zoom:S.zoom,rot:S.rot};
+  const keep=map[0][0], keepLV=landVal[0];
+  cx=pc; S.rot=0;
+  const baseX=W/2;
+  try{
+    if (it.draw){
+      let z;
+      if (it.c && it.c.t==='airport') z=0.82;
+      else z=Math.min(2.2, 188/towerHeight(it.c.t, it.c.lv));   // fill the width regardless of tier height
+      it.draw(baseX, WORK - 24 - TH*z, z);
+    } else {
+      const z=2.5, baseY = WORK - 24 - TH*z;
+      S.ox=baseX; S.oy=baseY-TH/2; S.zoom=z;
+      map[0][0]=it.c; landVal[0]=it.lval||60;
+      drawCell(0,0,5000);
+    }
+  }catch(_){}
+  BLD_TINT=null;
+  map[0][0]=keep; landVal[0]=keepLV;
+  cx=oldCx; S.ox=oldS.ox; S.oy=oldS.oy; S.zoom=oldS.zoom; S.rot=oldS.rot;
+
+  // measure the painted vertical extent (device pixels) so the modal height fits the building
+  const dw=tmp.width, dh=tmp.height;
+  let top=-1, bot=-1;
+  try{
+    const data=pc.getImageData(0,0,dw,dh).data;
+    for (let yy=0; yy<dh && top<0; yy++){ const o=yy*dw*4+3; for (let xx=0; xx<dw; xx+=2){ if (data[o+xx*4]>10){ top=yy; break; } } }
+    for (let yy=dh-1; yy>=0 && bot<0; yy--){ const o=yy*dw*4+3; for (let xx=0; xx<dw; xx+=2){ if (data[o+xx*4]>10){ bot=yy; break; } } }
+  }catch(_){}
+  if (top<0){ top=0; bot=Math.round(120*dpr); }                 // nothing painted → small fallback
+  const padT=12*dpr, padB=10*dpr;
+  const fh=Math.round((bot-top)+padT+padB);
+  pv.width=dw; pv.height=fh;
+  pv.style.width=W+'px'; pv.style.height=Math.round(fh/dpr)+'px';
+  const oc=pv.getContext('2d'); oc.clearRect(0,0,dw,fh);
+  oc.drawImage(tmp, 0, top, dw, bot-top+1, 0, padT, dw, bot-top+1);   // crop the painted band into the fitted frame
+}
+/* hover any catalog tile to read its stats (jobs/residents, cost, effects) + a big preview */
+(function(){
+  const cv=document.getElementById('catCv');
+  let lastHit=null;
+  cv.addEventListener('pointermove', e=>{
+    const r=cv.getBoundingClientRect();
+    const x=e.clientX-r.left, y=e.clientY-r.top;
+    let hit=null;
+    for(const hh of catHits){ if(x>=hh.x&&x<hh.x+hh.w&&y>=hh.y&&y<hh.y+hh.h){ hit=hh; break; } }
+    if(!hit){ catTipEl.style.display='none'; lastHit=null; return; }
+    if(hit!==lastHit){            // only re-render the portrait when the hovered tile changes
+      lastHit=hit;
+      catTipEl.innerHTML='<canvas class="ctpv"></canvas>'+hit.tip;
+      const pvc=catTipEl.querySelector('.ctpv'); if(pvc) renderCatBig(hit.it, pvc);
+      catTipEl.style.display='block';
+    }
+    const tw=catTipEl.offsetWidth, th=catTipEl.offsetHeight;
+    let lx=e.clientX+16, ly=e.clientY+16;
+    if(lx+tw>window.innerWidth-8) lx=e.clientX-tw-16;
+    if(ly+th>window.innerHeight-8) ly=Math.max(8, window.innerHeight-th-8);
+    catTipEl.style.left=lx+'px'; catTipEl.style.top=ly+'px';
+  });
+  cv.addEventListener('pointerleave', ()=>{ catTipEl.style.display='none'; lastHit=null; });
+})();
 /* ---------- HUD stat breakdowns on hover ---------- */
 const statTip=document.getElementById('statTip');
 function statRow(k,v,signed){
@@ -7634,10 +8141,10 @@ bindStatTip(document.getElementById('happy'), ()=>{
     + statRow('Base mood', h.base)
     + statRow('Avg land value ÷ 2', h.lv, true)
     + statRow('Jobs balance', h.jobs, true)
-    + statRow('Tax above 9%', h.tax, true)
+    + statRow('Tax burden', h.tax, true)
     + statRow('Blackouts', h.power, true)
     + statRow('Water shortages', h.water, true)
-    + statRow('Gridlock', h.traffic, true)
+    + statRow('Traffic', h.traffic, true)
     + statRow('Crime', h.crime||0, true)
     + `<div class="row" style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px"><span><b>Total</b></span><span><b>${S.happy}%</b></span></div>`;
 });
@@ -8256,7 +8763,9 @@ function buildBBar(){
     for (const o of grp.leaves){
       const ch=document.createElement('button');
       ch.className='bchip'; ch.dataset.id=o.id;
-      ch.innerHTML='<span class="ic" style="color:'+o.col+'">'+(tintI(ICONS[o.id])||o.ic)+'</span><span class="bl">'+o.n+'</span>'+(o.c?'<span class="bc">§'+o.c+'</span>':'');
+      const lk=isToolLocked(o.id);
+      const foot = lk ? '<span class="bc lockbc">🔒 '+lockPopShort(o)+'</span>' : (o.c?'<span class="bc">§'+o.c+'</span>':'');
+      ch.innerHTML='<span class="ic" style="color:'+o.col+'">'+(tintI(ICONS[o.id])||o.ic)+'</span><span class="bl">'+o.n+'</span>'+foot;
       ch.onclick=()=>{ grp._cur=o.id; setTool(o.id); bbarSync(); };   // remember the player's pick
       sub.appendChild(ch);
     }
