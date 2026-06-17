@@ -9,6 +9,24 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="POLIS">
 <title>POLIS — City Builder</title>
+<meta name="description" content="POLIS is a polished isometric city builder that runs right in your browser — zone, power, and grow a living city. No install, no sign-up.">
+<link rel="canonical" href="https://polis-game.com/">
+<!-- Open Graph (Facebook, LinkedIn, iMessage, Slack, Discord, WhatsApp) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="POLIS">
+<meta property="og:title" content="POLIS — City Builder">
+<meta property="og:description" content="A polished isometric city builder that runs right in your browser — zone, power, and grow a living city. No install, no sign-up.">
+<meta property="og:url" content="https://polis-game.com/">
+<meta property="og:image" content="https://polis-game.com/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="POLIS — an isometric city builder, with a stylized skyscraper.">
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="POLIS — City Builder">
+<meta name="twitter:description" content="A polished isometric city builder that runs right in your browser — zone, power, and grow a living city. No install, no sign-up.">
+<meta name="twitter:image" content="https://polis-game.com/og.png">
+<meta name="twitter:image:alt" content="POLIS — an isometric city builder, with a stylized skyscraper.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -5696,7 +5714,7 @@ function render(now){
 /* ============================================================
    INPUT
    ============================================================ */
-let dragging=false, painting=false, lastP=null, pinch=null;
+let dragging=false, painting=false, lastP=null, pinch=null, tapPend=null;
 /* ---------- drag-preview (marquee) ---------- */
 const PAINTABLE={road:1,avenue:1,path:1,rail:1,res:1,com:1,ind:1,park:1,garden:1,playground:1,plaza:1,bulldoze:1};
 let pend=null; // {a:[x,y], b:[x,y]} anchor → current while dragging a paintable tool
@@ -5983,6 +6001,14 @@ cv.addEventListener('pointerdown', e=>{
     painting=true;
     return;
   }
+  // touch: defer single placements to release so a second finger (pinch) can cancel them
+  if (e.pointerType!=='mouse'){ tapPend=[gx,gy]; painting=true; S.hover=[gx,gy]; dirty=true; return; }
+  placeSingle(gx,gy);
+  painting=true;
+});
+// single (non-paintable) placement, shared by mouse-down and touch release
+function placeSingle(gx,gy){
+  if (!inB(gx,gy)) return;
   beginAction();
   try{
     const before1=S.money;
@@ -6000,11 +6026,10 @@ cv.addEventListener('pointerdown', e=>{
       if (bull1) sfxBulldoze(1); else sfxPlace(1);
       if (navigator.vibrate && document.body.classList.contains('mob')){ try{ navigator.vibrate(bull1?12:6); }catch(_){} }
     } else if (r1==='nofunds') sfxDeny();
-  }              // single placements stay immediate
+  }
   catch(err){ console.error(err); msg('<b>That placement failed.</b>'); }
   finally{ endAction(); }
-  painting=true;
-});
+}
 cv.addEventListener('pointermove', e=>{
   if (touches.size>=2 || pinch){ dragging=false; return; }   // pinch owns the gesture
   const [px,py]=eventPos(e);
@@ -6014,6 +6039,7 @@ cv.addEventListener('pointermove', e=>{
   S.hover=[gx,gy];
   if (moved && S.overlay && S.overlay!=='none') dirty=true;   // refresh the bold reach ring under the cursor
   if (painting && pend){ pend.b=[gx,gy]; return; }
+  if (painting && tapPend){ tapPend=[gx,gy]; return; }   // deferred touch tap tracks the finger
   if (e.pointerType!=='mouse' || painting) return;
   if (S.tool==='inspect'){ showTip(gx,gy,false); return; }      // inspect is immediate
   if (moved){
@@ -6027,9 +6053,11 @@ cv.addEventListener('pointermove', e=>{
 let tipTimer=0;
 cv.addEventListener('pointerup', ()=>{
   if (pend) commitPending();
+  else if (tapPend && !pinch && touches.size<2) placeSingle(tapPend[0], tapPend[1]);  // a real tap, not the start of a pinch
+  tapPend=null;
   dragging=false; painting=false; lastP=null;
 });
-cv.addEventListener('pointercancel', ()=>cancelPending());
+cv.addEventListener('pointercancel', ()=>{ tapPend=null; cancelPending(); });
 cv.addEventListener('pointerleave', ()=>{ S.hover=null; tipEl.style.display='none'; commuteViz=null; dirty=true; });
 cv.addEventListener('wheel', e=>{
   e.preventDefault();
@@ -6047,9 +6075,9 @@ const touches=new Map();
 cv.addEventListener('touchstart', e=>{
   for(const t of e.changedTouches) touches.set(t.identifier,[t.clientX,t.clientY]);
   if(touches.size>=2){
-    // a second finger means a pinch — abort any in-progress paint/drag so they don't fight
+    // a second finger means a pinch — abort any in-progress paint/drag/tap so they don't fight
     cancelPending();
-    painting=false; dragging=false; pend=null;
+    painting=false; dragging=false; pend=null; tapPend=null;
     pinch=pinchInfo(e);
   }
 },{passive:true});

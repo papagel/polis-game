@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b2c47"/>
+      <stop offset="0.55" stop-color="#101b2e"/>
+      <stop offset="1" stop-color="#0a1220"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.74" cy="0.7" r="0.5">
+      <stop offset="0" stop-color="#e8b04a" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#e8b04a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- isometric tower (right side) -->
+  <g>
+    <!-- ground diamond -->
+    <polygon points="900,352 1080,430 900,508 720,430" fill="#3f8f55"/>
+    <polygon points="900,430 1080,430 900,508 720,430" fill="#000000" fill-opacity="0.22"/>
+
+    <!-- tier 1 (base) -->
+    <polygon points="900,478 1020,418 1020,262 900,322" fill="#43568f"/>
+    <polygon points="900,478 780,418 780,262 900,322" fill="#5a6fae"/>
+    <polygon points="900,322 1020,262 900,202 780,262" fill="#8b9fd6"/>
+
+    <!-- tier 2 (mid) -->
+    <polygon points="900,334 984,292 984,172 900,214" fill="#4a5f9d"/>
+    <polygon points="900,334 816,292 816,172 900,214" fill="#6278ba"/>
+    <polygon points="900,214 984,172 900,130 816,172" fill="#8b9fd6"/>
+
+    <!-- tier 3 (top) -->
+    <polygon points="900,217 954,190 954,100 900,127" fill="#5269aa"/>
+    <polygon points="900,217 846,190 846,100 900,127" fill="#6c84c9"/>
+    <polygon points="900,127 954,100 900,73 846,100" fill="#8b9fd6"/>
+
+    <!-- roof slab + antenna -->
+    <rect x="846" y="119" width="108" height="13" fill="#e8b04a"/>
+    <line x1="900" y1="73" x2="900" y2="22" stroke="#e8b04a" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="900" cy="22" r="7" fill="#ffd23f"/>
+
+    <!-- window dots -->
+    <g fill="#ffe096" fill-opacity="0.85">
+      <rect x="828" y="300" width="11" height="14"/>
+      <rect x="858" y="307" width="11" height="14"/>
+      <rect x="828" y="330" width="11" height="14"/>
+      <rect x="888" y="337" width="11" height="14"/>
+      <rect x="930" y="300" width="11" height="14"/>
+      <rect x="960" y="307" width="11" height="14"/>
+      <rect x="930" y="330" width="11" height="14"/>
+      <rect x="960" y="337" width="11" height="14"/>
+      <rect x="858" y="240" width="9" height="12"/>
+      <rect x="924" y="240" width="9" height="12"/>
+      <rect x="894" y="222" width="9" height="12"/>
+    </g>
+  </g>
+
+  <!-- wordmark + tagline (left side) -->
+  <text x="96" y="300" font-family="'Chakra Petch','Helvetica Neue',Helvetica,Arial,sans-serif" font-weight="700" font-size="150" letter-spacing="10" fill="#e9eef5">POLIS</text>
+  <rect x="100" y="330" width="300" height="6" rx="3" fill="#e8b04a"/>
+  <text x="100" y="392" font-family="'Helvetica Neue',Helvetica,Arial,sans-serif" font-weight="500" font-size="38" fill="#93a4b8">An isometric city builder</text>
+  <text x="100" y="438" font-family="'Helvetica Neue',Helvetica,Arial,sans-serif" font-weight="500" font-size="38" fill="#93a4b8">in your browser</text>
+  <text x="100" y="540" font-family="'Chakra Petch','Helvetica Neue',Helvetica,Arial,sans-serif" font-weight="600" font-size="30" letter-spacing="2" fill="#5ab2ff">polis-game.com</text>
+</svg>
