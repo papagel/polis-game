@@ -740,6 +740,12 @@
     <button class="mstyle" data-st="chiptune">Chiptune</button>
     <button class="mstyle" data-st="synthwave">Synthwave</button>
     <button class="mstyle" data-st="aegean">Aegean</button>
+    <button class="mstyle" data-st="jazz">Jazz</button>
+    <button class="mstyle" data-st="techno">Techno</button>
+    <button class="mstyle" data-st="cinematic">Cinematic</button>
+    <button class="mstyle" data-st="vangelis">Vangelis</button>
+    <button class="mstyle" data-st="funk">Funk</button>
+    <button class="mstyle" data-st="bossa">Bossa</button>
   </div>
   <div class="arow"><span>Music volume</span><input type="range" id="musVol" min="0" max="100" value="55"></div>
   <div class="arow" style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><span>City sounds</span><button class="atgl on" id="ambTgl">ON</button></div>
@@ -7021,6 +7027,365 @@ function aegeanBar(){
   boom(t,0.075); tek(t+2.5*ST); boom(t+3*ST,0.05); tek(t+5.5*ST); boom(t+6*ST,0.045);
   return BAR*1000;
 }
+/* — style 8: JAZZ (trio: brushed swing ride, plucked upright walk, rootless comp, sax lead) — */
+const PROG_J=[[5,8,12,15],[-2,2,5,8],[3,7,10,14],[0,4,7,10]];  // Dm7 G7 Cmaj7 A7 (ii-V-I-VI, rel. A=220)
+function jazzBar(){
+  const C=AU.ctx, t=C.currentTime, BAR=60/116*4, BEAT=BAR/4, sw=BEAT*0.64;   // sw = swung 'and' (triplet feel)
+  const ch=PROG_J[bar%PROG_J.length];
+  const nextRoot=PROG_J[(bar+1)%PROG_J.length][0];
+  // walking upright bass: a quarter on every beat, climbing chord tones then a chromatic lean to the next root
+  const walk=[ch[0], ch[1], ch[2], nextRoot+(Math.random()<0.5?-1:1)];
+  const bass=(semi,at,dur)=>{
+    const f=NOTE(semi)/4;
+    const o=C.createOscillator(); o.type='triangle';
+    o.frequency.setValueAtTime(f*1.5,at); o.frequency.exponentialRampToValueAtTime(f,at+0.05);  // upright string snap
+    const o2=C.createOscillator(); o2.type='sine'; o2.frequency.value=f;                         // round body
+    const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=650;
+    const g=C.createGain();
+    g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(0.10,at+0.02);
+    g.gain.exponentialRampToValueAtTime(0.001,at+dur);
+    o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(AU.mus);
+    o.start(at); o2.start(at); o.stop(at+dur+0.05); o2.stop(at+dur+0.05);
+  };
+  for (let i=0;i<4;i++) bass(walk[i], t+i*BEAT, BEAT*0.92);
+  // brushed ride cymbal: filtered-noise shimmer in the classic 'spang-a-lang' swing pattern
+  const ride=(at,vol)=>{
+    const src=C.createBufferSource(); src.buffer=makeNoiseBuf(C,0.18,false);
+    const hp=C.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=6500;
+    const bp=C.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=9500; bp.Q.value=0.7;
+    const g=C.createGain(); g.gain.setValueAtTime(vol,at); g.gain.exponentialRampToValueAtTime(0.0004,at+0.15);
+    src.connect(hp); hp.connect(bp); bp.connect(g); g.connect(AU.mus); src.start(at);
+  };
+  for (let i=0;i<4;i++){ ride(t+i*BEAT, 0.016); if (i===1||i===3) ride(t+i*BEAT+sw, 0.011); }   // skip note on 2 & 4
+  // hi-hat foot 'chick' on 2 & 4
+  const chick=(at)=>{
+    const src=C.createBufferSource(); src.buffer=makeNoiseBuf(C,0.05,false);
+    const hp=C.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=9000;
+    const g=C.createGain(); g.gain.setValueAtTime(0.018,at); g.gain.exponentialRampToValueAtTime(0.001,at+0.045);
+    src.connect(hp); hp.connect(g); g.connect(AU.mus); src.start(at);
+  };
+  chick(t+BEAT); chick(t+3*BEAT);
+  // rootless piano comp: 3rd-5th-7th, lightly rolled, on syncopated off-beats
+  const comp=(at,vol)=>ch.slice(1).forEach((semi,k)=> tone(NOTE(semi), at+k*0.014, BEAT*0.9, vol, 'triangle', AU.mus, 2400));
+  comp(t+BEAT+sw, 0.016);                                 // 'and' of 2
+  if (Math.random()<0.7) comp(t+3*BEAT+sw, 0.014);        // 'and' of 4
+  if (Math.random()<0.35) comp(t+0.02, 0.012);            // occasional downbeat punctuation
+  // sax lead: a sparse swung phrase off the chord tones, breathy filtered tone with vibrato
+  const lively = S.started && S.speed ? Math.min(1, S.pop/700) : 0.4;
+  if (lively>0.3 && Math.random()<0.7){
+    const seq=[ch[1],ch[3],ch[2],ch[3]+2,ch[2]], t0=t+(1+(Math.random()*2|0))*BEAT;
+    let at=t0;
+    for (let i=0;i<seq.length;i++){
+      const dur=(i%2? BEAT-sw : sw), f=NOTE(seq[i]+12);   // swung eighths: long-short
+      const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=f;
+      const vib=C.createOscillator(); vib.frequency.value=5.2; const vd=C.createGain(); vd.gain.value=f*0.006;
+      vib.connect(vd); vd.connect(o.frequency);
+      const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1500; lp.Q.value=0.6;
+      const g=C.createGain();
+      g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(0.030,at+0.06);
+      g.gain.setValueAtTime(0.026,at+dur*0.6); g.gain.linearRampToValueAtTime(0.0001,at+dur);
+      o.connect(lp); lp.connect(g); g.connect(AU.mus);
+      o.start(at); vib.start(at); o.stop(at+dur+0.05); vib.stop(at+dur+0.05);
+      at+=dur;
+    }
+  }
+  return BAR*1000;
+}
+/* — style 9: TECHNO (four-on-the-floor, acid bass, off-beat hats, stab chords) — */
+const PROG_TC=[[0,3,7],[0,3,7],[10,13,17],[8,12,15]];
+function technoBar(){
+  const C=AU.ctx, t=C.currentTime, BAR=60/128*4, ST=BAR/16;     // 16 sixteenths @128bpm
+  const ch=PROG_TC[bar%PROG_TC.length];
+  const lively = S.started && S.speed ? Math.min(1, S.pop/700) : 0.35;
+  // four-on-the-floor kick
+  for (let i=0;i<4;i++){
+    const at=t+i*ST*4;
+    const o=C.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(150,at); o.frequency.exponentialRampToValueAtTime(45,at+0.09);
+    const g=C.createGain(); g.gain.setValueAtTime(0.14,at); g.gain.exponentialRampToValueAtTime(0.0001,at+0.16);
+    o.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+0.18);
+  }
+  // acid bass: resonant lowpass saw, 16th pulse with octave/slide accents
+  const accent=[1,0,0,1, 0,1,0,0, 1,0,1,0, 0,1,0,1];
+  for (let i=0;i<16;i++){
+    if (i%2===1 && Math.random()<0.4) continue;
+    const at=t+i*ST, semi=ch[0]-12+(accent[i]?12:0);
+    const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=NOTE(semi);
+    const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.Q.value=12;
+    const cut=600+accent[i]*2200*lively;
+    lp.frequency.setValueAtTime(cut,at); lp.frequency.exponentialRampToValueAtTime(300,at+ST*1.4);
+    const g=C.createGain(); g.gain.setValueAtTime(0.06,at); g.gain.exponentialRampToValueAtTime(0.001,at+ST*1.5);
+    o.connect(lp); lp.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+ST*1.6);
+  }
+  // hats: closed 16ths, open on the off-beats
+  for (let i=0;i<16;i++){
+    if (lively<0.2 && i%4!==2) continue;
+    const at=t+i*ST, open=(i%4===2);
+    const src=C.createBufferSource(); src.buffer=makeNoiseBuf(C, open?0.07:0.022, false);
+    const hp=C.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=8000;
+    const g=C.createGain(); g.gain.value=open?0.016:0.009;
+    src.connect(hp); hp.connect(g); g.connect(AU.mus); src.start(at);
+  }
+  // clap on 2 & 4
+  for (const i of [4,12]){
+    const at=t+i*ST;
+    const src=C.createBufferSource(); src.buffer=makeNoiseBuf(C,0.09,false);
+    const bp=C.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1800; bp.Q.value=0.8;
+    const g=C.createGain(); g.gain.setValueAtTime(0.05,at); g.gain.exponentialRampToValueAtTime(0.001,at+0.1);
+    src.connect(bp); bp.connect(g); g.connect(AU.mus); src.start(at);
+  }
+  // synth stab on the off-beats once the floor is busy
+  if (lively>0.3) for (const i of [6,14]) for (const semi of ch)
+    tone(NOTE(semi), t+i*ST, ST*1.2, 0.014, 'sawtooth', AU.mus, 2200);
+  return BAR*1000;
+}
+/* — style 10: CINEMATIC (epic orchestra: string swell, timpani, pizzicato, soaring horn theme) — */
+const PROG_O=[[0,3,7],[8,12,15],[5,8,12],[7,10,14]];   // i VI III v — grand minor sweep
+const ORCH_THEME=[[7,2],[8,1],[10,3],[8,1],[7,1],[5,4]];
+function cinematicBar(){
+  const C=AU.ctx, t=C.currentTime, BAR=4.2, ST=BAR/8;
+  const ch=PROG_O[bar%PROG_O.length];
+  const lively = S.started && S.speed ? Math.min(1, S.pop/900) : 0.5;
+  // sustained string + brass bed: detuned saws swelling under a slow lowpass
+  const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.Q.value=0.6;
+  lp.frequency.setValueAtTime(700,t); lp.frequency.linearRampToValueAtTime(1900,t+BAR*0.55); lp.frequency.linearRampToValueAtTime(700,t+BAR);
+  lp.connect(AU.mus);
+  for (const semi of [ch[0]-12, ...ch]){
+    for (const det of [0.996,1.004]){
+      const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=NOTE(semi)*det;
+      const g=C.createGain();
+      g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.018,t+BAR*0.45);
+      g.gain.setValueAtTime(0.016,t+BAR-0.5); g.gain.linearRampToValueAtTime(0.0001,t+BAR);
+      o.connect(g); g.connect(lp); o.start(t); o.stop(t+BAR+0.1);
+    }
+  }
+  // timpani: deep hits on 1 (and a roll into the downbeat every 4th bar)
+  const timp=(at,semi,vol)=>{
+    const o=C.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(NOTE(semi)/4*1.5,at); o.frequency.exponentialRampToValueAtTime(NOTE(semi)/4,at+0.06);
+    const g=C.createGain(); g.gain.setValueAtTime(vol,at); g.gain.exponentialRampToValueAtTime(0.001,at+0.55);
+    o.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+0.6);
+  };
+  timp(t,ch[0],0.10); timp(t+ST*4,ch[0],0.07);
+  if (bar%4===3) for (let i=0;i<6;i++) timp(t+BAR-0.5+i*0.08, ch[0], 0.03+i*0.012);
+  // pizzicato strings: light staccato arpeggio under the bed
+  for (let i=0;i<8;i++){
+    if (i%2===1 && Math.random()<0.5) continue;
+    tone(NOTE(ch[i%3]+12), t+i*ST, ST*0.5, 0.020, 'triangle', AU.mus, 2600);
+  }
+  // soaring horn theme: legato saw line through a warm lowpass, on every other bar
+  if (lively>0.35 && bar%2===0){
+    let at=t+ST*0.5;
+    for (const [deg,durSteps] of ORCH_THEME){
+      const dur=durSteps*ST, f=NOTE(deg+12);
+      const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=f;
+      const fl=C.createBiquadFilter(); fl.type='lowpass'; fl.frequency.value=1500;
+      const g=C.createGain();
+      g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(0.034,at+0.12);
+      g.gain.setValueAtTime(0.030,at+dur-0.18); g.gain.linearRampToValueAtTime(0.0001,at+dur);
+      o.connect(fl); fl.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+dur+0.05);
+      at+=dur;
+    }
+  }
+  return BAR*1000;
+}
+/* — style 11: VANGELIS (lush CS-80 brass pad, gliding soaring lead, glassy shimmer, deep pedal) — */
+const PROG_V=[[0,3,7],[-4,0,3],[3,7,10],[-2,2,5]];   // Am F C G  (i VI III VII, rel. A=220)
+const VMEL=[12,15,14,12, 10,12,14,19];               // soaring lead degrees (octave-up, A-minor)
+function vangelisBar(){
+  const C=AU.ctx, t=C.currentTime, BAR=4.6;
+  const ch=PROG_V[bar%PROG_V.length], root=ch[0];
+  const lively = S.started && S.speed ? Math.min(1, S.pop/900) : 0.5;
+  // lush detuned brass pad: three-voice saw stack swelling under a slow filter sweep
+  const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.Q.value=0.6;
+  lp.frequency.setValueAtTime(500,t); lp.frequency.linearRampToValueAtTime(2200,t+BAR*0.5); lp.frequency.linearRampToValueAtTime(600,t+BAR);
+  lp.connect(AU.mus);
+  for (const semi of ch){
+    for (const det of [0.994, 1.0, 1.007]){
+      const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=NOTE(semi)*det;
+      const g=C.createGain();
+      g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.015,t+BAR*0.35);
+      g.gain.setValueAtTime(0.014,t+BAR-0.7); g.gain.linearRampToValueAtTime(0.0001,t+BAR);
+      o.connect(g); g.connect(lp); o.start(t); o.stop(t+BAR+0.1);
+    }
+  }
+  // deep pedal: sustained root, sine sub two octaves down + a triangle an octave up for warmth
+  { const o=C.createOscillator(); o.type='sine'; o.frequency.value=NOTE(root)/4;
+    const o2=C.createOscillator(); o2.type='triangle'; o2.frequency.value=NOTE(root)/2;
+    const g=C.createGain();
+    g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.05,t+0.6);
+    g.gain.setValueAtTime(0.045,t+BAR-0.8); g.gain.linearRampToValueAtTime(0.0001,t+BAR);
+    const g2=C.createGain(); g2.gain.value=0.5; o2.connect(g2);
+    o.connect(g); g2.connect(g); g.connect(AU.mus);
+    o.start(t); o2.start(t); o.stop(t+BAR+0.1); o2.stop(t+BAR+0.1); }
+  // soaring CS-80 lead: one note per bar, gliding (portamento) from the previous, vibrato swelling in
+  if (lively>0.3){
+    const fCur=NOTE(VMEL[bar%VMEL.length]), fPrev=NOTE(VMEL[(bar+VMEL.length-1)%VMEL.length]);
+    const o=C.createOscillator(); o.type='sawtooth';
+    o.frequency.setValueAtTime(fPrev,t); o.frequency.exponentialRampToValueAtTime(fCur,t+0.30);
+    const vib=C.createOscillator(); vib.frequency.value=5.0;
+    const vd=C.createGain(); vd.gain.setValueAtTime(0.0001,t); vd.gain.linearRampToValueAtTime(fCur*0.010,t+1.3);
+    vib.connect(vd); vd.connect(o.frequency);
+    const lp2=C.createBiquadFilter(); lp2.type='lowpass'; lp2.frequency.value=2600; lp2.Q.value=0.8;
+    const g=C.createGain();
+    g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.052,t+0.45);
+    g.gain.setValueAtTime(0.046,t+BAR-0.9); g.gain.linearRampToValueAtTime(0.0001,t+BAR);
+    o.connect(lp2); lp2.connect(g); g.connect(AU.mus);
+    o.start(t); vib.start(t); o.stop(t+BAR+0.1); vib.stop(t+BAR+0.1);
+  }
+  // glassy shimmer: sparse high bell plucks tracing the chord
+  const ST=BAR/8, arp=[0,1,2,1,2,0,1,2];
+  for (let i=0;i<8;i++){
+    if (Math.random()<0.35) continue;
+    tone(NOTE(ch[arp[i]%3]+24), t+i*ST, ST*1.4, 0.012+lively*0.006, 'triangle', AU.mus, 4200);
+  }
+  // soft timpani heartbeat on the downbeat once the city swells, every other bar
+  if (lively>0.45 && bar%2===0){
+    const o=C.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(NOTE(root)/4*1.4,t); o.frequency.exponentialRampToValueAtTime(NOTE(root)/4,t+0.08);
+    const g=C.createGain(); g.gain.setValueAtTime(0.07,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.5);
+    o.connect(g); g.connect(AU.mus); o.start(t); o.stop(t+0.55);
+  }
+  return BAR*1000;
+}
+/* — style 12: FUNK (popping syncopated bass, wah-clav stabs, tight 16th drums, horn hits) — */
+const PROG_F=[[0,3,7,10],[0,3,7,10],[0,3,7,10],[5,8,12,15]];   // Am7 vamp with a IV push (rel. A=220)
+const FBASS=[0,null,12,0, null,0,7,null, 0,12,null,0, null,10,0,12];
+function funkBar(){
+  const C=AU.ctx, t=C.currentTime, BAR=60/104*4, ST=BAR/16;
+  const ch=PROG_F[bar%PROG_F.length], root=ch[0];
+  const lively = S.started && S.speed ? Math.min(1, S.pop/700) : 0.4;
+  // popping finger-bass: syncopated 16ths with octave pops and ghost rests
+  for (let i=0;i<16;i++){
+    const n=FBASS[i]; if (n===null) continue;
+    const at=t+i*ST, accent=(n>=12);
+    const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=NOTE(root+n)/4;
+    const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.Q.value=6;
+    lp.frequency.setValueAtTime(accent?1600:700,at); lp.frequency.exponentialRampToValueAtTime(300,at+ST*1.6);
+    const g=C.createGain();
+    g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(accent?0.085:0.06,at+0.008);
+    g.gain.exponentialRampToValueAtTime(0.001,at+ST*1.5);
+    o.connect(lp); lp.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+ST*1.7);
+  }
+  // wah-clav stabs: short resonant chord 'chanks' with an auto-wah sweep on off-16ths
+  const stab=[0,0,1,0, 0,1,0,1, 0,0,1,0, 1,0,1,0];
+  for (let i=0;i<16;i++){
+    if (!stab[i] || (lively<0.25 && Math.random()<0.5)) continue;
+    const at=t+i*ST;
+    for (const semi of ch.slice(1)){
+      const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=NOTE(semi);
+      const bp=C.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=5;
+      bp.frequency.setValueAtTime(800,at); bp.frequency.exponentialRampToValueAtTime(2600,at+0.05);
+      const g=C.createGain();
+      g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(0.014,at+0.006);
+      g.gain.exponentialRampToValueAtTime(0.001,at+ST*0.9);
+      o.connect(bp); bp.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+ST);
+    }
+  }
+  // drums: kick (the 'one' + a syncopated push), snare on 2 & 4, busy 16th hats
+  const kick=(at,vol)=>{ const o=C.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(140,at); o.frequency.exponentialRampToValueAtTime(45,at+0.09);
+    const g=C.createGain(); g.gain.setValueAtTime(vol,at); g.gain.exponentialRampToValueAtTime(0.0001,at+0.15);
+    o.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+0.17); };
+  kick(t,0.14); kick(t+6*ST,0.11); kick(t+10*ST,0.10);
+  const snare=(at)=>{ const src=C.createBufferSource(); src.buffer=makeNoiseBuf(C,0.14,false);
+    const bp=C.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1900; bp.Q.value=0.7;
+    const g=C.createGain(); g.gain.setValueAtTime(0.06,at); g.gain.exponentialRampToValueAtTime(0.001,at+0.13);
+    const o=C.createOscillator(); o.type='triangle'; o.frequency.value=180;
+    const g2=C.createGain(); g2.gain.setValueAtTime(0.03,at); g2.gain.exponentialRampToValueAtTime(0.001,at+0.08);
+    src.connect(bp); bp.connect(g); g.connect(AU.mus); o.connect(g2); g2.connect(AU.mus);
+    src.start(at); o.start(at); o.stop(at+0.1); };
+  snare(t+4*ST); snare(t+12*ST);
+  for (let i=0;i<16;i++){
+    if (lively<0.2 && i%2) continue;
+    const at=t+i*ST, open=(i%4===2);
+    const src=C.createBufferSource(); src.buffer=makeNoiseBuf(C, open?0.05:0.02, false);
+    const hp=C.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=8500;
+    const g=C.createGain(); g.gain.value=(i%4===0)?0.014:0.008;
+    src.connect(hp); hp.connect(g); g.connect(AU.mus); src.start(at);
+  }
+  // horn stab: punchy brass chord on the 'one', every other bar once the groove is up
+  if (lively>0.4 && bar%2===0) for (const semi of ch){
+    const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=NOTE(semi+12);
+    const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2200;
+    const g=C.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.02,t+0.02);
+    g.gain.setValueAtTime(0.018,t+0.12); g.gain.exponentialRampToValueAtTime(0.001,t+0.3);
+    o.connect(lp); lp.connect(g); g.connect(AU.mus); o.start(t); o.stop(t+0.34);
+  }
+  return BAR*1000;
+}
+/* — style 13: BOSSA NOVA (nylon violão comp, round thumb bass, rim clave, behind-the-beat flute) — */
+const PROG_BN=[[3,7,10,14],[0,3,7,10],[5,8,12,15],[-2,2,5,8]];   // Cmaj7 Am7 Dm7 G7 (I vi ii V, rel. A=220)
+function bossaBar(){
+  const C=AU.ctx, t=C.currentTime, BAR=60/132*4, ST=BAR/16;
+  const ch=PROG_BN[bar%PROG_BN.length], root=ch[0];
+  const Bside=bar%2;                                   // 2-bar feel: alternate the clave side
+  const lively = S.started && S.speed ? Math.min(1, S.pop/800) : 0.5;
+  // nylon violão chord: a quick upward finger-roll of the upper voicing, warm and short
+  const chord=(at,vol)=>{
+    const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2300; lp.Q.value=0.4; lp.connect(AU.mus);
+    ch.slice(1).forEach((semi,k)=>{
+      const a=at+k*0.009;                              // strum roll across the strings
+      for (const det of [1,1.006]){
+        const o=C.createOscillator(); o.type='triangle'; o.frequency.value=NOTE(semi)*det;
+        const g=C.createGain();
+        g.gain.setValueAtTime(0.0001,a); g.gain.linearRampToValueAtTime(vol,a+0.006);
+        g.gain.exponentialRampToValueAtTime(0.0008,a+ST*2.6);
+        o.connect(g); g.connect(lp); o.start(a); o.stop(a+ST*2.8);
+      }
+    });
+  };
+  // round thumb/upright bass: sine sub + a softer octave body through a lowpass
+  const bass=(semi,at,vol)=>{
+    const f=NOTE(semi)/4;
+    const o=C.createOscillator(); o.type='sine'; o.frequency.value=f;
+    const o2=C.createOscillator(); o2.type='triangle'; o2.frequency.value=f*2;
+    const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=900;
+    const g=C.createGain(); g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(vol,at+0.02);
+    g.gain.exponentialRampToValueAtTime(0.001,at+ST*3.4);
+    const g2=C.createGain(); g2.gain.value=0.35; o2.connect(g2);
+    o.connect(lp); g2.connect(lp); lp.connect(g); g.connect(AU.mus);
+    o.start(at); o2.start(at); o.stop(at+ST*3.6); o2.stop(at+ST*3.6);
+  };
+  // gentle two-feel: root on 1, fifth on 3
+  bass(root, t, 0.07); bass(ch[2], t+8*ST, 0.06);
+  // syncopated chord comp with the bossa anticipation (the '& of 4' ties into the next bar)
+  for (const i of (Bside ? [6,10,14] : [3,6,14])){
+    if (lively<0.25 && Math.random()<0.35) continue;
+    chord(t+i*ST, 0.018);
+  }
+  // soft rim cross-stick on the bossa clave (2-bar) + a steady shaker
+  const rim=(at)=>{
+    const o=C.createOscillator(); o.type='triangle'; o.frequency.value=1500;
+    const bp=C.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2200; bp.Q.value=3;
+    const g=C.createGain(); g.gain.setValueAtTime(0.026,at); g.gain.exponentialRampToValueAtTime(0.0006,at+0.05);
+    o.connect(bp); bp.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+0.06);
+  };
+  for (const i of (Bside ? [4,10] : [0,3,6])) rim(t+i*ST);
+  for (let i=0;i<8;i++){
+    const src=C.createBufferSource(); src.buffer=makeNoiseBuf(C,0.04,false);
+    const hp=C.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=7000;
+    const g=C.createGain(); g.gain.value=(i%2?0.010:0.006);
+    src.connect(hp); hp.connect(g); g.connect(AU.mus); src.start(t+i*ST*2);
+  }
+  // flute melody: a smooth 2-bar phrase, even notes laid slightly behind the beat
+  if (lively>0.3 && !Bside && Math.random()<0.75){
+    const seq=[ch[2],ch[3],ch[3]+2,ch[2],ch[1]];       // gentle rise & fall
+    let at=t+ST*1.5;                                    // breathe in behind the beat
+    for (let i=0;i<seq.length;i++){
+      const dur=ST*3, f=NOTE(seq[i]+12);
+      const o=C.createOscillator(); o.type='sine'; o.frequency.value=f;
+      const vib=C.createOscillator(); vib.frequency.value=4.6; const vd=C.createGain(); vd.gain.value=f*0.004;
+      vib.connect(vd); vd.connect(o.frequency);
+      const g=C.createGain();
+      g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(0.022,at+0.10);
+      g.gain.setValueAtTime(0.018,at+dur*0.65); g.gain.linearRampToValueAtTime(0.0001,at+dur);
+      o.connect(g); g.connect(AU.mus); o.start(at); vib.start(at); o.stop(at+dur+0.05); vib.stop(at+dur+0.05);
+      at+=dur;
+    }
+  }
+  return BAR*1000;
+}
 function musicLoop(){
   if (!AU.ctx) return;
   let next=600;
@@ -7030,7 +7395,7 @@ function musicLoop(){
       // rotate between the styles every few minutes for variety
       const now=Date.now();
       if (now>AU.shufAt){
-        const pool=['classical','ambient','dynamic','lofi','chiptune','synthwave','aegean'].filter(x=>x!==AU.shufCur);
+        const pool=['classical','ambient','dynamic','lofi','chiptune','synthwave','aegean','jazz','techno','cinematic','vangelis','funk','bossa'].filter(x=>x!==AU.shufCur);
         AU.shufCur=pool[Math.random()*pool.length|0];
         AU.shufAt=now+(105+Math.random()*90)*1000;         // next change in 1.75–3.25 min
         bar=0;                                            // fresh phrase for the new style
@@ -7044,6 +7409,12 @@ function musicLoop(){
     else if (st==='chiptune') next=chiptuneBar();
     else if (st==='synthwave') next=synthwaveBar();
     else if (st==='aegean') next=aegeanBar();
+    else if (st==='jazz') next=jazzBar();
+    else if (st==='techno') next=technoBar();
+    else if (st==='cinematic') next=cinematicBar();
+    else if (st==='vangelis') next=vangelisBar();
+    else if (st==='funk') next=funkBar();
+    else if (st==='bossa') next=bossaBar();
   }
   bar++;
   AU.musTimer=setTimeout(musicLoop, next);
@@ -8085,7 +8456,7 @@ function renderStats(){
   const cv2=document.getElementById('statsCv');
   CHART_HITS=[];
   const GAP=16;
-  const avail=Math.min(1280, window.innerWidth*0.94)-40;
+  const avail=Math.min(1140, window.innerWidth*0.96)-40; // match #statsModal .inner (max 1140 / 96vw) minus its 20px padding, else the last column overflows the panel
   const cols = window.innerWidth<700 ? 1 : (window.innerWidth<1040 ? 2 : 3);
   const CW2=Math.min(430, (avail-GAP*(cols+1))/cols);
   const CHARTS=[
@@ -8999,7 +9370,7 @@ function buildBBar(){
     const was=btn.classList.contains('on');
     cats.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
     sub.innerHTML='';
-    if (was){ sub.classList.remove('open'); bbarMeasure(); return; }
+    if (was){ sub.classList.remove('open'); setTool('pan'); bbarSync(); bbarMeasure(); return; }   // closing the active-item menu drops back to Pan
     btn.classList.add('on');
     for (const o of grp.leaves){
       const ch=document.createElement('button');
