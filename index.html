@@ -164,6 +164,13 @@
   .arow input[type=range]{width:120px;margin:0}
   .atgl{background:#1a2636;border:1px solid var(--line);border-radius:7px;color:var(--dim);font-size:11px;padding:3px 12px;cursor:pointer}
   .atgl.on{background:#1f3a2a;border-color:var(--green);color:var(--green)}
+  .pgrp{color:var(--dim);font-family:'Chakra Petch';font-size:9.5px;letter-spacing:.1em;margin:7px 0 3px}
+  .prow{display:flex;align-items:flex-start;gap:8px;margin:5px 0}
+  .ptgl{flex:none;margin-top:1px;width:34px;background:#1a2636;border:1px solid var(--line);border-radius:7px;color:var(--dim);font-size:10px;padding:4px 0;cursor:pointer;font-family:'Chakra Petch'}
+  .ptgl.on{background:#1f3a2a;border-color:var(--green);color:var(--green)}
+  .pmeta{min-width:0;font-size:11px;line-height:1.35}
+  .pmeta b{display:block;color:var(--ink);font-size:11.5px}
+  .pmeta .pdesc{color:#8593a3;font-size:10.5px}
   #mstyles{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:4px 0 2px}
   .mstyle{background:#1a2636;border:1px solid var(--line);border-radius:7px;color:var(--dim);font-size:10.5px;padding:7px 2px;cursor:pointer;white-space:nowrap;font-family:'Chakra Petch'}
   .mstyle.on{background:#3a2f1a;border-color:var(--amber);color:var(--amber)}
@@ -633,7 +640,6 @@
       <button id="pwrMenuBtn"><span class="mi" data-mi="saver"></span><span class="mlbl">Power saver: On</span></button>
       <button id="dnMenuBtn"><span class="mi" data-mi="daynight"></span><span class="mlbl">Day–night cycle: On</span></button>
       <button id="commuteMenuBtn"><span class="mi" data-mi="commute"></span><span class="mlbl">Realistic commutes: On</span></button>
-      <button id="fsBtn"><span class="mi" data-mi="fullscreen"></span><span class="mlbl">Fullscreen</span></button>
       <button id="installBtn"><span class="mi" data-mi="install"></span><span class="mlbl">Add to home screen</span></button>
     </div>
     <div class="modalBtns"><button id="setClose" class="ghostBtn">Done</button></div>
@@ -678,9 +684,10 @@
   <button id="scenMenuBtn"><span class="mi" data-mi="scenario"></span><span class="mlbl">Scenarios</span></button>
   <div class="msep"></div>
   <button id="newMenuBtn"><span class="mi" data-mi="newcity"></span><span class="mlbl">New city</span></button>
-  <button id="saveMenuBtn"><span class="mi" data-mi="save"></span><span class="mlbl">Saves</span></button>
+  <button id="saveMenuBtn"><span class="mi" data-mi="save"></span><span class="mlbl">Save/Load</span></button>
   <div class="msep"></div>
   <button id="photoBtn"><span class="mi" data-mi="photo"></span><span class="mlbl">Photo</span></button>
+  <button id="fsBtn"><span class="mi" data-mi="fullscreen"></span><span class="mlbl">Fullscreen</span></button>
   <button data-for="sndBtn"><span class="mi" data-mi="audio"></span><span class="mlbl">Audio &amp; music</span></button>
   <button id="settingsBtn"><span class="mi" data-mi="settings"></span><span class="mlbl">Settings</span></button>
   <button id="helpBtn"><span class="mi" data-mi="help"></span><span class="mlbl">Help &amp; about</span></button>
@@ -693,8 +700,10 @@
   <div class="row"><span>Tax income</span><span id="bIncome">§0</span></div>
   <div class="row"><span>Road upkeep</span><span id="bRoads">§0</span></div>
   <div class="row"><span>Services</span><span id="bServices">§0</span></div>
+  <div class="row" id="bEmitRow" style="display:none"><span>Emissions levy</span><span id="bEmit">§0</span></div>
   <div class="row" id="bTourRow" style="display:none"><span>Tourism (airport)</span><span id="bTour" style="color:var(--good,#5fe08a)">§0</span></div>
   <div class="row" id="bLoanRow" style="display:none"><span>Loan payment</span><span id="bLoan">§0</span></div>
+  <div class="row" id="bPolRow" style="display:none"><span>Ordinances</span><span id="bPol">§0</span></div>
   <div class="row" style="border-top:1px solid var(--line);margin-top:4px;padding-top:6px"><span>Net / month</span><span id="bNet">§0</span></div>
   <button id="whyBtn" style="background:none;border:none;color:#6d8096;font-size:11px;cursor:pointer;padding:4px 0;text-align:left;font-family:'Inter'">How is this calculated? ▾</button>
   <div id="budgetWhy" style="display:none;font-size:11px;line-height:1.55;color:#aeb8c2;background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:2px 0 6px"></div>
@@ -708,6 +717,10 @@
   <div class="frow"><span>Fire</span><input type="range" class="fslider" data-k="fire" min="50" max="150" value="100"><span class="fv" id="fv_fire">100%</span></div>
   <div class="frow"><span>Schools</span><input type="range" class="fslider" data-k="school" min="50" max="150" value="100"><span class="fv" id="fv_school">100%</span></div>
   <div class="frow"><span>Health</span><input type="range" class="fslider" data-k="health" min="50" max="150" value="100"><span class="fv" id="fv_health">100%</span></div>
+  </div>
+  <h3 class="bsecH" data-sec="pol" style="margin-top:10px">ORDINANCES <span class="bsecA">▾</span></h3>
+  <div class="bsec" id="bsec_pol">
+  <div id="polList"></div>
   </div>
   <h3 class="bsecH" data-sec="diff" style="margin-top:10px">DIFFICULTY <span class="bsecA">▾</span></h3>
   <div class="bsec" id="bsec_diff">
@@ -783,7 +796,7 @@
         <p>Businesses need an <b>educated workforce</b> to reach level 3 — build schools near homes.</p>
         <p><b>Crime</b> grows with density and erodes land value; police coverage suppresses it.</p>
         <p>Click the <b>Treasury</b> for taxes &amp; funding. Drag panels by their title to rearrange.</p>
-        <p><b>Photo</b> lives in the ⋯ menu; <b>Fullscreen</b> in ⋯ → Settings.</p>
+        <p><b>Photo</b> and <b>Fullscreen</b> live in the ⋯ menu.</p>
         <div class="modalBtns" style="justify-content:flex-start"><button id="aboutFromHelp" class="ghostBtn">About POLIS</button></div>
       </div>
     </div>
@@ -870,6 +883,7 @@ const S = {
   tool: 'pan', hover: null, msgT: 0, overlay: 'none', congested: 0, rot: 0, milestone: 0, weather: false, cityName: 'Polis',
   powerCap:0, powerUse:0, waterCap:0, waterUse:0,
   fund: { police:100, fire:100, school:100, health:100 },
+  policy: {},   // active ordinances by id — each trades money for a field/demand/mood effect
 };
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 /* power saver: caps the frame rate (30fps running / ~12fps paused) and renders at a slightly
@@ -1132,6 +1146,57 @@ function kmRamp(){
     dis: 1 + 0.22*yr                            // ever more frequent catastrophe
   };
 }
+/* ---------- ordinances ----------
+   Each is a free toggle with an ongoing budget effect and a field/demand/mood
+   trade-off, so a healthy city always has live decisions to make. Costs/incomes
+   are §/month (scaled by difficulty); fx keys ending in "Mul" multiply, the rest add.
+   Effects plug into the existing fields (polFx) and budget (polBudget). */
+const POLICIES=[
+  { id:'recycle',   ic:'♻',  n:'Recycling Program',  grp:'Environment',
+    d:'Curbside sorting cuts factory smog by a quarter. §0.04 per resident / mo.',
+    cost:s=>s.pop*0.04, fx:{ indPolMul:0.75 } },
+  { id:'smog',      ic:'🌫', n:'Smog Controls',       grp:'Environment',
+    d:'Scrubbers cut power-plant smog 40%, but raise running costs — industry cools.',
+    cost:s=>s.pop*0.03, fx:{ plantPolMul:0.60, demI:-0.06 } },
+  { id:'watch',     ic:'👁', n:'Neighborhood Watch',  grp:'Safety',
+    d:'Volunteers shave crime ~20% citywide. Cheap to run.',
+    cost:s=>s.pop*0.02, fx:{ crimeMul:0.80 } },
+  { id:'curfew',    ic:'🌙', n:'Night Curfew',        grp:'Safety',
+    d:'Slashes crime hard, but the nightlife dies — mood and commerce dip.',
+    cost:s=>s.pop*0.01, fx:{ crimeMul:0.55, happy:-4, demC:-0.06 } },
+  { id:'incentive', ic:'📈', n:'Business Incentives', grp:'Economy',
+    d:'Grants lure shops and factories. Lifts commercial & industrial demand at a cost.',
+    cost:s=>s.jobs*0.06, fx:{ demC:0.10, demI:0.10 } },
+  { id:'toll',      ic:'🛣', n:'Road Tolls',          grp:'Economy',
+    d:'Charges drivers for the roads — steady income, but unpopular and slightly off-putting.',
+    inc:s=>Math.min(2500, s.pop*0.05), fx:{ happy:-3, demR:-0.04 } },
+  { id:'festival',  ic:'🎉', n:'Public Festivals',    grp:'Welfare',
+    d:'Regular celebrations lift mood and commerce. §0.05 per resident / mo.',
+    cost:s=>s.pop*0.05, fx:{ happy:5, demC:0.06 } },
+  { id:'edu',       ic:'🎓', n:'Education Grants',     grp:'Welfare',
+    d:'Subsidised tuition raises the educated-workforce share — unlocks denser towers.',
+    cost:s=>s.pop*0.05, fx:{ eduMul:1.12 } },
+];
+const POLICY_DEF={}; for (const p of POLICIES) POLICY_DEF[p.id]=p;
+/* aggregate the active ordinances into one set of multipliers/addends */
+function polFx(){
+  const f={ indPolMul:1, plantPolMul:1, crimeMul:1, eduMul:1, happy:0, demR:0, demC:0, demI:0 };
+  for (const p of POLICIES){
+    if (!S.policy[p.id] || !p.fx) continue;
+    for (const k in p.fx){ if (k.slice(-3)==='Mul') f[k]*=p.fx[k]; else f[k]+=p.fx[k]; }
+  }
+  return f;
+}
+/* net §/month from ordinances (tolls − running costs), after difficulty scaling */
+function polBudget(){
+  const d=DIFF[S.diff], km=kmRamp(); let cost=0, inc=0;
+  for (const p of POLICIES){
+    if (!S.policy[p.id]) continue;
+    if (p.cost) cost += p.cost(S);
+    if (p.inc)  inc  += p.inc(S);
+  }
+  return inc*d.inc*km.inc - cost*d.up*km.up;
+}
 const TOOLDEF={};
 for (const t of TOOLS){ if (t.id) TOOLDEF[t.id]=t; if (t.sub) for (const o of t.sub) TOOLDEF[o.id]=o; }
 TOOLDEF.cityhall.lockAt=3; TOOLDEF.monument.lockAt=5;
@@ -1204,10 +1269,12 @@ function setWorldSize(n){
   map.length=0;
   allocFields();
   traffic = new Float32Array(G*G);
-  jobDist = new Float32Array(G*G);
-  homeDist = new Float32Array(G*G);
-  shopDist = new Float32Array(G*G);
-  leisureDist = new Float32Array(G*G);
+  jobCost = new Float32Array(G*G);
+  homeCost = new Float32Array(G*G);
+  shopCost = new Float32Array(G*G);
+  leisureCost = new Float32Array(G*G);
+  stepCost = new Float32Array(G*G);
+  congSnap = new Float32Array(G*G);
   cars.length=0; peds.length=0; smoke.length=0;
   cachedRoads=[]; dirtyRoads=true; cachedWalk=[]; dirtyWalk=true;
   S.hover=null;
@@ -1423,14 +1490,19 @@ function splat(arr, x, y, r, amt){
     arr[idx(nx,ny)] += amt * (1 - d/r);
   }
 }
+/* an educated workforce shifts industry from smokestacks toward clean tech:
+   a fully-schooled city emits half the industrial smog. This is the mayor's
+   real lever on what *kind* of industry grows — build schools, get cleaner factories. */
+function indCleanMul(){ return 1 - 0.5*(S.edu||0); }
 function recomputeFields(){
   pollution.fill(0);
   leisure.fill(0);
   for (const k in cover) cover[k].fill(0);
+  const pfx=polFx(), eduClean=indCleanMul();
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     const c=map[y][x];
-    if (c.t==='ind' && c.lv>0) splat(pollution,x,y,4, 12+c.lv*6);
-    if (PLANT[c.t] && PLANT[c.t].pol && !c.part){ const ox=x+((c.fw||1)-1>>1), oy=y+((c.fh||1)-1>>1); splat(pollution,ox,oy,PLANT[c.t].polR, PLANT[c.t].pol); }
+    if (c.t==='ind' && c.lv>0) splat(pollution,x,y,4, (12+c.lv*6)*pfx.indPolMul*eduClean);
+    if (PLANT[c.t] && PLANT[c.t].pol && !c.part){ const ox=x+((c.fw||1)-1>>1), oy=y+((c.fh||1)-1>>1); splat(pollution,ox,oy,PLANT[c.t].polR, PLANT[c.t].pol*pfx.plantPolMul); }
     const fr=(k)=>Math.max(2, Math.round(10*Math.sqrt(S.fund[k]/100)));
     const fs=(k)=>S.fund[k]/100;
     const fcx=x+((c.fw||1)-1>>1), fcy=y+((c.fh||1)-1>>1);   // footprint centre; parts splat nothing
@@ -1485,7 +1557,7 @@ function recomputeFields(){
     if (!ZONE[c.t] || c.lv<1 || c.part) continue;
     const cap=CAP[c.t][Math.min(c.lv,5)]||0;
     const pol=Math.min(1, cover.police[idx(x,y)]);
-    const risk=cap*0.045*(1.12-pol)*DIFF[S.diff].crime;
+    const risk=cap*0.045*(1.12-pol)*DIFF[S.diff].crime*pfx.crimeMul;
     if (risk>0.1) splat(crime,x,y,3,risk);
   }
   // land value
@@ -1717,11 +1789,16 @@ function unmerge(bx,by,mode){
   }
   dirty=true; recomputeFields();
 }
+/* emissions levy: §/month per unit of industrial smog emitted — prices the
+   pollution externality so dirty factories pay for what they put in the air.
+   Reads the same 12+lv*6 term the pollution field uses, after the Recycling
+   ordinance (indPolMul), so cleaning up also shrinks the bill. */
+const EMIT_RATE=0.45;
 /* the whole monthly budget, computable at any moment — simTick applies it at
    month end, and the sliders use it to preview changes immediately */
 function computeBudget(){
   const pop=S.pop, jobs=S.jobs, d=DIFF[S.diff];
-  let roads=0, aves=0, paths=0, busStops=0, rails=0, rstations=0, svcBase=0;
+  let roads=0, aves=0, paths=0, busStops=0, rails=0, rstations=0, svcBase=0, indEmit=0;
   const svcRows=[];
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     const t=map[y][x].t;
@@ -1731,6 +1808,7 @@ function computeBudget(){
     if (map[y][x].bus) busStops++;
     if (map[y][x].rail) rails++;
     if (t==='rstation') rstations++;
+    if (t==='ind' && map[y][x].lv>0) indEmit += 12 + map[y][x].lv*6;
     if (UPKEEP[t] && !map[y][x].part){
       const fk = (t==='police')?'police' : (t==='fire')?'fire'
                : (t==='school'||t==='highschool'||t==='university')?'school'
@@ -1750,16 +1828,19 @@ function computeBudget(){
   const income = ((resTax + jobTax) * d.inc + tourism) * km.inc;
   const roadCost = (roads*0.95 + aves*2.4 + paths*0.18 + busStops*3.0 + rails*0.55 + rstations*8.0) * d.up * km.up;
   const svcCost = svcBase * 2.6 * d.up * km.up;
-  return { income, tourism, roadCost, svcCost,
+  const emit = indEmit * polFx().indPolMul * indCleanMul();
+  const emitCost = emit * EMIT_RATE * d.up * km.up;
+  const polNet = polBudget();
+  return { income, tourism, roadCost, svcCost, emitCost, emit, polNet,
            pop, jobs, tax:S.tax, resTax, jobTax, dInc:d.inc, dUp:d.up, dName:d.n,
            roads, aves, paths, busStops, airports, svcBase };
 }
 function projectBudget(){
   if (!S.started) return;
   const B=computeBudget();
-  S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost;
+  S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.polNet=B.polNet;
   S.budgetParts=B;
-  S.net = S.income - S.roadCost - S.svcCost - (S.loan?S.loan.pay:0);
+  S.net = S.income - S.roadCost - S.svcCost - S.emitCost + S.polNet - (S.loan?S.loan.pay:0);
   updateHUD();
   fillBudgetWhy();
 }
@@ -1901,7 +1982,8 @@ function simTick(){
       crSum += crime[idx(x2,y2)]; crN++;
     }
   }
-  S.edu = eduD ? eduN/eduD : 0;
+  const pfx=polFx();
+  S.edu = Math.min(1, (eduD ? eduN/eduD : 0) * pfx.eduMul);
   S.crimeAvg = crN ? crSum/crN : 0;
   S.pop = pop; S.jobs = comJ + indJ;
   checkMilestones();
@@ -1912,9 +1994,9 @@ function simTick(){
   const taxDrag = (S.tax - 9) * 0.045;
   const demK = (DIFF[S.diff] && DIFF[S.diff].dem) || 1;
   const scaleDem = v => v > 0 ? v * demK : v;   // harder difficulty cools hot demand; gluts stay as bad
-  D.r = clamp(scaleDem(( (S.jobs*1.15 - pop) / (40 + pop*0.35) ) + 0.35 - taxDrag), -1, 1);
-  D.c = clamp(scaleDem(( (pop*0.40 - comJ) / (30 + pop*0.25) ) - taxDrag), -1, 1);
-  D.i = clamp(scaleDem(( (pop*0.55 - indJ) / (30 + pop*0.25) ) + 0.15 - taxDrag), -1, 1);
+  D.r = clamp(scaleDem(( (S.jobs*1.15 - pop) / (40 + pop*0.35) ) + 0.35 - taxDrag) + pfx.demR, -1, 1);
+  D.c = clamp(scaleDem(( (pop*0.40 - comJ) / (30 + pop*0.25) ) - taxDrag) + pfx.demC, -1, 1);
+  D.i = clamp(scaleDem(( (pop*0.55 - indJ) / (30 + pop*0.25) ) + 0.15 - taxDrag) + pfx.demI, -1, 1);
 
   // happiness
   let lvAvg=55, n=0, lvSum=0;
@@ -1925,8 +2007,8 @@ function simTick(){
   const crimeDrag = Math.min(10, (S.crimeAvg||0)*0.45);
   const access = pop>0 ? clamp(strandedPop/pop,0,1) : 0;   // share of residents cut off from jobs by road
   S.strandedPop = strandedPop;
-  S.happyParts = { base:30, lv:lvAvg*.5, jobs:jobBal*18, tax:-(S.tax-9)*2.2, power:-unp*1.5, water:-dry*0.8, traffic:-congested*0.7, crime:-crimeDrag, access:-access*12 };
-  S.happy = Math.round(clamp(30 + lvAvg*.5 + jobBal*18 - (S.tax-9)*2.2 - unp*1.5 - dry*0.8 - congested*0.7 - crimeDrag - access*12, 0, 100));
+  S.happyParts = { base:30, lv:lvAvg*.5, jobs:jobBal*18, tax:-(S.tax-9)*2.2, power:-unp*1.5, water:-dry*0.8, traffic:-congested*0.7, crime:-crimeDrag, access:-access*12, policy:pfx.happy };
+  S.happy = Math.round(clamp(30 + lvAvg*.5 + jobBal*18 - (S.tax-9)*2.2 - unp*1.5 - dry*0.8 - congested*0.7 - crimeDrag - access*12 + pfx.happy, 0, 100));
   S.demParts = { pop, jobs:S.jobs, comJ, indJ, taxDrag };
 
   if (unp>3 && S.day%17===0) msg('<b>Blackouts.</b> Parts of the city have no power — extend roads from a plant or build another.');
@@ -1958,7 +2040,7 @@ function simTick(){
     }
     // a mature, well-run city should clear a modest margin — not print money
     const B=computeBudget();
-    S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost;
+    S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.polNet=B.polNet;
     S.budgetParts=B;
     // loan servicing: fixed amortized payment each month until the balance clears
     S.loanPay=0;
@@ -1974,7 +2056,7 @@ function simTick(){
         refreshLoanBox();
       }
     }
-    S.net = S.income - S.roadCost - S.svcCost - S.loanPay;
+    S.net = S.income - S.roadCost - S.svcCost - (S.emitCost||0) + (S.polNet||0) - S.loanPay;
     S.money += S.net;
     if (S.money < 0) msg('<b>The treasury is in the red.</b> Raise taxes, trim services'+(S.loan?'':' or take a loan')+' before the city defaults.');
     recordHist();
@@ -1982,34 +2064,61 @@ function simTick(){
   }
   updateHUD();
 }
-/* commute access: multi-source BFS over the road graph from every job lot's
-   frontage. jobDist[roadtile] = shortest road-steps to a job; Infinity = the
-   street can't reach any job. Lets a stranded suburb suffer real unemployment
-   instead of teleporting its labour. Cheap: one O(roads) FIFO sweep per tick. */
-let jobDist = new Float32Array(G * G);     // road-steps to nearest job    (work trips)
-let homeDist = new Float32Array(G * G);    // road-steps to nearest home   (return trips)
-let shopDist = new Float32Array(G * G);    // road-steps to nearest shop   (shopping trips)
-let leisureDist = new Float32Array(G * G); // road-steps to nearest venue  (leisure trips)
+/* commute routing: congestion-aware least-COST fields over the road graph. For each destination
+   kind, *Cost[roadtile] = cheapest total traversal cost from that tile to the nearest destination,
+   where a tile's cost climbs with its congestion (BPR-style). So trips don't just follow the
+   shortest path — they follow the cheapest one, and as a corridor fills its cost rises until a
+   parallel road becomes cheaper and absorbs the overflow. Infinity = the street can't reach the
+   destination at all (drives the job-access / stranded-labour penalty). One Dijkstra per kind per
+   day, off the settled (post-decay, pre-emit) traffic snapshot, so it's stable and order-free. */
+let jobCost = new Float32Array(G * G);     // road cost to nearest job    (work trips)
+let homeCost = new Float32Array(G * G);    // road cost to nearest home   (return trips)
+let shopCost = new Float32Array(G * G);    // road cost to nearest shop   (shopping trips)
+let leisureCost = new Float32Array(G * G); // road cost to nearest venue  (leisure trips)
+let stepCost = new Float32Array(G * G);    // per-tile traversal cost (base × congestion penalty)
+let congSnap = new Float32Array(G * G);    // settled congestion per tile (snapshot for routing + throttle)
 let commuteJobs = 0;            // job-frontage road tiles seeded this pass (0 ⇒ no jobs yet)
-/* multi-source BFS over the road graph from the frontage of every cell where isSrc(cell) is
-   true. A source = a developed lot OR any footprint cell of a tower/venue (parts keep their
-   type but have lv=0, and a 2x2's road frontage often touches only a part). Returns seeds. */
-function commuteField(out, isSrc){
+const COST_K = 2.5, COST_P = 2;            // congestion penalty: ramps in from ~half capacity so parallels share load early
+const AVE_BASE = 0.6;                      // avenues flow freer ⇒ cheaper per tile than a plain road
+/* per-tile traversal cost from the current (settled) traffic — shared by all the cost fields.
+   Also snapshots congestion so the trip emitter can throttle on the same stable, order-free data. */
+function buildStepCost(){
+  for (let y=0;y<G;y++) for (let x=0;x<G;x++){
+    const i=idx(x,y), t=map[y][x].t;
+    if (!ROADTYPE[t]){ stepCost[i]=Infinity; congSnap[i]=0; continue; }
+    const cg = traffic[i] / ROAD_CAP[t];
+    congSnap[i] = cg;
+    const base = t==='avenue' ? AVE_BASE : 1;
+    stepCost[i] = base * (1 + COST_K*Math.pow(cg,COST_P));
+  }
+}
+/* multi-source Dijkstra over the road graph from the frontage of every cell where isSrc(cell) is
+   true (a developed lot OR any footprint cell of a tower/venue — parts keep their type but lv=0,
+   and a 2x2's frontage often touches only a part). Uses a binary min-heap. Returns seed count. */
+function commuteCostField(out, isSrc){
   out.fill(Infinity);
-  const q=[]; let head=0;
+  const hc=[], hi=[]; let hn=0;
+  const sw=(a,b)=>{ const c=hc[a];hc[a]=hc[b];hc[b]=c; const i=hi[a];hi[a]=hi[b];hi[b]=i; };
+  const push=(c,i)=>{ let k=hn; hc[k]=c; hi[k]=i; hn++; while(k>0){ const p=(k-1)>>1; if(hc[p]<=hc[k])break; sw(p,k); k=p; } };
+  const pop=()=>{ const ri=hi[0]; hn--; if(hn>0){ hc[0]=hc[hn]; hi[0]=hi[hn]; let k=0; for(;;){ let l=2*k+1,r=l+1,m=k; if(l<hn&&hc[l]<hc[m])m=l; if(r<hn&&hc[r]<hc[m])m=r; if(m===k)break; sw(m,k); k=m; } } return ri; };
+  let seeds=0;
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     if (!isSrc(map[y][x])) continue;
     for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
       const nx=x+dx, ny=y+dy;
-      if (isRoad(nx,ny) && out[idx(nx,ny)]===Infinity){ out[idx(nx,ny)]=0; q.push([nx,ny]); }
+      if (!isRoad(nx,ny)) continue;
+      const i=idx(nx,ny), c=stepCost[i];
+      if (c<out[i]){ out[i]=c; push(c,i); seeds++; }
     }
   }
-  const seeds=q.length;
-  while (head<q.length){                     // FIFO ⇒ correct shortest road-step distances
-    const [x,y]=q[head++]; const d=out[idx(x,y)]+1;
+  while (hn>0){
+    const i=pop(); const cu=out[i];
+    const x=i%G, y=(i/G)|0;
     for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
       const nx=x+dx, ny=y+dy;
-      if (isRoad(nx,ny) && out[idx(nx,ny)]===Infinity){ out[idx(nx,ny)]=d; q.push([nx,ny]); }
+      if (!isRoad(nx,ny)) continue;
+      const j=idx(nx,ny), nc=cu+stepCost[j];
+      if (nc<out[j]){ out[j]=nc; push(nc,j); }
     }
   }
   return seeds;
@@ -2021,34 +2130,41 @@ const isHomeCell = c => c.t==='res' && (c.lv>0||c.part);
 const isShopCell = c => c.t==='com' && (c.lv>0||c.part);
 const isLeisCell = c => !!LEIS[c.t];          // parks, gardens, pools, plazas, stadiums, etc.
 function recomputeCommute(){
-  commuteJobs = commuteField(jobDist, isJobCell);   // always: feeds the job-access penalty
+  buildStepCost();                                  // congestion snapshot shared by every field
+  commuteJobs = commuteCostField(jobCost, isJobCell);   // always: feeds the job-access penalty
   if (S.commuteRoute){                              // direction fields for the trip mix
-    commuteField(homeDist, isHomeCell);
-    commuteField(shopDist, isShopCell);
-    commuteField(leisureDist, isLeisCell);
+    commuteCostField(homeCost, isHomeCell);
+    commuteCostField(shopCost, isShopCell);
+    commuteCostField(leisureCost, isLeisCell);
   }
 }
-/* shortest job distance among the road tiles a lot fronts (hasFrontage's 5x5 window) */
+/* lowest job cost among the road tiles a lot fronts (hasFrontage's 5x5 window); Infinity ⇒ no
+   road route to any job at all — the lot's labour is stranded. */
 function jobReach(x,y){
   let best=Infinity;
   for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++){
     const nx=x+dx, ny=y+dy;
-    if (isRoad(nx,ny)){ const d=jobDist[idx(nx,ny)]; if (d<best) best=d; }
+    if (isRoad(nx,ny)){ const d=jobCost[idx(nx,ny)]; if (d<best) best=d; }
   }
   return best;
 }
-/* STEP 2 (experimental, S.commuteRoute): each trip walks the FULL road route from the lot to
-   its actual destination (nearest job / shop / venue via the BFS distance field `field`),
-   laying load on every tile. So trip length = real commute distance: a home next to its jobs
-   makes almost no traffic, a home cut off from local jobs paints a long corridor to the far
-   employment district — traffic mirrors the city's geography. Each step is forward-biased but
-   allows lateral hops to parallel roads and avoids tiles only as they near capacity, so
-   corridors stay busy yet shed onto a parallel road when one jams. Homes make work+shop+leisure
-   trips; jobs send people home. Capped so a pathological cross-map trip can't run unbounded. */
+/* each trip walks the FULL road route from the lot down the descending COST gradient of `field`
+   to its destination (`isDest`), laying load on every tile. Trip length = real commute distance:
+   a home next to its jobs makes almost no traffic; a home cut off from local jobs paints a long
+   corridor to the far district. Because `field` already prices in congestion, "forward" (lower
+   cost) naturally bends onto a parallel road once the direct corridor jams — that's the rerouting.
+   The walk stays forward-biased but allows lateral/back hops for spread. Capped so a pathological
+   cross-map trip can't run unbounded. */
 const TRIP_W = { work:1.0, shop:0.5, leis:0.3 };    // relative trip-making rate per purpose
+const TRIP_LOAD = 0.5;                              // global load scale: calibrates congestion vs ROAD_CAP for the full-route model
 const MAX_TRIP = 80;                                // step cap (bounds the longest commute)
-function emitCommute(x,y,lv,field,w){
-  // driveway: the fronting road that best heads toward the destination
+const COST_EPS = 1e-3;                              // float slack when comparing tile costs
+function adjToDest(x,y,isDest){
+  for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx, ny=y+dy; if (inB(nx,ny) && isDest(map[ny][nx])) return true; }
+  return false;
+}
+function emitCommute(x,y,lv,field,w,isDest){
+  // driveway: the fronting road with the cheapest route toward the destination
   let cx=-1, cy=-1, best=Infinity;
   for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
     const nx=x+dx, ny=y+dy;
@@ -2056,20 +2172,25 @@ function emitCommute(x,y,lv,field,w){
   }
   if (cx<0 || best===Infinity) return false;        // no road-reachable destination
   const tr0=Math.min(2, cover.transit[idx(x,y)]);
-  const load = w * (0.4 + lv*0.5) * (1 - 0.45*Math.min(1,tr0) - 0.30*Math.max(0,tr0-1));
+  // latent demand: where the driveway street is already saturated, some trips don't set out
+  // (people stagger, combine, or stay home) — keeps a jammed network at equilibrium instead of all-red
+  const cg0=congSnap[idx(cx,cy)];
+  const jam=1/(1 + 0.7*Math.max(0, cg0-0.8));
+  const load = TRIP_LOAD * w * (0.4 + lv*0.5) * (1 - 0.45*Math.min(1,tr0) - 0.30*Math.max(0,tr0-1)) * jam;
   let lx=x, ly=y;                                    // forbid immediate backtrack
   for (let s=0; s<MAX_TRIP; s++){
     traffic[idx(cx,cy)] += load;
+    if (adjToDest(cx,cy,isDest)) break;              // reached the destination's frontage
     const fHere=field[idx(cx,cy)];
-    if (fHere===0) break;                            // arrived at the destination's frontage
     let opts=[], tot=0;
     for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
       const nx=cx+dx, ny=cy+dy;
       if (!isRoad(nx,ny) || (nx===lx&&ny===ly)) continue;
       const fn=field[idx(nx,ny)];
-      const dir = fn<fHere ? 3 : fn===fHere ? 1 : 0.25;     // forward ≫ lateral > back
-      const cg  = congestion(nx,ny);
-      const wgt = dir * (map[ny][nx].t==='avenue' ? 1.6 : 1) / (1 + 0.5*cg*cg);   // avoid only near capacity
+      if (fn===Infinity) continue;                            // that road can't reach the destination
+      const dd = fHere - fn;                                  // >0 ⇒ cheaper (toward destination)
+      const dir = dd>COST_EPS ? 3 : dd>-COST_EPS ? 1 : 0.25;  // forward ≫ lateral > back
+      const wgt = dir * (map[ny][nx].t==='avenue' ? 1.6 : 1);
       opts.push([nx,ny,wgt]); tot+=wgt;
     }
     if (!opts.length) break;
@@ -2085,12 +2206,12 @@ function emitTraffic(x,y,lv,t){
     let routed=false;
     if (t==='res'){
       // a household makes a mix of trips: to work, to the shops, and to leisure venues
-      if (emitCommute(x,y,lv,jobDist,    TRIP_W.work)) routed=true;
-      if (emitCommute(x,y,lv,shopDist,   TRIP_W.shop)) routed=true;
-      if (emitCommute(x,y,lv,leisureDist,TRIP_W.leis)) routed=true;
+      if (emitCommute(x,y,lv,jobCost,    TRIP_W.work, isJobCell))  routed=true;
+      if (emitCommute(x,y,lv,shopCost,   TRIP_W.shop, isShopCell)) routed=true;
+      if (emitCommute(x,y,lv,leisureCost,TRIP_W.leis, isLeisCell)) routed=true;
     } else {
       // shops & workplaces send their people home at day's end
-      if (emitCommute(x,y,lv,homeDist,TRIP_W.work)) routed=true;
+      if (emitCommute(x,y,lv,homeCost,TRIP_W.work, isHomeCell)) routed=true;
     }
     if (routed) return;          // fully cut-off lots fall through to local diffusion
   }
@@ -6242,6 +6363,62 @@ function commuteSearch(sx,sy, want, lim){
 }
 function findWorkplaces(hx,hy){ return commuteSearch(hx,hy,isJobCell); }
 function findResidents(jx,jy){ return commuteSearch(jx,jy,isHomeCell); }
+/* the primary (steepest-descent) route a lot takes down a cost field to its destination, as a
+   list of road-tile indices. Mirrors emitCommute's driveway pick, then always takes the cheapest
+   next tile — the modal path the bulk of that lot's trips follow. */
+function modalRoute(sx,sy, field, isDest){
+  const root=map[sy][sx], cells=root.grp?grpCells(root):[[sx,sy]];
+  let cx=-1, cy=-1, best=Infinity;
+  for (const [ax,ay] of cells) for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    const nx=ax+dx, ny=ay+dy;
+    if (isRoad(nx,ny) && field[idx(nx,ny)]<best){ best=field[idx(nx,ny)]; cx=nx; cy=ny; }
+  }
+  if (cx<0 || best===Infinity) return null;
+  const path=[]; let lx=-9, ly=-9;
+  for (let s=0;s<MAX_TRIP;s++){
+    path.push(idx(cx,cy));
+    if (adjToDest(cx,cy,isDest)) break;
+    const fHere=field[idx(cx,cy)];
+    let nb=Infinity, nx2=-1, ny2=-1;
+    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=cx+dx, ny=cy+dy;
+      if (!isRoad(nx,ny) || (nx===lx&&ny===ly)) continue;
+      const fn=field[idx(nx,ny)];
+      if (fn<nb){ nb=fn; nx2=nx; ny2=ny; }
+    }
+    if (nx2<0 || nb>=fHere) break;        // arrived or no descent
+    lx=cx; ly=cy; cx=nx2; cy=ny2;
+  }
+  return path;
+}
+/* which origin lots feed traffic THROUGH a given road tile: flood upstream (toward higher cost,
+   away from the destination) to gather candidate origins, then keep only those whose modal route
+   actually crosses the tile. Returns up to `lim`, nearest-along-the-route first. */
+function feedersThrough(tx,ty, field, isOrigin, isDest, lim){
+  const ti=idx(tx,ty);
+  if (!isRoad(tx,ty) || field[ti]===Infinity) return [];
+  const seen=new Set([ti]); const stack=[[tx,ty]];
+  const roots=new Set(), cands=[]; let guard=0;
+  while (stack.length && guard++<1500){
+    const [x,y]=stack.pop(); const fHere=field[idx(x,y)];
+    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx, ny=y+dy; if (!inB(nx,ny)) continue;
+      const n=map[ny][nx];
+      if (isOrigin(n)){ const r=n.grp?n.grp:[nx,ny], k=r[0]+','+r[1]; if (!roots.has(k)){ roots.add(k); cands.push(r); } }
+      if (isRoad(nx,ny) && !seen.has(idx(nx,ny)) && field[idx(nx,ny)]>fHere){ seen.add(idx(nx,ny)); stack.push([nx,ny]); }
+    }
+  }
+  const found=[];
+  for (const [rx,ry] of cands){
+    const path=modalRoute(rx,ry, field, isDest);
+    if (!path) continue;
+    const d=path.indexOf(ti);
+    if (d<0) continue;                    // this lot's main route doesn't actually pass here
+    const rc=map[ry][rx]; found.push({x:rx, y:ry, d, name:bizName(rc)||NAMES[rc.t]});
+  }
+  found.sort((a,b)=>a.d-b.d);
+  return found.slice(0, lim||4);
+}
 function showTip(x,y,force,light){
   if (!inB(x,y)){ tipEl.style.display='none'; return; }
   let c=map[y][x];
@@ -6337,6 +6514,15 @@ function showTip(x,y,force,light){
     } else {
       html+=`<div class="row"><span>Visitors</span><span style="color:var(--dim)">no homes visit here</span></div>`;
     }
+  } else if (force && ROADTYPE[c.t] && !c.bridge && S.commuteRoute){
+    // a road: trace who routes THROUGH this tile — homes heading out, workers heading home
+    const out=feedersThrough(x,y, jobCost, isHomeCell, isJobCell);   // homes → work
+    const back=feedersThrough(x,y, homeCost, isJobCell, isHomeCell); // workplaces → home
+    if (out.length){ cmHdr('Commuters to work'); cmHomes(out); }
+    if (back.length){ cmHdr('Heading home from'); cmDest(back); }
+    if (!out.length && !back.length) html+=`<div class="row"><span>Through traffic</span><span style="color:var(--dim)">no commute routes here</span></div>`;
+    const to=out.concat(back);
+    if (to.length) commuteViz={from:[x+0.5, y+0.5], to};
   }
   if (PLANT[c.t]||WSRC[c.t]){
     if (PLANT[c.t]) html+=`<div class="row"><span>Output</span><span>${PLANT[c.t].cap} MW (city: ${Math.round(S.powerUse)}/${S.powerCap})</span></div>`;
@@ -7649,6 +7835,29 @@ document.querySelectorAll('.fslider').forEach(sl=>sl.oninput=(e)=>{
   projectBudget();
 });
 
+/* ---------- ordinances panel ---------- */
+function renderPolicies(){
+  const wrap=document.getElementById('polList'); if (!wrap) return;
+  let html='', lastGrp='';
+  for (const p of POLICIES){
+    if (p.grp!==lastGrp){ html+=`<div class="pgrp">${p.grp.toUpperCase()}</div>`; lastGrp=p.grp; }
+    const on=!!S.policy[p.id];
+    html+=`<div class="prow"><button class="ptgl${on?' on':''}" data-id="${p.id}">${on?'ON':'OFF'}</button>`
+        + `<div class="pmeta"><b>${p.n}</b><span class="pdesc">${p.d}</span></div></div>`;
+  }
+  wrap.innerHTML=html;
+  wrap.querySelectorAll('.ptgl').forEach(b=>b.onclick=()=>togglePolicy(b.dataset.id));
+}
+function togglePolicy(id){
+  const p=POLICY_DEF[id]; if (!p) return;
+  S.policy[id]=!S.policy[id];
+  recomputeFields(); dirty=true; projectBudget();
+  msg(`<b>${p.ic} ${p.n} ${S.policy[id]?'enacted':'repealed'}.</b> `
+      + (S.policy[id]?p.d:'The ordinance is no longer in effect.'));
+  renderPolicies();
+}
+renderPolicies();
+
 /* ---------- overlay views ---------- */
 function viewsBtnSync(){
   const vb=document.getElementById('viewsBtn'); if (!vb) return;
@@ -7751,7 +7960,7 @@ function makeSave(){
     const mg=(c.grp?(c.part?2:1):0)|(c.bridge?4:0)|(c.bus?8:0)|(c.rail?16:0);
     cells.push(TYPE_IDS.indexOf(c.t), c.t==='rubble'?Math.max(0,TYPE_IDS.indexOf(c.rz||'grass')):c.lv, Math.round(c.dev), mg);
   }
-  const data={v:4,g:G,m:Math.round(S.money),tx:S.tax,d:S.day,p:S.pop,c:cells,fd:S.fund,df:S.diff,ms:S.milestone,hs:packHist(),wx:S.weather?1:0,au:settingsSnapshot(),cn:S.cityName,ln:S.loan||0,sc:S.scen||0};
+  const data={v:4,g:G,m:Math.round(S.money),tx:S.tax,d:S.day,p:S.pop,c:cells,fd:S.fund,df:S.diff,ms:S.milestone,hs:packHist(),wx:S.weather?1:0,au:settingsSnapshot(),cn:S.cityName,ln:S.loan||0,sc:S.scen||0,po:S.policy||{}};
   return 'TLV4.'+btoa(unescape(encodeURIComponent(JSON.stringify(data))));
 }
 function loadSave(code){
@@ -7848,6 +8057,8 @@ function loadSave(code){
   if (data.fd){ S.fund={...S.fund, ...data.fd};
     document.querySelectorAll('.fslider').forEach(sl=>{ sl.value=S.fund[sl.dataset.k]; const el=document.getElementById('fv_'+sl.dataset.k); if(el) el.textContent=S.fund[sl.dataset.k]+'%'; });
   }
+  S.policy = (data.po && typeof data.po==='object') ? {...data.po} : {};
+  renderPolicies();
   document.getElementById('taxSlider').value=S.tax;
   document.getElementById('taxLbl').textContent=S.tax+'%';
   traffic.fill(0); cars.length=0; smoke.length=0; dirtyRoads=true;
@@ -8094,6 +8305,11 @@ function updateHUD(){
   document.getElementById('bIncome').textContent=fmt(S.income);
   document.getElementById('bRoads').textContent='−'+fmt(S.roadCost).slice(1);
   document.getElementById('bServices').textContent='−'+fmt(S.svcCost).slice(1);
+  const ber=document.getElementById('bEmitRow'), ec=S.emitCost||0;
+  if (ber){
+    ber.style.display = ec>=0.5 ? 'flex' : 'none';
+    if (ec>=0.5){ const be=document.getElementById('bEmit'); be.textContent='−'+fmt(ec).slice(1); be.style.color='var(--red)'; }
+  }
   const btr=document.getElementById('bTourRow');
   if (btr){
     btr.style.display = (S.tourism||0)>0 ? 'flex' : 'none';
@@ -8103,6 +8319,15 @@ function updateHUD(){
   if (blr){
     blr.style.display = S.loan ? 'flex' : 'none';
     if (S.loan) document.getElementById('bLoan').textContent='−'+fmt(Math.round(S.loan.pay)).slice(1);
+  }
+  const bpr=document.getElementById('bPolRow'), pn=S.polNet||0;
+  if (bpr){
+    bpr.style.display = Math.abs(pn)>=0.5 ? 'flex' : 'none';
+    if (Math.abs(pn)>=0.5){
+      const be=document.getElementById('bPol');
+      be.textContent=(pn>=0?'+':'−')+fmt(Math.abs(pn)).slice(1);
+      be.style.color=pn>=0?'var(--green)':'var(--red)';
+    }
   }
   const bn=document.getElementById('bNet');
   bn.textContent=(S.net>=0?'+':'−')+fmt(Math.abs(S.net)).slice(1);
@@ -8791,12 +9016,13 @@ function makeDraggable(el, handle){
 }
 const moreMenu=document.getElementById('moreMenu');
 document.getElementById('moreBtn').onclick=(e)=>{ e.stopPropagation(); moreMenu.classList.toggle('open'); };
-document.querySelectorAll('.bsecH').forEach(h=>{
+document.querySelectorAll('.bsecH').forEach((h,i)=>{
   h.onclick=()=>{
     h.classList.toggle('closed');
     document.getElementById('bsec_'+h.dataset.sec).classList.toggle('closed');
   };
-  if (window.innerWidth < 900){
+  // the panel carries a lot — collapse everything but the first section by default
+  if (i>0){
     h.classList.add('closed');
     document.getElementById('bsec_'+h.dataset.sec).classList.add('closed');
   }
@@ -9016,7 +9242,9 @@ function fillBudgetWhy(){
     + `<div style="color:var(--amber);font-family:'Chakra Petch';font-size:10px;letter-spacing:.08em;margin-top:6px">UPKEEP · ×${B.dUp.toFixed(2)} difficulty</div>`
     + r(`Roads ${B.roads}×0.95 + avenues ${B.aves}×2.4`+(B.paths?` + paths ${B.paths}×0.18`:'')+(B.busStops?` + stops ${B.busStops}×3`:''), '−'+f(B.roadCost).slice(1))
     + r(`Services base ${f(B.svcBase)} × funding × 2.6`, '−'+f(B.svcCost).slice(1))
+    + ((B.emitCost && B.emitCost>=0.5) ? r(`Emissions levy · ${Math.round(B.emit)} smog × ${EMIT_RATE}`+((S.edu||0)>0.02?` <span style="color:#5fe08a">(−${Math.round(50*(S.edu||0))}% schooling)</span>`:''), '−'+f(B.emitCost).slice(1)) : '')
     + (S.loan ? r(`Loan payment`, '−'+f(S.loan.pay).slice(1)) : '')
+    + ((B.polNet && Math.abs(B.polNet)>=0.5) ? r(`Ordinances (tolls − running costs)`, (B.polNet>=0?'+':'−')+f(Math.abs(B.polNet)).slice(1)) : '')
     + `<div style="border-top:1px solid var(--line);margin-top:5px;padding-top:4px">`
     + r(`Net / month`, (S.net>=0?'+':'−')+f(Math.abs(S.net)).slice(1)) + '</div>';
 }
@@ -9142,6 +9370,7 @@ function scenFresh(size,diff,seed,name){
   S.money=DIFF[S.diff].money;
   S.day=0; S.pop=0; S.jobs=0; S.tax=9;
   S.fund={ police:100, fire:100, school:100, health:100 };
+  S.policy={}; renderPolicies();
   S.loan=null; S.loanPay=0; refreshLoanBox();
   S.milestone=0; hist=[]; histStep=30;
   WX.target=0; WX.rain=0; WX.until=0;
@@ -9454,6 +9683,7 @@ document.getElementById('mapBegin').onclick=()=>{
   S.money=DIFF[S.diff].money;
   S.day=0; S.pop=0; S.jobs=0; S.tax=9;
   S.fund={ police:100, fire:100, school:100, health:100 };
+  S.policy={}; renderPolicies();
   S.loan=null; S.loanPay=0; refreshLoanBox();
   S.milestone=0; hist=[]; histStep=30;
   WX.target=0; WX.rain=0; WX.until=0;
