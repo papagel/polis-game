@@ -243,6 +243,13 @@
   #views button{padding:6px 10px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--dim);font-family:'Chakra Petch';font-size:11px;cursor:pointer}
   #views button.on{background:#27384c;border-color:var(--amber);color:var(--ink)}
   #views button:hover{color:var(--ink)}
+  /* safety overlay sub-filter — only shown while the Safety map is up */
+  #safetySub{position:fixed;left:12px;bottom:82px;z-index:7;display:none;gap:4px;padding:5px;pointer-events:auto}
+  #safetySub.show{display:flex}
+  #safetySub button{padding:6px 11px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--dim);font-family:'Chakra Petch';font-size:11px;cursor:pointer}
+  #safetySub button.on{background:#27384c;border-color:var(--amber);color:var(--ink)}
+  #safetySub button:hover{color:var(--ink)}
+  body.mob #safetySub{left:calc(8px + env(safe-area-inset-left));bottom:calc(var(--bbarh,58px) + 62px)}
 
   /* save/load modal */
   #saveModal,#catModal,#advModal,#statsModal,#mapModal,#helpModal{position:fixed;inset:0;z-index:30;background:rgba(5,10,18,.7);display:none;align-items:center;justify-content:center;padding:18px}
@@ -603,13 +610,18 @@
   <button data-v="traffic">Traffic</button>
   <button data-v="value">Value</button>
   <button data-v="density">Density</button>
-  <button data-v="pollution">Smog</button>
+  <button data-v="pollution">Pollution</button>
   <button data-v="power">Power</button>
   <button data-v="water">Water</button>
   <button data-v="edu">Education</button>
   <button data-v="health">Health</button>
   <button data-v="crime">Safety</button>
   <button id="flatBtn" title="Hide tall buildings — work at street level (F)">⌄ Low-rise</button>
+</div>
+<div id="safetySub" class="hud panel">
+  <button data-sv="all" class="on">All</button>
+  <button data-sv="police">☂ Police</button>
+  <button data-sv="fire">▲ Fire</button>
 </div>
 <div id="disModal" class="modalWrap">
   <div class="modal panel">
@@ -899,7 +911,7 @@ const S = {
   demand: { r: .6, c: .1, i: .4 },
   income: 0, roadCost: 0, svcCost: 0, net: 0,
   zoom: 1, ox: 0, oy: 0,
-  tool: 'pan', hover: null, msgT: 0, overlay: 'none', congested: 0, rot: 0, milestone: 0, weather: false, cityName: 'Polis',
+  tool: 'pan', hover: null, msgT: 0, overlay: 'none', safetyView: 'all', congested: 0, rot: 0, milestone: 0, weather: false, cityName: 'Polis',
   powerCap:0, powerUse:0, waterCap:0, waterUse:0,
   fund: { police:100, fire:100, school:100, health:100 },
   policy: {},   // active ordinances by id — each trades money for a field/demand/mood effect
@@ -972,13 +984,13 @@ const TOOLS = [
       { id:'playground', n:'Playground',  c:110,  ic:'⛹', col:'#e0784a', d:'value +8 over 3 tiles' },
       { id:'plaza',      n:'Plaza',       c:160,  ic:'▢', col:'#c3c89a', d:'value +10 over 4 tiles' },
       { id:'garden',     n:'Garden',      c:140,  ic:'✿', col:'#67b86f', d:'value +13 over 4 tiles' },
-      { id:'church',     n:'Church',      c:700,  ic:'✝', col:'#e0d8c6', d:'a neighbourhood landmark with a steeple · value +12 over 6 tiles' },
       { id:'pool',       n:'Public pool', c:320,  ic:'≈', col:'#3aa0c9', d:'a little resort · value +10 over 4 tiles' },
       { id:'stadium',    n:'Stadium',     c:1100, ic:'◎', col:'#b86a8f', d:'2×2 grounds · value +12 over 6 tiles' },
       { id:'arena',      n:'Arena',       c:1400, ic:'◍', col:'#8f6ab8', d:'2×2 grounds · value +12 over 6 tiles · light show' },
       { id:'zoo',        n:'City Zoo',    c:2600, ic:'🦁', col:'#c79a5b', d:'3×3 grounds · home to dozens of animals · value +16 over 8 tiles' },
       { id:'airport',    n:'Airport',     c:9000, ic:'✈', col:'#9ab8d8', d:'4×2 runway · rotatable · tourism income scales with population', lockAt:6 } ] },
   { id:'cityhall', n:'City Hall', c:1500, ic:'⚖', col:'#c9b87a', sub:[
+      { id:'church',   n:'Church',   c:700,  ic:'✝', col:'#e0d8c6', d:'a neighbourhood landmark with a steeple · value +12 over 6 tiles' },
       { id:'cityhall', n:'City Hall', c:1500, ic:'⚖', col:'#c9b87a', d:'value +14 over 6 tiles', lockAt:3 },
       { id:'monument', n:'Monument',  c:2500, ic:'▲', col:'#d8cfc0', d:'value +16 over 7 tiles', lockAt:5 },
       { id:'botanic',  n:'Botanic Gardens', c:2200, ic:'✿', col:'#8fd6a8', d:'2×2 grounds · value +15 over 8 tiles', lockAt:6 },
@@ -1328,6 +1340,7 @@ function genMap(seed){
   for (let y=0; y<G; y++){ map[y]=[];
     for (let x=0; x<G; x++) map[y][x] = { t:T[y][x], lv:0, dev:0, pw:false, wt:false, ws:false, fire:0, vary: rnd(), grp:null, part:false, bld:0, bridge:false, rz:null };
   }
+  shoreDirty=true;
 }
 
 /* ---------- helpers ---------- */
@@ -1577,7 +1590,7 @@ function recomputeWaste(){
   }
   S.wasteUse=use;
 }
-function recomputeNets(){ recomputePower(); recomputeWater(); recomputeWaste(); }
+function recomputeNets(){ recomputePower(); recomputeWater(); recomputeWaste(); shoreDirty=true; }
 function splat(arr, x, y, r, amt){
   for (let dy=-r;dy<=r;dy++) for (let dx=-r;dx<=r;dx++){
     const nx=x+dx, ny=y+dy; if(!inB(nx,ny)) continue;
@@ -1678,6 +1691,80 @@ function recomputeFields(){
     v -= Math.min(14, crime[idx(x,y)]*0.55);
     landVal[idx(x,y)] = Math.max(0, Math.min(100, v));
   }
+}
+
+/* ---------- shoreline smoothing ----------
+   The water/land border is a hard isometric staircase of tile edges. To read as a
+   flowing river, displace each border GRID VERTEX toward the smoothed contour and
+   have every tile that owns that vertex route its ground polygon through the SAME
+   displaced point — so neighbours stay watertight (each side paints up to the shared
+   edge, no gaps/overlap, order-independent) while the bank curves and meanders.
+   Only natural tiles (water/grass/tree) take part: a vertex touching a built tile or
+   the map edge stays pinned, so roads/buildings keep square footprints and never tear. */
+let SHORE=null, SHORECELL=null, shoreDirty=true;
+function recomputeShore(){
+  shoreDirty=false;
+  const isW=(cx2,cy2)=> cx2>=0&&cy2>=0&&cx2<G&&cy2<G && map[cy2][cx2].t==='water';
+  const nat=(cx2,cy2)=>{ if(cx2<0||cy2<0||cx2>=G||cy2>=G) return false; const t=map[cy2][cx2].t; return t==='water'||t==='grass'||t==='tree'; };
+  const KV=(a,b)=>a*(G+1)+b;                       // vertex key, gx/gy in 0..G
+  const adj=new Map(), opos=new Map(), pin=new Set();
+  const touch=(a,b)=>{ const k=KV(a,b); if(!opos.has(k)){ opos.set(k,[a,b]); adj.set(k,[]); } return k; };
+  const link=(ka,kb)=>{ adj.get(ka).push(kb); adj.get(kb).push(ka); };
+  const mark=(a,b)=>{ if (!(nat(a-1,b-1)&&nat(a,b-1)&&nat(a-1,b)&&nat(a,b))) pin.add(KV(a,b)); };
+  for (let gy=0; gy<=G; gy++) for (let gx=0; gx<=G; gx++){
+    if (gx<G && isW(gx,gy-1)!==isW(gx,gy)){ link(touch(gx,gy),touch(gx+1,gy)); mark(gx,gy); mark(gx+1,gy); }
+    if (gy<G && isW(gx-1,gy)!==isW(gx,gy)){ link(touch(gx,gy),touch(gx,gy+1)); mark(gx,gy); mark(gx,gy+1); }
+  }
+  // Laplacian smoothing — pinned vertices stay put and anchor the curve's ends
+  const sm=new Map(); for (const [k,p] of opos) sm.set(k,[p[0],p[1]]);
+  for (let it=0; it<4; it++){
+    const nx=new Map();
+    for (const [k,nbrs] of adj){
+      const p=sm.get(k);
+      if (pin.has(k) || !nbrs.length){ nx.set(k,[p[0],p[1]]); continue; }
+      let ax=0,ay=0; for (const nb of nbrs){ const q=sm.get(nb); ax+=q[0]; ay+=q[1]; }
+      ax/=nbrs.length; ay/=nbrs.length;
+      let mx=p[0]+(ax-p[0])*0.5, my=p[1]+(ay-p[1])*0.5;
+      const o=opos.get(k), dx=mx-o[0], dy=my-o[1], d=Math.hypot(dx,dy);
+      if (d>0.62){ mx=o[0]+dx/d*0.62; my=o[1]+dy/d*0.62; }   // never wander more than ~⅔ tile
+      nx.set(k,[mx,my]);
+    }
+    for (const [k,v] of nx) sm.set(k,v);
+  }
+  SHORE=new Map(); const cells=new Set();
+  for (const [k,p] of sm){
+    if (pin.has(k)) continue;
+    const o=opos.get(k);
+    if (Math.abs(p[0]-o[0])<1e-3 && Math.abs(p[1]-o[1])<1e-3) continue;
+    SHORE.set(k, p);
+    for (const [cx2,cy2] of [[o[0]-1,o[1]-1],[o[0],o[1]-1],[o[0]-1,o[1]],[o[0],o[1]]])
+      if (cx2>=0&&cy2>=0&&cx2<G&&cy2<G) cells.add(cy2*G+cx2);
+  }
+  SHORECELL=cells;
+}
+function vGrid(gx,gy){ const s=SHORE&&SHORE.get(gx*(G+1)+gy); return s||[gx,gy]; }
+function isShoreCell(x,y){ return SHORECELL ? SHORECELL.has(y*G+x) : false; }
+/* trace a ground tile's four (possibly displaced) corners — isometric + rotation aware */
+function groundPath(x,y){
+  const P=(gx,gy)=>{ const v=vGrid(gx,gy); const [rx,ry]=rotC(v[0],v[1]); return toScreen(rx,ry); };
+  const A=P(x,y),B=P(x+1,y),C=P(x+1,y+1),D=P(x,y+1);
+  cx.beginPath(); cx.moveTo(A[0],A[1]); cx.lineTo(B[0],B[1]); cx.lineTo(C[0],C[1]); cx.lineTo(D[0],D[1]); cx.closePath();
+}
+/* pull a point inside a convex quad (ray from its centroid), inset units in from the edges —
+   used to keep scatter (e.g. tree trunks) off the water where a bank has reshaped the tile */
+function clampQuad(px,py,q,inset){
+  const c0=(q[0][0]+q[1][0]+q[2][0]+q[3][0])/4, c1=(q[0][1]+q[1][1]+q[2][1]+q[3][1])/4;
+  const dx=px-c0, dy=py-c1; let tmin=1;
+  for (let e=0;e<4;e++){
+    const a=q[e], b=q[(e+1)&3];
+    let nx=-(b[1]-a[1]), ny=(b[0]-a[0]);
+    if (nx*(c0-a[0])+ny*(c1-a[1])<0){ nx=-nx; ny=-ny; }
+    const L=Math.hypot(nx,ny)||1; nx/=L; ny/=L;
+    const dist=nx*(c0-a[0])+ny*(c1-a[1])-inset, den=nx*dx+ny*dy;
+    if (den<0){ const tHit=-dist/den; if (tHit<tmin) tmin=tHit; }
+  }
+  if (tmin<0) tmin=0;
+  return [c0+dx*tmin, c1+dy*tmin];
 }
 
 /* ---------- placement ---------- */
@@ -3372,28 +3459,40 @@ function drawCell(x,y,now){
     }
     case 'grass': {
       const g = 0.95 + v*0.1;
-      diamond(sx,sy); cx.fillStyle=shade(SEAS.grass,g); cx.fill();
+      if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
+      cx.fillStyle=shade(SEAS.grass,g); cx.fill();
       if (SEAS.snow && v>.55){ cx.fillStyle='rgba(255,255,255,.5)'; cx.beginPath(); cx.ellipse(sx+(v-0.55)*40*z-8*z, sy+TH*.5*z, 4.5*z, 2*z, 0, 0, 7); cx.fill(); }
       else if (v>.93){ cx.fillStyle='rgba(255,255,255,.25)'; cx.fillRect(sx+(v-0.93)*200*z-6*z, sy+TH*.45*z, 2*z, 2*z); }
       break; }
     case 'tree': {
-      diamond(sx,sy); cx.fillStyle=shade(SEAS.treeBase,.95+v*.1); cx.fill();
+      const shore = isShoreCell(x,y);
+      if (shore) groundPath(x,y); else diamond(sx,sy);
+      cx.fillStyle=shade(SEAS.treeBase,.95+v*.1); cx.fill();
       const n=5+Math.min(3,(v*4)|0);                 // 5..8 trees per block for a richer stand; v re-rolls on re-plant
       const z2=S.zoom, cluster=[], sd=x+v*97.3, spread=0.82;   // mix vary into the seed so re-planting reshapes the stand
+      // on a bank the land area has shifted — clamp every trunk base to the real (displaced)
+      // land quad so trees stand on the shore, not in the river (canopy may still lean over water)
+      const dq = shore ? [vGrid(x,y),vGrid(x+1,y),vGrid(x+1,y+1),vGrid(x,y+1)] : null;
       for (let i=0;i<n;i++){
         // spread the trees evenly: one per angular slice, with mild angle/radius jitter so it stays natural
         const ang=(i + (hsh(sd,y,i+7)-0.5)*0.7)/n*6.2832;
         const r=(0.32 + hsh(sd,y,i+13)*0.62)*spread;   // some near the centre, some at the rim — a full stand
         let a=Math.cos(ang)*r, b=Math.sin(ang)*r;
         const m=Math.abs(a)+Math.abs(b); if (m>spread){ a*=spread/m; b*=spread/m; }   // keep inside the tile diamond
-        const ox=a*TW*0.5*z2, oy=b*TH*0.5*z2;
-        cluster.push([sx+ox, sy+oy, .46+hsh(sd,y,i+40)*.30, hsh(sd,y,i+80)]);
+        let tx, ty;
+        if (dq){                                       // grid-space base point, clamped onto the land quad
+          let bx=x+0.5+(a+b)/2, by=y+0.5+(b-a)/2;
+          [bx,by]=clampQuad(bx,by,dq,0.09);
+          const [rgx,rgy]=rotC(bx,by), bsr=toScreen(rgx,rgy);
+          tx=bsr[0]; ty=bsr[1]-TH*0.5*z2;
+        } else { tx=sx+a*TW*0.5*z2; ty=sy+b*TH*0.5*z2; }
+        cluster.push([tx, ty, .46+hsh(sd,y,i+40)*.30, hsh(sd,y,i+80)]);
       }
       cluster.sort((p,q)=>p[1]-q[1]);                 // paint back-to-front so nearer trees overlap
       for (const [tx,ty,sc,tv] of cluster) tree(tx,ty,sc,tv);
       break; }
     case 'water': {
-      diamond(sx,sy);
+      if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
       const sh = Math.sin(now/700 + (x+y)*1.3)*.06;
       cx.fillStyle=shade('#3a7fc1', .95+sh); cx.fill();
       cx.fillStyle='rgba(255,255,255,.12)';
@@ -3586,17 +3685,17 @@ function drawCell(x,y,now){
       // concrete pad
       diamond(sx,sy); cx.fillStyle='#8497a3'; cx.fill();
       diamond(sx,sy,.92); cx.strokeStyle='rgba(38,54,64,.35)'; cx.lineWidth=Math.max(.7,.9*z); cx.stroke();
-      // intake basin cut into the river-facing front corner
+      // intake basin set into the front of the pad — kept clear of the tile's front corner
       cx.fillStyle='#3f5c69';
       cx.beginPath();
-      cx.moveTo(sx, cyp+TH*.10*z); cx.lineTo(sx+TW*.30*z, cyp+TH*.42*z);
-      cx.lineTo(sx, cyp+TH*.74*z); cx.lineTo(sx-TW*.30*z, cyp+TH*.42*z); cx.closePath(); cx.fill();
+      cx.moveTo(sx, cyp+TH*.04*z); cx.lineTo(sx+TW*.20*z, cyp+TH*.23*z);
+      cx.lineTo(sx, cyp+TH*.42*z); cx.lineTo(sx-TW*.20*z, cyp+TH*.23*z); cx.closePath(); cx.fill();
       // shimmering water + ripple, livelier when the pump is powered
       const wob = on ? 1 : .35;
       cx.fillStyle=`rgba(150,212,242,${.30+.16*Math.sin(ph*2.1)*wob})`;
-      cx.beginPath(); cx.ellipse(sx, cyp+TH*.42*z, 7.2*z, 2.9*z, 0, 0, 7); cx.fill();
+      cx.beginPath(); cx.ellipse(sx, cyp+TH*.23*z, 5*z, 2.1*z, 0, 0, 7); cx.fill();
       cx.fillStyle='rgba(235,250,255,.55)';
-      cx.beginPath(); cx.ellipse(sx-2*z, cyp+TH*.40*z+Math.sin(ph*3)*.7*z*wob, 2.2*z, .9*z, 0, 0, 7); cx.fill();
+      cx.beginPath(); cx.ellipse(sx-1.4*z, cyp+TH*.22*z+Math.sin(ph*3)*.6*z*wob, 1.7*z, .7*z, 0, 0, 7); cx.fill();
 
       // grid-offset → screen, so sub-structures sit correctly in iso
       const at=(ox,oy)=>[sx+(ox-oy)*TW/2*z, sy+(ox+oy)*TH/2*z];
@@ -3612,7 +3711,7 @@ function drawCell(x,y,now){
       paneWin(f.L, f.B, f.H, .34, .12, .26, .60, night && on, false);
 
       // cylindrical storage tank (front-right) with a domed cap + water-drop emblem
-      const tk=cyl(sx,sy,.2,.04,.34,18,'#56a3d2');
+      const tk=cyl(sx,sy,.16,-.02,.27,17,'#56a3d2');
       cx.fillStyle=shade('#56a3d2',1.22);
       cx.beginPath(); cx.ellipse(tk.cx, tk.cy-tk.H-tk.ry*.5, tk.rx*.92, tk.ry*1.2, 0, 0, 7); cx.fill();
       cx.fillStyle='rgba(225,245,255,.92)';
@@ -3884,15 +3983,37 @@ function drawCell(x,y,now){
       cx.moveTo(sx+21.6*z, cy2+2.2*z); cx.lineTo(sx+24.4*z, cy2+2.2*z);
       cx.stroke();
       break; }
-    case 'highschool': { // two-storey block + gym wing + court
-      const f=vol(sx,sy,-.06,-.04,.28,.24,15,'#b08a5a',{roof:'#7a5a32'});
-      faceWin(f,2,3,night);
-      const g2=vol(sx,sy,.26,.18,.16,.16,8,'#c8b890',{roof:'#8a7a52',noShadow:true});
-      archRoof(g2,'#9aa3ad',4);
-      cx.fillStyle='#5d8a6a';
-      cx.beginPath(); cx.ellipse(sx-9*z, sy+TH/2*z+4*z, 4*z, 2*z, 0, 0, 7); cx.fill(); // court
-      cx.strokeStyle='#fff'; cx.lineWidth=.5*z;
-      cx.beginPath(); cx.ellipse(sx-9*z, sy+TH/2*z+4*z, 1.6*z, .8*z, 0, 0, 7); cx.stroke();
+    case 'highschool': { // three-storey academy block + barrel-roofed gym annex, forecourt, track & flag
+      const z2=S.zoom, cy2=sy+TH/2*z2;
+      // schoolyard ground
+      diamond(sx,sy); cx.fillStyle=shade('#8fae6b',.95+v*.06); cx.fill();
+      cx.strokeStyle='rgba(54,74,46,.22)'; cx.lineWidth=1; diamond(sx,sy,.95); cx.stroke();
+      // --- main academic block: tall brick mass, three storeys of windows, flat parapet roof ---
+      const f=vol(sx,sy,-.02,-.04,.34,.30,22,'#bda067',{roof:'#6f5732'});
+      faceWin(f,3,4,night,(side,u)=> side==='R' && u>0.36 && u<0.64);   // leave the centre bay clear for the entrance
+      // pale string courses mark the floor lines so the mass reads as masonry, not a flat box
+      for (const bv of [0.335,0.665]){ signBand(f,'L',bv-0.018,bv+0.018,'rgba(214,196,150,.9)'); signBand(f,'R',bv-0.018,bv+0.018,'rgba(228,210,164,.9)'); }
+      // parapet cap catching light along the flat roof rim
+      cx.strokeStyle='rgba(255,248,228,.5)'; cx.lineWidth=Math.max(.7,.9*z2);
+      cx.beginPath(); cx.moveTo(f.L[0],f.L[1]); cx.lineTo(f.T[0],f.T[1]); cx.lineTo(f.R[0],f.R[1]); cx.stroke();
+      // central entrance: glass doors under a shallow projecting canopy, on the front-right face
+      faceDoor(f,'R',0.5,night?'rgba(255,224,150,.92)':'rgba(150,190,225,.92)',0.30);
+      awning3D(f,'R',0.70,0.22,['#3f6d8c']);
+      // --- gym annex: lower barrel-roofed hall tucked at the front-left ---
+      const g2=vol(sx,sy,.05,.22,.18,.15,12,'#cdbb94',{roof:'#9aa3ad',noShadow:true});
+      archRoof(g2,'#9aa3ad',5);
+      faceWin(g2,1,3,night);
+      // small running track on the forecourt, kept inside the tile
+      { const tx=sx+9*z2, ty=cy2+6*z2;
+        cx.fillStyle='#b06440'; cx.beginPath(); cx.ellipse(tx,ty,5.4*z2,2.6*z2,0,0,7); cx.fill();
+        cx.fillStyle='#5d8a6a'; cx.beginPath(); cx.ellipse(tx,ty,3.5*z2,1.6*z2,0,0,7); cx.fill();
+        cx.strokeStyle='rgba(255,255,255,.6)'; cx.lineWidth=.5*z2;
+        cx.beginPath(); cx.ellipse(tx,ty,4.5*z2,2.1*z2,0,0,7); cx.stroke();
+        cx.beginPath(); cx.moveTo(tx,ty-2.5*z2); cx.lineTo(tx,ty+2.5*z2); cx.stroke(); }
+      // flagpole on the forecourt
+      cx.strokeStyle='#cfd8e2'; cx.lineWidth=.8*z2;
+      cx.beginPath(); cx.moveTo(sx-3*z2, cy2+7*z2); cx.lineTo(sx-3*z2, cy2-12*z2); cx.stroke();
+      cx.fillStyle='#3a77b8'; cx.fillRect(sx-3*z2, cy2-12*z2, 3.2*z2, 2.1*z2);
       break; }
     case 'university': if (c.grp){
       // 2×2 campus: lawn quad per tile, buildings drawn once at the centre
@@ -3925,23 +4046,35 @@ function drawCell(x,y,now){
     case 'clinic': { // small white practice + cross
       const f=vol(sx,sy,0,0,.24,.22,9,'#eef0f2',{roof:'#aab6c2'});
       faceWin(f,1,2,night);
+      // red cross laid flat on the roof — vertical extent foreshortened onto the iso plane
+      const rcy=f.cy-f.H-1.5*z, Y=oy=>rcy+oy*0.5;
       cx.fillStyle='#d23b3b';
-      cx.fillRect(f.cx-1*z, f.cy-f.H-4.5*z, 2*z, 5*z);
-      cx.fillRect(f.cx-3.2*z, f.cy-f.H-3.3*z, 6.4*z, 2*z);
+      cx.fillRect(f.cx-1*z, Y(-2.5*z), 2*z, 2.5*z);
+      cx.fillRect(f.cx-3.2*z, Y(-1*z), 6.4*z, 1*z);
       break; }
     case 'medcenter': {
       const art=(sx,sy)=>{ // tall slab + helipad on roof
       const f=vol(sx,sy,0,0,.34,.28,26,'#e3e8ee',{roof:'#8a9aab'});
-      faceWin(f,4,4,night);
+      faceWin(f,4,4,night,(side,u,vT)=> side==='R' && u>0.30 && u<0.70 && vT>0.25 && vT<0.70);   // clear a 2×2 bay for the wall-mounted cross
       cx.fillStyle='#5d6b7d';
       cx.beginPath(); cx.ellipse(f.T[0]+(f.B[0]-f.T[0])/2, f.T[1]+(f.B[1]-f.T[1])/2, 6*z, 3*z, 0, 0, 7); cx.fill();
       cx.strokeStyle='#fff'; cx.lineWidth=1*z;
       cx.beginPath(); cx.ellipse(f.T[0]+(f.B[0]-f.T[0])/2, f.T[1]+(f.B[1]-f.T[1])/2, 4*z, 2*z, 0, 0, 7); cx.stroke();
       cx.fillStyle='#fff'; cx.font=`bold ${3*z}px Inter`; cx.textAlign='center';
       if (z>0.6) cx.fillText('H', f.T[0]+(f.B[0]-f.T[0])/2, f.T[1]+(f.B[1]-f.T[1])/2+1*z);
+      // red cross mounted on the right wall, lying in the wall plane so it foreshortens with the building
+      const cu=(u0,u1,v0,v1)=>quadF(facePt(f,'R',u0,v0),facePt(f,'R',u1,v0),facePt(f,'R',u1,v1),facePt(f,'R',u0,v1));
+      cx.fillStyle = night ? 'rgba(255,236,190,.92)' : 'rgba(244,247,250,.95)';   // recessed white panel behind the cross
+      cu(0.275,0.725,0.255,0.745);
+      const pb=[facePt(f,'R',0.275,0.255),facePt(f,'R',0.725,0.255),facePt(f,'R',0.725,0.745),facePt(f,'R',0.275,0.745)];
+      cx.strokeStyle='rgba(40,60,80,.35)'; cx.lineWidth=Math.max(.5,.6*z);
+      cx.beginPath(); cx.moveTo(pb[0][0],pb[0][1]); cx.lineTo(pb[1][0],pb[1][1]); cx.lineTo(pb[2][0],pb[2][1]); cx.lineTo(pb[3][0],pb[3][1]); cx.closePath(); cx.stroke();
       cx.fillStyle='#d23b3b';
-      cx.fillRect(f.cx-1.2*z, f.cy-f.H*0.55, 2.4*z, 5*z);
-      cx.fillRect(f.cx-3.5*z, f.cy-f.H*0.55+1.3*z, 7*z, 2.4*z);
+      cu(0.435,0.565,0.300,0.700);                                                 // vertical arm
+      cu(0.310,0.690,0.450,0.550);                                                 // horizontal arm
+      cx.fillStyle='rgba(150,30,30,.30)';                                          // shaded right/lower edges give the cross a little relief
+      cu(0.530,0.565,0.300,0.700);
+      cu(0.310,0.690,0.520,0.550);
       };
       if (c.grp){
         diamond(sx,sy); cx.fillStyle=shade('#cfd6dd',.95+c.vary*.05); cx.fill();
@@ -4073,22 +4206,32 @@ function drawCell(x,y,now){
       cx.beginPath(); cx.arc(sx-3*z+Math.sin(now/900)*2*z, cy2+1*z, .9*z, 0, 7); cx.fill();
       cx.beginPath(); cx.arc(sx+5*z, cy2-1*z, .9*z, 0, 7); cx.fill();
       break; }
-    case 'cityhall': { // domed civic hall: wide stately block, columned portico, gold dome, flag
-      const f=vol(sx,sy,0,.04,.38,.28,14,'#ded2b0',{roof:'#b8ac8a'});
-      faceWin(f,1,4,night);
-      for (let i=0;i<4;i++) cyl(sx,sy,-.32,-.26+i*.17,.045,12,'#ece2c8');     // portico columns
-      const dr=vol(sx,sy,-.3,.02,.05,.26,12,'#ded2b0',{roof:'#c8bc9a',noShadow:true});
-      gable(dr,dr.cx,12*z,'#b0a480',z);
-      // gold dome on a drum
-      cyl(sx,sy,.04,0,.11,14+5,'#d8cca8');
-      const dome=cx.createLinearGradient(f.cx-6*z, f.cy-25*z, f.cx+6*z, f.cy-17*z);
+    case 'cityhall': { // domed civic hall: stately block, temple-front portico, gold dome, flag
+      const f=vol(sx,sy,0,-.02,.38,.26,14,'#ded2b0',{roof:'#b8ac8a'});
+      faceWin(f,2,4,night);
+      // gold dome on a drum, set on the roof behind the portico (drawn before the front colonnade so it reads behind)
+      const drum=cyl(sx,sy,.04,-.04,.11,14+4,'#d8cca8');
+      const dcx=drum.cx+0.6*z, dcy=drum.cy-drum.H;
+      const dome=cx.createLinearGradient(dcx-6*z, dcy-6*z, dcx+6*z, dcy+2*z);
       dome.addColorStop(0,'#ffe9a0'); dome.addColorStop(1,'#c9a23a');
       cx.fillStyle=dome;
-      cx.beginPath(); cx.ellipse(f.cx+1.2*z, f.cy-(14+5)*z, 4.6*z, 4.2*z, 0, Math.PI, 0); cx.fill();
+      cx.beginPath(); cx.ellipse(dcx, dcy, 4.6*z, 4.4*z, 0, Math.PI, 0); cx.fill();
       cx.strokeStyle='#8a702a'; cx.lineWidth=.8*z;
-      cx.beginPath(); cx.moveTo(f.cx+1.2*z, f.cy-(14+5)*z-4.2*z); cx.lineTo(f.cx+1.2*z, f.cy-(14+5)*z-6.4*z); cx.stroke();
+      cx.beginPath(); cx.moveTo(dcx, dcy-4.4*z); cx.lineTo(dcx, dcy-6.6*z); cx.stroke();      // flagpole
       cx.fillStyle='#d23b3b';
-      cx.beginPath(); cx.moveTo(f.cx+1.2*z, f.cy-(14+5)*z-6.4*z); cx.lineTo(f.cx+4.4*z, f.cy-(14+5)*z-5.7*z); cx.lineTo(f.cx+1.2*z, f.cy-(14+5)*z-5*z); cx.closePath(); cx.fill();
+      cx.beginPath(); cx.moveTo(dcx, dcy-6.6*z); cx.lineTo(dcx+3.2*z, dcy-5.9*z); cx.lineTo(dcx, dcy-5.2*z); cx.closePath(); cx.fill();
+      // temple-front portico along the camera-facing wall
+      vol(sx,sy,0,.32,.34,.11,1.8,'#e2d8ba',{roof:'#efe6c8',noShadow:true});   // stylobate platform
+      const PT=(ox,oy)=>[sx+(ox-oy)*TW/2*z, sy+TH/2*z+(ox+oy)*TH/2*z];
+      const colY=.32, cpts=[];
+      for (let i=0;i<6;i++){ const cox=-.26+i*.104; cyl(sx,sy,cox,colY,.04,10,'#ece2c8'); cpts.push(PT(cox,colY)); }
+      const bY=10*z, c0=cpts[0], c5=cpts[5];
+      const ux=c5[0]-c0[0], uy=c5[1]-c0[1], ul=Math.hypot(ux,uy)||1, ex=ux/ul*2.4*z, ey=uy/ul*2.4*z, cap=.6*z, th=2*z;
+      const E0=[c0[0]-ex,c0[1]-ey-bY+cap], E5=[c5[0]+ex,c5[1]+ey-bY+cap];
+      cx.fillStyle='#e6dcbe';
+      cx.beginPath(); cx.moveTo(E0[0],E0[1]); cx.lineTo(E5[0],E5[1]); cx.lineTo(E5[0],E5[1]-th); cx.lineTo(E0[0],E0[1]-th); cx.closePath(); cx.fill();
+      const FL=[E0[0],E0[1]-th], FR=[E5[0],E5[1]-th];
+      pediment3D(FL,FR,5*z,2.8*z,'#d8cea8',z);
       break; }
     case 'church': { // stone chapel: pitched nave, a bell-tower steeple topped with a cross
       const z2=S.zoom, cy2=sy+TH/2*z2;
@@ -4097,13 +4240,20 @@ function drawCell(x,y,now){
       // nave: a long body set slightly back, under a steep pitched roof
       const nave=vol(sx,sy,-0.06,-0.06,0.30,0.20,11,'#e7ddc6',{roof:'#c4a564'});
       gable(nave, nave.cx, nave.H, '#8c5a30', z2);
-      // arched stained-glass windows down the sunlit nave wall
+      // a lancet window seated in a wall plane: the jambs run down v, the arch is a quad on the face
+      const archWin=(f,side,u,hw,vT,vSpr,vB,fill)=>{
+        const P=(uu,vv)=>facePt(f,side,uu,vv);
+        const bl=P(u-hw,vB), sl=P(u-hw,vSpr), ap=P(u,vT), sr=P(u+hw,vSpr), br=P(u+hw,vB);
+        cx.fillStyle=fill;
+        cx.beginPath(); cx.moveTo(bl[0],bl[1]); cx.lineTo(sl[0],sl[1]);
+        cx.quadraticCurveTo(ap[0],ap[1], sr[0],sr[1]); cx.lineTo(br[0],br[1]); cx.closePath(); cx.fill();
+        cx.strokeStyle='rgba(60,48,30,.5)'; cx.lineWidth=.5*z2; cx.stroke();
+      };
+      // arched stained-glass windows down both nave walls (the left wall in shade)
       const wcols=['#c0466a','#3f74b8','#e0a23a','#4e9a6a'];
-      for (let i=0;i<3;i++){ const u=(i+0.5)/3;
-        const wx=nave.B[0]+(nave.R[0]-nave.B[0])*u, wy=nave.B[1]+(nave.R[1]-nave.B[1])*u;
-        cx.fillStyle=night?shade(wcols[i],1.3):wcols[i];
-        cx.beginPath(); cx.moveTo(wx-1.1*z2, wy+5.5*z2); cx.lineTo(wx-1.1*z2, wy+2.4*z2);
-        cx.quadraticCurveTo(wx, wy+0.8*z2, wx+1.1*z2, wy+2.4*z2); cx.lineTo(wx+1.1*z2, wy+5.5*z2); cx.closePath(); cx.fill();
+      for (let i=0;i<3;i++){ const u=.2+.3*i, gc=wcols[i];
+        archWin(nave,'R',u,.085,.28,.52,.92, night?shade(gc,1.3):gc);
+        archWin(nave,'L',u,.085,.28,.52,.92, night?shade(gc,1.05):shade(gc,.78));
       }
       // rose window on the gable end facing the street
       cx.fillStyle=night?'#ffe9a0':'#caa54e';
@@ -4111,9 +4261,7 @@ function drawCell(x,y,now){
       cx.strokeStyle='rgba(60,48,30,.5)'; cx.lineWidth=.5*z2; cx.beginPath(); cx.arc(nave.B[0], nave.B[1]+3.2*z2, 1.7*z2, 0, 7); cx.stroke();
       // bell tower at the front-right corner, drawn over the nave so it reads as the entrance steeple
       const tf=vol(sx,sy,0.20,0.18,0.085,0.085,23,'#ddd2bb',{roof:'#b3a37e'});
-      cx.fillStyle='#3a3327';                                                               // arched belfry openings
-      for (const sgn of [[tf.L,tf.B],[tf.B,tf.R]]){ const mx=(sgn[0][0]+sgn[1][0])/2, my=(sgn[0][1]+sgn[1][1])/2;
-        cx.beginPath(); cx.moveTo(mx-1*z2, my+8*z2); cx.lineTo(mx-1*z2, my+5*z2); cx.quadraticCurveTo(mx, my+3.6*z2, mx+1*z2, my+5*z2); cx.lineTo(mx+1*z2, my+8*z2); cx.closePath(); cx.fill(); }
+      for (const side of ['L','R']) archWin(tf,side,.5,.2,.16,.34,.62,'#3a3327');             // arched belfry openings, one per face
       // four-sided spire on the tower
       const peak=[tf.cx, tf.cy - tf.H - 13*z2];
       const faces=[[tf.L,tf.T,'#5c3a26'],[tf.T,tf.R,'#4e3120'],[tf.L,tf.B,'#6e4630'],[tf.B,tf.R,'#5f3f2b']];
@@ -4311,18 +4459,18 @@ function drawCell(x,y,now){
         cx.beginPath(); cx.moveTo(bx2-wB-2*z,by2+1*z); cx.lineTo(bx2-wT-1*z,by2-hOb); cx.lineTo(bx2+wT+1*z,by2-hOb); cx.lineTo(bx2+wB+2*z,by2+1*z); cx.closePath(); cx.fill();
       }
       break; }
-    case 'police': { // navy station, identified by a single sheriff-badge roof emblem
+    case 'police': { // navy station, identified by a sheriff badge laid flat on the roof
       const f=civic(sx,sy,'#33508f','#22386f',night,'');
       const z2=S.zoom, cy2=sy+TH/2*z2;
-      const rcx=sx, rcy=cy2-f.H-2*z2;
-      cx.fillStyle='#eef1f4';                                            // pale sign disc
-      cx.beginPath(); cx.arc(rcx, rcy, 6.4*z2, 0, 7); cx.fill();
+      const rcx=sx, rcy=cy2-f.H-2*z2, Y=oy=>rcy+oy*0.5;                  // foreshorten onto the iso roof plane
+      cx.fillStyle='#eef1f4';                                            // pale sign plate, lying flat (iso disc)
+      cx.beginPath(); cx.ellipse(rcx, rcy, 6.4*z2, 3.2*z2, 0, 0, 7); cx.fill();
       cx.strokeStyle='#22386f'; cx.lineWidth=.9*z2;
-      cx.beginPath(); cx.arc(rcx, rcy, 6.4*z2, 0, 7); cx.stroke();
+      cx.beginPath(); cx.ellipse(rcx, rcy, 6.4*z2, 3.2*z2, 0, 0, 7); cx.stroke();
       cx.fillStyle='#e8c34e';                                            // gold five-point star
       cx.beginPath();
       for(let i=0;i<10;i++){ const a=-Math.PI/2+i*Math.PI/5, r=(i%2?2.1:5.0)*z2;
-        cx[i?'lineTo':'moveTo'](rcx+Math.cos(a)*r, rcy+Math.sin(a)*r); }
+        cx[i?'lineTo':'moveTo'](rcx+Math.cos(a)*r, Y(Math.sin(a)*r)); }
       cx.closePath(); cx.fill();
       cx.strokeStyle='#9a7a1e'; cx.lineWidth=.5*z2; cx.stroke();
       break; }
@@ -4334,22 +4482,22 @@ function drawCell(x,y,now){
       cx.beginPath(); cx.moveTo(sx-4.5*z2,cy2-5.3*z2); cx.lineTo(sx-0*z2,cy2-3*z2); cx.lineTo(sx-0*z2,cy2+3.2*z2); cx.lineTo(sx-4.5*z2,cy2+1*z2); cx.closePath(); cx.fill();
       cx.strokeStyle='#a89888'; cx.lineWidth=.6*z2;
       for(let i=1;i<3;i++){ cx.beginPath(); cx.moveTo(sx-10*z2,cy2-8*z2+i*2.4*z2); cx.lineTo(sx-5.5*z2,cy2-5.8*z2+i*2.4*z2); cx.stroke(); }
-      const rcx=sx, rcy=cy2-f.H-2*z2;
-      cx.fillStyle='#eef1f4';                                            // pale sign disc
-      cx.beginPath(); cx.arc(rcx, rcy, 6.4*z2, 0, 7); cx.fill();
+      const rcx=sx, rcy=cy2-f.H-2*z2, Y=oy=>rcy+oy*0.5;                  // foreshorten onto the iso roof plane
+      cx.fillStyle='#eef1f4';                                            // pale sign plate, lying flat (iso disc)
+      cx.beginPath(); cx.ellipse(rcx, rcy, 6.4*z2, 3.2*z2, 0, 0, 7); cx.fill();
       cx.strokeStyle='#b83a3a'; cx.lineWidth=.9*z2;
-      cx.beginPath(); cx.arc(rcx, rcy, 6.4*z2, 0, 7); cx.stroke();
+      cx.beginPath(); cx.ellipse(rcx, rcy, 6.4*z2, 3.2*z2, 0, 0, 7); cx.stroke();
       cx.fillStyle='#d8462b';                                            // red flame
       cx.beginPath();
-      cx.moveTo(rcx, rcy-5*z2);
-      cx.bezierCurveTo(rcx+3.6*z2, rcy-1.6*z2, rcx+2.8*z2, rcy+3.2*z2, rcx, rcy+3.6*z2);
-      cx.bezierCurveTo(rcx-2.8*z2, rcy+3.2*z2, rcx-3.6*z2, rcy-1.6*z2, rcx, rcy-5*z2);
+      cx.moveTo(rcx, Y(-5*z2));
+      cx.bezierCurveTo(rcx+3.6*z2, Y(-1.6*z2), rcx+2.8*z2, Y(3.2*z2), rcx, Y(3.6*z2));
+      cx.bezierCurveTo(rcx-2.8*z2, Y(3.2*z2), rcx-3.6*z2, Y(-1.6*z2), rcx, Y(-5*z2));
       cx.fill();
       cx.fillStyle='#f4b13c';                                            // amber inner flame
       cx.beginPath();
-      cx.moveTo(rcx, rcy-2*z2);
-      cx.bezierCurveTo(rcx+1.9*z2, rcy-0.2*z2, rcx+1.5*z2, rcy+2.2*z2, rcx, rcy+2.6*z2);
-      cx.bezierCurveTo(rcx-1.5*z2, rcy+2.2*z2, rcx-1.9*z2, rcy-0.2*z2, rcx, rcy-2*z2);
+      cx.moveTo(rcx, Y(-2*z2));
+      cx.bezierCurveTo(rcx+1.9*z2, Y(-0.2*z2), rcx+1.5*z2, Y(2.2*z2), rcx, Y(2.6*z2));
+      cx.bezierCurveTo(rcx-1.5*z2, Y(2.2*z2), rcx-1.9*z2, Y(-0.2*z2), rcx, Y(-2*z2));
       cx.fill();
       break; }
     case 'school': { // brick schoolhouse: hipped roof, bell cupola, arched entrance, flagpole + playground
@@ -4379,8 +4527,10 @@ function drawCell(x,y,now){
         cx.fillStyle='#f2efe6'; quad(tL,tB,tR,tT);                                                   // top deck
         cx.strokeStyle='rgba(40,30,22,.4)'; cx.lineWidth=Math.max(.5,.6*z2);                          // flashing where the walls meet the roof
         cx.beginPath(); cx.moveTo(bL[0],bL[1]); cx.lineTo(bB[0],bB[1]); cx.lineTo(bR[0],bR[1]); cx.stroke();
-        const fr2=(u,v)=>[bB[0]+(bR[0]-bB[0])*u, bB[1]+(bR[1]-bB[1])*u - ph*v];                       // single bell opening on the sunlit face
-        cx.fillStyle='#2e2620'; quad(fr2(.26,.22),fr2(.74,.22),fr2(.74,.82),fr2(.26,.82));
+        const fr2=(u,v)=>[bB[0]+(bR[0]-bB[0])*u, bB[1]+(bR[1]-bB[1])*u - ph*v];                       // sunlit ("white") wall of the cupola
+        const uAng=Math.atan2(bR[1]-bB[1], bR[0]-bB[0]); let di=0;                                     // playful colour dots painted flat on the wall, foreshortened to its plane
+        for (const dcol of ['#e0662a','#3a77b8','#4caf6e']){ const Cd=fr2(.30+di*.20,.52); di++;
+          cx.fillStyle=dcol; cx.beginPath(); cx.ellipse(Cd[0],Cd[1],1.05*z2,.62*z2,uAng,0,7); cx.fill(); }
         const C=[(tL[0]+tR[0])/2,(tB[1]+tT[1])/2], rA=[C[0],C[1]-3.8*z2];                             // red pyramidal cap + gold finial
         cx.fillStyle='#7a2c26'; cx.beginPath(); cx.moveTo(tL[0],tL[1]); cx.lineTo(rA[0],rA[1]); cx.lineTo(tB[0],tB[1]); cx.closePath(); cx.fill();
         cx.fillStyle='#9a3a30'; cx.beginPath(); cx.moveTo(tB[0],tB[1]); cx.lineTo(rA[0],rA[1]); cx.lineTo(tR[0],tR[1]); cx.closePath(); cx.fill();
@@ -4389,24 +4539,17 @@ function drawCell(x,y,now){
       cx.strokeStyle='#cfd8e2'; cx.lineWidth=.8*z2;
       cx.beginPath(); cx.moveTo(sx+11*z2, cy2+2*z2); cx.lineTo(sx+11*z2, cy2-12*z2); cx.stroke();
       cx.fillStyle='#d23b3b'; cx.fillRect(sx+11*z2, cy2-12*z2, 3.4*z2, 2.2*z2);
-      // playground corner
-      cx.fillStyle='#d8c8a0';
-      cx.beginPath(); cx.ellipse(sx-11*z2, cy2+3*z2, 4.5*z2, 2.2*z2, 0, 0, 7); cx.fill();
-      for (const [px3,col] of [[-13,'#e06a2a'],[-11,'#3a77b8'],[-9,'#4caf6e']]){
-        cx.fillStyle=col; cx.beginPath(); cx.arc(sx+px3*z2, cy2+2.6*z2, .9*z2, 0, 7); cx.fill();
-      }
       break; }
     case 'hospital': { // white clinic with red cross, canopy and helipad ring
       const f=civic(sx,sy,'#e3e8ee','#aab6c2',night,'');
-      const z2=S.zoom, ty=sy+TH/2*z2 - f.H - 3*z2, cy2=sy+TH/2*z2;
+      const z2=S.zoom, ty=sy+TH/2*z2 - f.H - 2*z2, cy2=sy+TH/2*z2;
+      // red cross laid flat on the roof — vertical extent foreshortened onto the iso plane
       cx.fillStyle='#d23b3b';
-      cx.fillRect(sx-1.6*z2, ty-5*z2, 3.2*z2, 10*z2);
-      cx.fillRect(sx-5*z2, ty-1.6*z2, 10*z2, 3.2*z2);
+      cx.fillRect(sx-1.6*z2, ty-2.5*z2, 3.2*z2, 5*z2);
+      cx.fillRect(sx-5*z2, ty-0.8*z2, 10*z2, 1.6*z2);
       // entrance canopy
       cx.fillStyle='#9ab0c4';
       cx.beginPath(); cx.moveTo(sx-7*z2,cy2-1*z2); cx.lineTo(sx,cy2+2.5*z2); cx.lineTo(sx,cy2+4.2*z2); cx.lineTo(sx-7*z2,cy2+0.7*z2); cx.closePath(); cx.fill();
-      // ambulance bay stripe
-      cx.fillStyle='#d23b3b'; cx.fillRect(sx+5*z2, cy2+1.5*z2, 6*z2, 1*z2);
       break; }
     case 'landfill': { // earth tip whose refuse mounds rise as it fills (c.dev = 0..100%)
       const z2=S.zoom, cy2=sy+TH/2*z2;
@@ -4523,22 +4666,27 @@ function drawTowerTile(c,x,y,sx,sy,night,now){
   }
   if (x===lastX && y===lastY){
     const root=map[by][bx];
+    const hf = root.bld>0 ? 0.18+0.82*(1-root.bld) : 1;
+    const h = towerHeight(root.t, root.lv)*hf;
     if (S.flatten){
       // low-rise stand-in: a short plinth in the zone's colour with the level badge
-      const [vcx2,vcy2]=rotC(bx+1,by+1);
-      const [fsx,fsy]=toScreen(vcx2-.5,vcy2-.5);
-      const colF = c.t==='res' ? '#79c694' : c.t==='com' ? '#7fb3ff' : '#ffd23f';
-      const f=vol(fsx,fsy,0,0,.72,.72,4, shade(colF,.85), {roof:shade(colF,1.05)});
-      cx.fillStyle='rgba(10,16,28,.75)';
-      cx.font=`${Math.max(8,8.5*z)}px 'Chakra Petch'`; cx.textAlign='center';
-      cx.fillText('L'+root.lv, f.cx, f.cy-f.H*0.5+3*z);
+      queueStruct(true, h, ()=>{
+        const [vcx2,vcy2]=rotC(bx+1,by+1);
+        const [fsx,fsy]=toScreen(vcx2-.5,vcy2-.5);
+        const colF = c.t==='res' ? '#79c694' : c.t==='com' ? '#7fb3ff' : '#ffd23f';
+        const f=vol(fsx,fsy,0,0,.72,.72,4, shade(colF,.85), {roof:shade(colF,1.05)});
+        cx.fillStyle='rgba(10,16,28,.75)';
+        cx.font=`${Math.max(8,8.5*z)}px 'Chakra Petch'`; cx.textAlign='center';
+        cx.fillText('L'+root.lv, f.cx, f.cy-f.H*0.5+3*z);
+      });
       return;
     }
-    const [vcx,vcy]=rotC(bx+1,by+1);
-    const [msx,msy]=toScreen(vcx-.5,vcy-.5);
-    const hf = root.bld>0 ? 0.18+0.82*(1-root.bld) : 1;
-    drawBigBuilding(root.t, msx, msy, hf, night, root.lv, root.vary);
-    if (root.bld>0) drawCrane(msx, msy, towerHeight(root.t, root.lv)*hf, now);
+    queueStruct(true, h, ()=>{
+      const [vcx,vcy]=rotC(bx+1,by+1);
+      const [msx,msy]=toScreen(vcx-.5,vcy-.5);
+      drawBigBuilding(root.t, msx, msy, hf, night, root.lv, root.vary);
+      if (root.bld>0) drawCrane(msx, msy, h, now);
+    });
   }
 }
 /* grand 2×2 leisure venues — anchored at the block's center point, u = pixel unit */
@@ -4738,6 +4886,16 @@ function drawVenue(t, mx, my, u, night, now, vary){
    hue/lightness/saturation — same silhouettes, different colors → varied skylines.
    null everywhere except mid-draw of one tower, so other buildings pay nothing. */
 let BLD_TINT=null;
+/* per-diagonal building layer. drawCell paints each cell's GROUND immediately, but defers the
+   tall superstructure here so it lands after every ground tile of the band — and sorted so a
+   2×2 tower (whose side walls actually belong to tiles one diagonal behind) paints first and a
+   shorter single-tile neighbour on the same band lands on top, instead of the tower's near-corner
+   draw overrunning it. Null outside the band loop (ghost preview etc.) → draw immediately. */
+let STRUCT_Q=null;
+function queueStruct(tower, h, fn){
+  if (STRUCT_Q) STRUCT_Q.push({k:(tower?1e7:0)+h, fn});
+  else fn();
+}
 function tintHex(hex){
   if(!BLD_TINT || typeof hex!=='string' || hex[0]!=='#') return hex;
   const n=parseInt(hex.slice(1),16);
@@ -4911,7 +5069,7 @@ TOWER_EXTRA.res[5] = [ spec({ w:1.5, body:'#c2906f', roof:'#6e4636', win:{cols:5
   crown:{kind:'pyramid', col:'#5f8f6a', peak:24} }) ];
 // RES lv6 (Highrise): slate mansard apartment block with iso-aligned dormer windows
 TOWER_EXTRA.res[6] = [ spec({ w:1.55, body:'#cdb89a', roof:'#7c6a50', win:{cols:5,rscale:7},
-  crown:{kind:'frustum', col:'#4a5560', peak:26, inset:0.46, dormers:2} }) ];
+  crown:{kind:'frustum', col:'#4a5560', peak:26, inset:0.46, dormers:1} }) ];
 // RES lv7 (Megatower): limestone wedding-cake crowned by a gilt pyramidal spire
 TOWER_EXTRA.res[7] = [ spec({ tiers:[{w:1.7,h:0.46},{w:1.15,h:0.78},{w:0.72,h:1}], body:'#cfb98f', roof:'#8a7452', win:{cols:3,rscale:6},
   crown:{kind:'pyramid', col:'#b08a4a', peak:30, finial:11, finialCol:'#e6c862'} }) ];
@@ -4933,6 +5091,32 @@ TOWER_EXTRA.ind[6] = [ ({msx,msy,H,z,hf,night,gy})=>{
   for (const ox of [3,9,15]) cyl(msx+ox*z, rcy-TH/2*z+1.5*z, 0,0, .12, H*0.20, '#c8c0ac');   // rooftop tank row
   return null;
 } ];
+/* ---- one extra silhouette per high-rise tier (lv4–7), com + res — appended so they take the
+   next vary bucket; TOWER_NAMES is extended in lockstep so names stay 1:1 with silhouettes. ---- */
+// COM lv4: pale stone civic tower under a slate mansard cap with dormer windows
+TOWER_EXTRA.com[4].push( spec({ w:1.5, body:'#c2cad3', roof:'#5d6b7d', win:{cols:5,rscale:6},
+  crown:{kind:'frustum', col:'#47535f', peak:24, inset:0.5, dormers:2} }) );
+// COM lv5: blue glass tower crowned by a faceted glass dome
+TOWER_EXTRA.com[5].push( spec({ w:1.46, body:'#6f9ec4', roof:'#2c4a66', glass:true, win:{cols:5,rscale:8},
+  crown:{kind:'dome', col:'#86c0e6', finial:true} }) );
+// COM lv6: glass shaft tapering to a pyramidal crystal crown
+TOWER_EXTRA.com[6].push( spec({ w:1.5, body:'#6f93b4', roof:'#2c4258', glass:true, win:{cols:6,rscale:9},
+  crown:{kind:'pyramid', col:'#3f6f8f', peak:30, finial:8, finialCol:'#cfe2f0'} }) );
+// COM lv7: glass wedding-cake shaft topped by a gilt pyramidal pinnacle
+TOWER_EXTRA.com[7].push( spec({ tiers:[{w:1.62,h:0.5},{w:1.08,h:0.82}], body:'#3d5a78', roof:'#243a52', glass:true, win:{cols:4,rscale:7},
+  crown:{kind:'pyramid', col:'#caa84e', peak:30, finial:12, finialCol:'#ffe08a'} }) );
+// RES lv4 (no prior extra): pale-stone apartment block under a green copper dome
+TOWER_EXTRA.res[4] = [ spec({ w:1.5, body:'#cdb89a', roof:'#7c6a50', win:{cols:5,rscale:5},
+  crown:{kind:'dome', col:'#7a9a6a', finial:true} }) ];
+// RES lv5: warm brick residential tower under a slate mansard with dormers
+TOWER_EXTRA.res[5].push( spec({ w:1.5, body:'#c49a78', roof:'#6e5642', win:{cols:5,rscale:8},
+  crown:{kind:'frustum', col:'#5a4a3c', peak:24, inset:0.48, dormers:2} }) );
+// RES lv6: limestone highrise crowned by a copper pyramid spire
+TOWER_EXTRA.res[6].push( spec({ w:1.55, body:'#cdbfa0', roof:'#86694e', win:{cols:5,rscale:8},
+  crown:{kind:'pyramid', col:'#6e8f6a', peak:26, finial:7, finialCol:'#caa84e'} }) );
+// RES lv7: limestone wedding-cake topped by a glass observation dome
+TOWER_EXTRA.res[7].push( spec({ tiers:[{w:1.7,h:0.46},{w:1.15,h:0.78},{w:0.72,h:1}], body:'#cfb98f', roof:'#8a7452', win:{cols:3,rscale:6},
+  crown:{kind:'dome', col:'#b7c6c0', finial:true} }) );
 function towerHeight(t, lv){
   if (lv>=7) return t==='res'?134:162;
   if (lv===6) return t==='res'?106:128;
@@ -5164,16 +5348,41 @@ function drawBigBuilding(t, msx, msy, hf, night, lv, vary){
     }
   } else {
   if (t==='res'){
-    if (vk===0){              // brick block with a plain flat roof
+    if (vk===0){              // brick block + a furnished flat roof (parapet, stair bulkhead, water tank)
       const f=box(msx,msy,1.78,H,'#c9a384',{roof:'#8a6450',line:true});
       windows(f, Math.max(2, Math.round(5*hf)), 6, night);
+      const {T,R,B,L}=f, tint=col=>BLD_TINT?tintHex(col):col;
+      const fp=(u,v)=>[T[0]+(R[0]-T[0])*u+(L[0]-T[0])*v, T[1]+(R[1]-T[1])*u+(L[1]-T[1])*v];
+      // small iso box sitting ON the roof plane (footprint in roof-uv, height in px)
+      const rbox=(u0,u1,v0,v1,hpx,col,rcol)=>{
+        const pT=fp(u0,v0),pR=fp(u1,v0),pB=fp(u1,v1),pL=fp(u0,v1), up=p=>[p[0],p[1]-hpx];
+        const tT=up(pT),tR=up(pR),tB=up(pB),tL=up(pL);
+        cx.fillStyle=shade(col,.60); cx.beginPath(); cx.moveTo(pL[0],pL[1]); cx.lineTo(pB[0],pB[1]); cx.lineTo(tB[0],tB[1]); cx.lineTo(tL[0],tL[1]); cx.closePath(); cx.fill();
+        cx.fillStyle=shade(col,.82); cx.beginPath(); cx.moveTo(pB[0],pB[1]); cx.lineTo(pR[0],pR[1]); cx.lineTo(tR[0],tR[1]); cx.lineTo(tB[0],tB[1]); cx.closePath(); cx.fill();
+        cx.fillStyle=rcol||shade(col,1.08); cx.beginPath(); cx.moveTo(tT[0],tT[1]); cx.lineTo(tR[0],tR[1]); cx.lineTo(tB[0],tB[1]); cx.lineTo(tL[0],tL[1]); cx.closePath(); cx.fill();
+      };
+      // sunlit parapet rim so the deck reads as walkable
+      cx.strokeStyle='rgba(255,244,220,.32)'; cx.lineWidth=Math.max(.6,.8*z);
+      cx.beginPath(); cx.moveTo(L[0],L[1]); cx.lineTo(T[0],T[1]); cx.lineTo(R[0],R[1]); cx.stroke();
+      // stair/elevator bulkhead, back-left (drawn first — it sits behind the tank)
+      rbox(0.14,0.52,0.12,0.50, 11*z, tint('#b89274'), tint('#6f5040'));
+      // a low mechanical hut beside it
+      rbox(0.16,0.40,0.56,0.78, 5*z, tint('#a98a6e'), tint('#6f5040'));
+      // rooftop water tank on short legs, front-right
+      { const base=fp(0.70,0.66), bx=base[0], by=base[1], r=4*z, ry=1.9*z, bodyH=7*z, legH=2.6*z, topY=by-legH-bodyH;
+        cx.strokeStyle='#564c42'; cx.lineWidth=Math.max(.6,.8*z);
+        for (const dx of [-r*0.66,0,r*0.66]){ cx.beginPath(); cx.moveTo(bx+dx,by); cx.lineTo(bx+dx,by-legH); cx.stroke(); }
+        cx.fillStyle=shade('#9aa0a6',.66); cx.fillRect(bx-r, topY, r, bodyH);
+        cx.fillStyle=shade('#9aa0a6',.90); cx.fillRect(bx, topY, r, bodyH);
+        cx.fillStyle=shade('#7e848a',.9); cx.beginPath(); cx.ellipse(bx, by-legH, r, ry, 0, 0, Math.PI); cx.fill();
+        cx.fillStyle=shade('#aab0b6',1.06); cx.beginPath(); cx.ellipse(bx, topY, r, ry, 0, 0, 7); cx.fill();
+        cx.fillStyle='#6b5a3e'; cx.fillRect(bx-0.6*z, topY-3*z, 1.2*z, 3*z); }   // finial cap stem
     } else if (vk===1){       // two residential slabs flanking a courtyard
       const fA=box(msx-14*z,msy,0.56,H,'#b8927a',{roof:'#7c5a48',line:true});
       windows(fA, Math.max(2, Math.round(5*hf)), 2, night);
       const fB=box(msx+14*z,msy,0.56,H*0.84,'#d3b694',{roof:'#9a7c5e',line:true});
       windows(fB, Math.max(2, Math.round(4*hf)), 2, night);
-      cx.fillStyle='#6da06a';
-      cx.beginPath(); cx.ellipse(msx, gy+1.5*z, 4.5*z, 2*z, 0, 0, 7); cx.fill();   // courtyard greenery
+      tree(msx, msy+7*z, .55, vary);   // a tree set forward into the open courtyard, clear of both slabs
     } else if (vk===2){       // garden tower: a flush-faced tower whose lower tiers widen only sideways, leaving planted terraces left & right
       const grnD='#34603a', grnM='#54904c', grnL='#69ac5d';
       // every tier is anchored at the SAME near (front) corner, so the two visible faces stay coplanar
@@ -6298,11 +6507,13 @@ function drawZone(c,x,y,sx,sy,night,now){
   const hf = c.bld>0 ? 0.22+0.78*(1-c.bld) : 1;   // construction: the building rises as it's built
   const pk=(n)=>Math.min(n-1,(c.vary*n)|0);
   const cyp=sy+TH/2*z;
-  if (c.t==='res') drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk);
-  else if (c.t==='com') drawCom(c,sx,sy,cyp,hf,night,z,pk,now);
-  else drawInd(c,sx,sy,cyp,hf,night,z,pk,now);
-  // scaffolding crane on bigger builds in progress
-  if (c.bld>0 && c.lv>=3) drawCrane(sx, sy, (c.t==='com'?38:30)*hf, now);
+  queueStruct(false, towerHeight(c.t,c.lv)*hf, ()=>{
+    if (c.t==='res') drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk);
+    else if (c.t==='com') drawCom(c,x,y,sx,sy,cyp,hf,night,z,pk,now);
+    else drawInd(c,sx,sy,cyp,hf,night,z,pk,now);
+    // scaffolding crane on bigger builds in progress
+    if (c.bld>0 && c.lv>=3) drawCrane(sx, sy, (c.t==='com'?38:30)*hf, now);
+  });
 }
 /* ---------- residential variants ---------- */
 function gable(f, sx, H, ridgeCol, z){
@@ -6334,7 +6545,7 @@ function pediment3D(FL, FR, pedH, dep, col, z){
 }
 function drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk){
   if (c.lv===1){
-    switch(pk(4)){
+    switch(pk(5)){
       case 0: { // cottage with pitched roof
         const f=box(sx,sy,.52,9*hf,'#e3d3ae',{roof:'#a3543f'});
         gable(f,sx,9*hf*z,'#a3543f',z);
@@ -6351,6 +6562,13 @@ function drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk){
         cx.fillStyle='#5d4a38'; cx.fillRect(sx+5*z, cyp-9*hf*z-9*z, 2.6*z, 6*z); // chimney
         windows(f,1,1,night);
         break; }
+      case 3: { // modern flat-roof house — main block beside a low garage wing, glazed living front
+        vol(sx,sy,-.20,.12,.16,.16,5*hf,'#d2ccc0',{roof:'#aaa294'});                 // garage wing, set forward
+        const f=vol(sx,sy,.10,-.04,.24,.22,11*hf,'#e9e2d4',{roof:'#3c4853'});         // main block under a dark flat roof
+        faceWin(f,1,3,night,(side)=>side==='R');                                      // bedroom windows on the side wall
+        storefront(f,'R',.12,.62,.40,night);                                          // big picture window into the living room
+        faceDoor(f,'R',.82,'#5a4634',.5);
+        break; }
       default: { // two-tone duplex
         const f=box(sx,sy,.58,10*hf,'#b8a8c4',{roof:'#5d5a72'});
         cx.fillStyle=shade('#a8c4b0',.82);
@@ -6360,7 +6578,7 @@ function drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk){
       }
     }
   } else if (c.lv===2){
-    switch(pk(4)){
+    switch(pk(5)){
       case 0: { // townhouse row — units split by slim pilasters that lie in the facade plane
         const f=box(sx,sy,.66,17*hf,'#c98a6a',{roof:'#6b4636'});
         windows(f,2,3,night);
@@ -6395,6 +6613,35 @@ function drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk){
           }
         }
         break; }
+      case 3: { // L-shaped corner block — ONE extruded L-prism (single footprint, single roof) so the wings can't seam or interpenetrate
+        const H=16*hf*z, wall='#bdac92', roof='#5d5142', s=.30, g=.05;                  // outer half-size s; reentrant inner corner at (g,g)
+        const P=(X,Y)=>[sx+(X-Y)*TW/2*z, sy+TH/2*z+(X+Y)*TH/2*z];                        // tile→ground screen point
+        const poly=[[-s,-s],[s,-s],[s,g],[g,g],[g,s],[-s,s]];                            // L footprint (CCW): notch cut from the FRONT quadrant → courtyard faces camera
+        const ctr=P(0,0);                                                                // soft ground shadow under the whole footprint
+        cx.fillStyle='rgba(10,16,28,.18)';
+        cx.beginPath(); cx.ellipse(ctr[0]+4*z, ctr[1]+3*z, s*TW*z*.95, s*TH*z*.92, 0,0,7); cx.fill();
+        // camera-facing walls only: outward normal (dy,-dx); a face shows iff (dy-dx)>0. the visible faces form one screen-x-monotonic strip, so any order is correct
+        for (let i=0;i<poly.length;i++){
+          const a=poly[i], b=poly[(i+1)%poly.length], dx=b[0]-a[0], dy=b[1]-a[1];
+          if (dy-dx<=0) continue;
+          const Ga=P(a[0],a[1]), Gb=P(b[0],b[1]), Ta=[Ga[0],Ga[1]-H], Tb=[Gb[0],Gb[1]-H], right=dy>0;
+          cx.fillStyle=shade(wall, right?.82:.62);
+          cx.beginPath(); cx.moveTo(Ga[0],Ga[1]); cx.lineTo(Gb[0],Gb[1]); cx.lineTo(Tb[0],Tb[1]); cx.lineTo(Ta[0],Ta[1]); cx.closePath(); cx.fill();
+          cx.fillStyle='rgba(8,12,20,.12)';                                              // base AO band grounds the wall
+          cx.beginPath(); cx.moveTo(Ga[0],Ga[1]); cx.lineTo(Gb[0],Gb[1]); cx.lineTo(Gb[0],Gb[1]-H*.32); cx.lineTo(Ga[0],Ga[1]-H*.32); cx.closePath(); cx.fill();
+          const len=Math.hypot(dx,dy), cols=Math.max(2,Math.round(len*11)), hw=Math.min(.30/cols,.12);   // two storeys of windows, density from face length
+          for (let r=0;r<2;r++) for (let c2=0;c2<cols;c2++){
+            const u=(c2+.5)/cols, vT=(r+.30)/2, vB=(r+.74)/2;
+            paneWin(Ta,Tb,H,u,hw,vT,vB, night&&((r*7+c2*13)%5<3), right);
+          }
+          if (i===1){ const pt=(u,v)=>[Ta[0]+(Tb[0]-Ta[0])*u, Ta[1]+(Tb[1]-Ta[1])*u + H*v];   // entrance centred on the long right-hand street facade
+            cx.fillStyle='#4a4038'; cx.beginPath();
+            cx.moveTo(...pt(.44,.50)); cx.lineTo(...pt(.56,.50)); cx.lineTo(...pt(.56,.99)); cx.lineTo(...pt(.44,.99)); cx.closePath(); cx.fill(); }
+        }
+        cx.fillStyle=roof;                                                               // one continuous L roof
+        cx.beginPath(); poly.forEach((p,i)=>{ const q=P(p[0],p[1]); i?cx.lineTo(q[0],q[1]-H):cx.moveTo(q[0],q[1]-H); }); cx.closePath(); cx.fill();
+        cx.strokeStyle='rgba(255,244,220,.28)'; cx.lineWidth=Math.max(.7,.9*z); cx.stroke();   // crisp eave line round the roof edge
+        break; }
       default: { // stacked flats, pastel
         const f=box(sx,sy,.66,17*hf,'#d8b47a',{roof:'#a14e3c'});
         windows(f,2,3,night);
@@ -6403,37 +6650,55 @@ function drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk){
   } else { // lv3
     const lvHere = landVal[idx(x,y)];
     if (lvHere>76){ // MANSION with pool — only in prime districts
-      const f=box(sx,sy,.62,13*hf,'#efe6d4',{roof:'#7a5a48'});
-      gable(f,sx,13*hf*z,'#7a5a48',z);
-      windows(f,1,3,night);
-      faceDoor(f,'R',0.5,'#6b4a32',0.5);                                           // grand entrance, seated on the front wall
-      // backyard pool — cut flush into the lawn: a flush rim shadow (no drop), a thin
-      // stone lip, then water with an inner shadow under the upper lip to read as a recess
-      const pxc=sx+12*z, pyc=cyp+2.4*z;
+      // house set back on the lot (a rectangular volume) so it leaves an open front garden for the pool
+      const f=vol(sx,sy,-.08,-.22,.42,.30,13*hf,'#efe6d4',{roof:'#7a5a48'});
+      gable(f,f.cx,13*hf*z,'#7a5a48',z);
+      faceWin(f,1,3,night,(side,u)=> side==='R' && Math.abs(u-0.5)<0.18);          // omit the centre pane where the door goes
+      faceDoor(f,'R',0.5,'#6b4a32',0.5);                                           // grand entrance on the front-right wall
+      // swimming pool — sits flat on the front lawn, fully clear of (and below) the house footprint
+      const pxc=sx+1*z, pyc=cyp+11.3*z;
       cx.fillStyle='rgba(12,22,16,.16)';                                            // earth shadow hugging the rim (centred → sunk, not floating)
-      cx.beginPath(); cx.ellipse(pxc, pyc, 6.9*z, 3.25*z, 0, 0, 7); cx.fill();
+      cx.beginPath(); cx.ellipse(pxc, pyc, 8.0*z, 3.7*z, 0, 0, 7); cx.fill();
       cx.fillStyle='#bdb6a2';                                                        // muted stone lip
-      cx.beginPath(); cx.ellipse(pxc, pyc, 6.2*z, 2.9*z, 0, 0, 7); cx.fill();
+      cx.beginPath(); cx.ellipse(pxc, pyc, 7.3*z, 3.35*z, 0, 0, 7); cx.fill();
       cx.fillStyle='#2f9ec9';                                                        // water
-      cx.beginPath(); cx.ellipse(pxc, pyc, 5.2*z, 2.4*z, 0, 0, 7); cx.fill();
+      cx.beginPath(); cx.ellipse(pxc, pyc, 6.3*z, 2.85*z, 0, 0, 7); cx.fill();
       cx.save();                                                                     // depth: the upper lip overhangs and shadows the water below it
-      cx.beginPath(); cx.ellipse(pxc, pyc, 5.2*z, 2.4*z, 0, 0, 7); cx.clip();
+      cx.beginPath(); cx.ellipse(pxc, pyc, 6.3*z, 2.85*z, 0, 0, 7); cx.clip();
       cx.fillStyle='rgba(6,44,66,.5)';
-      cx.beginPath(); cx.ellipse(pxc, pyc-1.5*z, 5.2*z, 2.4*z, 0, 0, 7); cx.fill();
+      cx.beginPath(); cx.ellipse(pxc, pyc-1.6*z, 6.3*z, 2.85*z, 0, 0, 7); cx.fill();
       cx.restore();
       cx.strokeStyle='rgba(255,255,255,.45)'; cx.lineWidth=.7*z;                     // ripple highlight low in the water
-      cx.beginPath(); cx.ellipse(pxc, pyc+0.6*z, 2.6*z, 0.95*z, 0, .3, 2.5); cx.stroke();
-      cx.fillStyle='#3f7a4a';                                                       // hedges along the lot edge
-      for(const hx of [-14,-10,-6]) { cx.beginPath(); cx.arc(sx+hx*z, cyp+3*z, 1.8*z, 0, 7); cx.fill(); }
+      cx.beginPath(); cx.ellipse(pxc, pyc+0.7*z, 3.0*z, 1.1*z, 0, .3, 2.5); cx.stroke();
+      cx.fillStyle='#3f7a4a';                                                       // hedges along the back-left lot edge
+      for(const [hx,hy] of [[-13,-2],[-15,2],[-11,4]]) { cx.beginPath(); cx.arc(sx+hx*z, cyp+hy*z, 1.8*z, 0, 7); cx.fill(); }
       return;
     }
-    switch(pk(3)){
+    switch(pk(4)){
       case 0: { const f=box(sx,sy,.72,30*hf,'#b8927a',{roof:'#7d5a48'}); windows(f,Math.max(1,Math.round(4*hf)),4,night); break; }
       case 1: { // white condo with glass band
         const f=box(sx,sy,.7,28*hf,'#e0e3e8',{roof:'#9aa3ad'});
         cx.fillStyle='rgba(120,180,220,.55)';
         cx.beginPath(); cx.moveTo(sx,cyp-28*hf*z+f.h); cx.lineTo(sx+f.w,cyp-28*hf*z); cx.lineTo(sx+f.w,cyp-6*z); cx.lineTo(sx,cyp+f.h-6*z); cx.closePath(); cx.fill();
         windows(f,Math.max(1,Math.round(3*hf)),3,night);
+        break; }
+      case 2: { // stepped terrace condo — three setback tiers, each with a planted roof terrace
+        // each tier's lower part hides behind the wider tier below, so only glaze the strip that rises above it (v=0 is the roof)
+        const winBand=(f,v0,v1,rows,cols)=>{
+          for (const side of ['L','R']){
+            const p0=side==='L'?f.L:f.B, p1=side==='L'?f.B:f.R, hw=Math.min(0.30/cols,0.13);
+            for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){
+              const u=(c+0.5)/cols, vT=v0+(v1-v0)*(r+0.24)/rows, vB=v0+(v1-v0)*(r+0.78)/rows;
+              paneWin(p0,p1,f.H,u,hw,vT,vB, night&&((r*7+c*13)%5<3), side==='R');
+            }
+          }
+        };
+        const b1=box(sx,sy,.74,15*hf,'#cdb39a',{roof:'#7a6450'}); winBand(b1,.06,.94,4,4);   // base: full facade (its centre gets capped by b2)
+        const b2=box(sx,sy,.58,27*hf,'#d8c0a6',{roof:'#8a7058'}); winBand(b2,.06,.42,3,3);   // mid: only the band above b1's roof
+        const b3=box(sx,sy,.42,38*hf,'#e2cdb2',{roof:'#94795e'}); winBand(b3,.06,.28,Math.max(2,Math.round(3*hf)),2);   // top: band above b2's roof
+        cx.fillStyle='#3f7a4a';                                                          // clipped hedges line each setback's terrace lip
+        for(const f of [b1,b2]) for(let i=0;i<3;i++){ const u=(i+.5)/3, p=[f.B[0]+(f.R[0]-f.B[0])*u, f.B[1]+(f.R[1]-f.B[1])*u];
+          cx.beginPath(); cx.arc(p[0],p[1],1.3*z,0,7); cx.fill(); }
         break; }
       default: { // apartment flats
         const f=box(sx,sy,.72,28*hf,'#a89888',{roof:'#5d5248'});
@@ -6444,9 +6709,9 @@ function drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk){
 }
 /* ---------- commercial variants ---------- */
 const COM_NAMES={
-  1:['Coffee shop','Restaurant','Pharmacy','Flower shop','Barbershop','Mini market','Clothes boutique','Bakery','Bookshop','Electronics store'],
-  2:['Supermarket','Office block','Retail row','Bistro','Gym','Bank','Cinema'],
-  3:['Office tower','Hotel','Department store','Shopping mall','Tech campus'],
+  1:['Coffee shop','Restaurant','Pharmacy','Flower shop','Barbershop','Mini market','Clothes boutique','Bakery','Bookshop','Electronics store','Diner'],
+  2:['Supermarket','Office block','Retail row','Bistro','Gym','Bank','Cinema','Car dealership'],
+  3:['Office tower','Hotel','Department store','Shopping mall','Tech campus','Convention center'],
 };
 const IND_NAMES={
   1:['Workshop','Warehouse','Lumber yard','Brewery','Recycling depot'],
@@ -6457,16 +6722,16 @@ const IND_NAMES={
    so the name is stable and reads alongside the building's distinct shape */
 const TOWER_NAMES={
   res:{
-    4:['Apartment Tower','Residential Block','Garden Tower','Terrace Tower'],
-    5:['Skyscraper Residences','Glass Sky Towers','Twin Residences','Pinnacle Apartments'],
-    6:['Residential Highrise','Panorama Highrise','Skybridge Residences','Crown Highrise'],
-    7:['Megatower Residences','The Residential Spire','Cloudtop Megatower','Zenith Residences'],
+    4:['Apartment Tower','Residential Block','Garden Tower','Terrace Tower','Copper-Dome Residences'],
+    5:['Skyscraper Residences','Glass Sky Towers','Twin Residences','Pinnacle Apartments','Copper-Crown Residences','Mansard Sky Residences'],
+    6:['Residential Highrise','Panorama Highrise','Skybridge Residences','Crown Highrise','Mansard Residences','Spire Highrise'],
+    7:['Megatower Residences','The Residential Spire','Cloudtop Megatower','Zenith Residences','Imperial Residences','Dome Megatower'],
   },
   com:{
-    4:['Office Tower','Corporate Block','Trade Tower','Business Center'],
-    5:['Office Skyscraper','Corporate HQ','Grand Hotel','Glass Skyscraper'],
-    6:['Commercial Highrise','Finance Highrise','Skyline Offices','Tower Plaza'],
-    7:['Megatower Offices','The Exchange','Pinnacle Megatower','Apex Tower'],
+    4:['Office Tower','Corporate Block','Trade Tower','Business Center','Heritage Bank','Mansard Offices'],
+    5:['Office Skyscraper','Corporate HQ','Grand Hotel','Glass Skyscraper','Art-Deco Tower','Crystal Dome Tower'],
+    6:['Commercial Highrise','Finance Highrise','Skyline Offices','Tower Plaza','Broadcast Tower','Crystal Spire'],
+    7:['Megatower Offices','The Exchange','Pinnacle Megatower','Apex Tower','Broadcast Megatower','Pinnacle Tower'],
   },
   ind:{
     4:['Industrial Complex','Factory Complex','Manufacturing Works','Assembly Plant'],
@@ -6580,6 +6845,19 @@ function facePt(f, side, u, v){
 }
 function quadF(a,b,c2,d){ cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.lineTo(c2[0],c2[1]); cx.lineTo(d[0],d[1]); cx.closePath(); cx.fill(); }
 function outV(side){ const z=S.zoom; return side==='L'?[-TW/2*z, TH/2*z]:[TW/2*z, TH/2*z]; }   // outward ground step, per grid unit
+/* which camera-facing wall a storefront should address so it fronts an adjacent road. only the
+   two near walls ('R'=+view-x, 'L'=+view-y) ever render, so we can honour a road on those two
+   sides and otherwise fall back to 'R' (the original look). recomputed per frame ⇒ tracks the
+   4 view rotations via rotD; a lot keeps facing the same real road as you spin the camera. */
+function frontSide(x,y){
+  let r=false, l=false;
+  for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    if (!isRoad(x+dx,y+dy)) continue;
+    const [vx,vy]=rotD(dx,dy);
+    if (vx>0) r=true; else if (vy>0) l=true;
+  }
+  return r?'R':l?'L':'R';   // prefer R on a corner/none so the default frontage is stable
+}
 /* full-width glazed shopfront on the lower facade; warm-lit at night unless a cool glow is given */
 function storefront(f, side, u0, u1, vTop, night, glow){
   const a=facePt(f,side,u0,vTop), b=facePt(f,side,u1,vTop), c2=facePt(f,side,u1,.965), d=facePt(f,side,u0,.965);
@@ -6629,18 +6907,67 @@ function cafeTable(sx,sy,ox,oy,col){
   cx.beginPath(); cx.moveTo(cxp,cyc-3*z); cx.lineTo(cxp-5*z,cyc); cx.quadraticCurveTo(cxp,cyc-1*z,cxp+5*z,cyc); cx.closePath(); cx.fill();
   cx.fillStyle='#5a4a38'; cx.fillRect(cxp-.45*z, cyc-4.2*z, .9*z, 1.4*z);                 // finial
 }
-/* ---------- 22 structurally distinct commercial buildings ---------- */
-function drawCom(c,sx,sy,cyp,hf,night,z,pk,now){
+/* a shopping trolley at screen (px,py) = ground contact; s = unit size. basket is an open
+   wire trapezoid (wider at the top), riding two wheels, with a push handle at the back */
+function trolley(px,py,s){
+  cx.fillStyle='rgba(10,16,28,.16)';
+  cx.beginPath(); cx.ellipse(px+.4*s, py, 2.8*s, 1.0*s, 0,0,7); cx.fill();                // contact shadow
+  cx.fillStyle='#23272e';                                                                  // wheels
+  cx.beginPath(); cx.arc(px-1.4*s, py-.2*s, .6*s, 0,7); cx.fill();
+  cx.beginPath(); cx.arc(px+1.5*s, py-.2*s, .6*s, 0,7); cx.fill();
+  const by=py-1.4*s, ty=by-3.1*s, wb=1.4*s, wt=2.4*s;                                       // basket body
+  cx.fillStyle='#c6ccd4';
+  cx.beginPath(); cx.moveTo(px-wt,ty); cx.lineTo(px+wt,ty); cx.lineTo(px+wb,by); cx.lineTo(px-wb,by); cx.closePath(); cx.fill();
+  cx.fillStyle='#9aa1aa';                                                                   // shaded lower rim → depth
+  cx.beginPath(); cx.moveTo(px-wb,by); cx.lineTo(px+wb,by); cx.lineTo(px+wb,by+.7*s); cx.lineTo(px-wb,by+.7*s); cx.closePath(); cx.fill();
+  cx.strokeStyle='rgba(72,82,94,.6)'; cx.lineWidth=Math.max(.45,.4*s);                       // wire mesh
+  for(const t of [.34,.66]){ const xt=px-wt+2*wt*t, xb=px-wb+2*wb*t; cx.beginPath(); cx.moveTo(xt,ty); cx.lineTo(xb,by); cx.stroke(); }
+  cx.beginPath(); cx.moveTo(px-(wt+wb)/2,(ty+by)/2); cx.lineTo(px+(wt+wb)/2,(ty+by)/2); cx.stroke();
+  cx.strokeStyle='#aeb4bd'; cx.lineWidth=Math.max(.6,.6*s); cx.lineCap='round';              // push handle
+  cx.beginPath(); cx.moveTo(px+wt,ty); cx.lineTo(px+wt+1.4*s, ty-1.6*s); cx.stroke();
+  cx.beginPath(); cx.moveTo(px+wt+1.4*s, ty-1.6*s); cx.lineTo(px+wt-.2*s, ty-1.6*s); cx.stroke();
+  cx.lineCap='butt';
+}
+/* a wrapped gift box at grid offset (ox,oy): an iso cube with ribbons that lie in its top
+   and wall planes (so they keep correct perspective on any rotation) + a bow on the lid */
+function giftBox(sx,sy,ox,oy,s,hp,boxCol,ribCol){
+  const z=S.zoom;
+  const f=vol(sx,sy,ox,oy,s,s,hp,boxCol,{roof:shade(boxCol,1.12)});
+  const {T,R,B,L,H}=f, w=.12;
+  const top=(u,v)=>[T[0]+(R[0]-T[0])*u+(L[0]-T[0])*v, T[1]+(R[1]-T[1])*u+(L[1]-T[1])*v];
+  const fp=(side,u,v)=>{ const p0=side==='L'?L:B, p1=side==='L'?B:R; return [p0[0]+(p1[0]-p0[0])*u, p0[1]+(p1[1]-p0[1])*u + H*v]; };
+  cx.fillStyle=ribCol;                                                       // ribbon cross on the lid
+  quadF(top(0,.5-w),top(1,.5-w),top(1,.5+w),top(0,.5+w));
+  quadF(top(.5-w,0),top(.5+w,0),top(.5+w,1),top(.5-w,1));
+  cx.fillStyle=shade(ribCol,.82); quadF(fp('R',.5-w,0),fp('R',.5+w,0),fp('R',.5+w,1),fp('R',.5-w,1));   // ribbon down the right wall
+  cx.fillStyle=shade(ribCol,.66); quadF(fp('L',.5-w,0),fp('L',.5+w,0),fp('L',.5+w,1),fp('L',.5-w,1));   // and the left wall
+  const c=top(.5,.5);                                                        // the bow
+  cx.fillStyle=shade(ribCol,1.14);
+  cx.beginPath(); cx.ellipse(c[0]-2.2*z, c[1]-1*z, 2.3*z, 1.4*z, -.5, 0,7); cx.fill();
+  cx.beginPath(); cx.ellipse(c[0]+2.2*z, c[1]-1*z, 2.3*z, 1.4*z,  .5, 0,7); cx.fill();
+  cx.fillStyle=ribCol; cx.beginPath(); cx.arc(c[0], c[1]-1*z, 1.1*z, 0,7); cx.fill();
+}
+/* ---------- 25 structurally distinct commercial buildings ---------- */
+function drawCom(c,x,y,sx,sy,cyp,hf,night,z,pk,now){
+  // orient a lot's frontage to the street: mirror the build across the screen-vertical axis
+  // (swap the two grid offsets + flip R↔L) when its road sits on the +view-y side. lighting stays
+  // tied to the screen, so only the entrance moves — the box shading is untouched.
+  const m = frontSide(x,y)==='L';
+  const V  = (ox,oy,ax,ay,h,col,opts)=> m? vol(sx,sy,oy,ox,ay,ax,h,col,opts) : vol(sx,sy,ox,oy,ax,ay,h,col,opts);
+  const CY = (ox,oy,r,h,col)=> m? cyl(sx,sy,oy,ox,r,h,col) : cyl(sx,sy,ox,oy,r,h,col);
+  const SD = s=> m? (s==='R'?'L':s==='L'?'R':s) : s;
+  const PF = (ox,oy)=>{ const a=m?oy:ox, b=m?ox:oy; return [sx+(a-b)*TW/2*z, sy+TH/2*z+(a+b)*TH/2*z]; };
+  const CT = (ox,oy,col)=> m? cafeTable(sx,sy,oy,ox,col) : cafeTable(sx,sy,ox,oy,col);
   if (c.lv===1){
-    switch(pk(10)){
+    switch(pk(11)){
       case 0: { // COFFEE: café set back, with a terrace of parasol tables out front
-        const f=vol(sx,sy,-.12,-.14,.28,.26,8*hf,'#ece1cf',{roof:'#cdbfa6'});
-        storefront(f,'R',.08,.92,.46,night);
-        awning3D(f,'R',.42,.12,['#7a4329','#e7dcc6']);
-        const s=facePt(f,'L',.66,.26);                                   // solid hanging sign board, warm at night
+        const f=V(-.12,-.14,.28,.26,8*hf,'#ece1cf',{roof:'#cdbfa6'});
+        storefront(f,SD('R'),.08,.92,.46,night);
+        awning3D(f,SD('R'),.42,.12,['#7a4329','#e7dcc6']);
+        const s=facePt(f,SD('L'),.66,.26);                               // solid hanging sign board, warm at night
         cx.fillStyle=night?'#caa15a':'#5d3a26'; cx.fillRect(s[0]-3.2*z, s[1], 6.4*z, 4.4*z);
-        cafeTable(sx,sy,.06,.28,'#c25a3f');                              // pavement seating (drawn front-to-back)
-        cafeTable(sx,sy,.3,.1,'#c25a3f');
+        CT(.06,.28,'#c25a3f');                                          // pavement seating (drawn front-to-back)
+        CT(.3,.1,'#c25a3f');
         break; }
       case 1: { // RESTAURANT: gabled hall + lit glass conservatory + terrace awning
         const f=vol(sx,sy,-.08,-.08,.30,.30,10*hf,'#dac6ab',{roof:'#8a4030'});
@@ -6653,12 +6980,17 @@ function drawCom(c,sx,sy,cyp,hf,night,z,pk,now){
         awning3D(f,'R',.5,.14,['#a83a30','#ecdfca']);
         break; }
       case 2: { // PHARMACY: clean white shopfront, green awning + bold green cross
-        const f=vol(sx,sy,0,.05,.42,.30,9*hf,'#f2f5f7',{roof:'#d4dade'});
-        storefront(f,'R',.06,.94,.58,night);
-        awning3D(f,'R',.56,.13,['#1f9c54','#eef3ef']);                    // pharmacy-green canopy
-        const s=facePt(f,'R',.5,.30), a=Math.min(5.6*z, f.H*.3);         // the green cross — the pharmacy mark
+        const f=V(0,.05,.42,.30,9*hf,'#f2f5f7',{roof:'#d4dade'});
+        storefront(f,SD('R'),.06,.94,.58,night);
+        awning3D(f,SD('R'),.56,.13,['#1f9c54','#eef3ef']);               // pharmacy-green canopy
+        const sd=SD('R'), [e0,e1]= sd==='R'?[f.B,f.R]:[f.L,f.B];          // bottom edge of whichever wall fronts the street
+        const s=facePt(f,sd,.5,.30), a=Math.min(5.6*z, f.H*.3), T=a*.32;   // the green cross — painted on the wall plane
+        const eU=[e1[0]-e0[0], e1[1]-e0[1]], uL=Math.hypot(eU[0],eU[1])||1;   // horizontal arm rides the iso slant of that face;
+        const uH=[eU[0]/uL, eU[1]/uL];                                            // the vertical arm stays vertical (walls are upright)
+        const M=(lu,lv)=>[s[0]+uH[0]*lu, s[1]+uH[1]*lu+lv];
         cx.fillStyle=night?'#46e487':'#179a4e';
-        cx.fillRect(s[0]-a*.32, s[1]-a, a*.64, a*2); cx.fillRect(s[0]-a, s[1]-a*.32, a*2, a*.64);
+        quadF(M(-T,-a),M(T,-a),M(T,a),M(-T,a));                                   // upright bar
+        quadF(M(-a,-T),M(a,-T),M(a,T),M(-a,T));                                   // slanted cross-arm
         break; }
       case 3: { // FLOWERS: barrel-roofed glasshouse + solid stall bins (no dots)
         const f=vol(sx,sy,0,0,.40,.26,5*hf,'#cfe6dc',{roof:'#b6d8ca'});
@@ -6679,11 +7011,11 @@ function drawCom(c,sx,sy,cyp,hf,night,z,pk,now){
         cx.fillStyle='#c4c8cc'; cx.beginPath(); cx.ellipse(p.cx,p.cy-p.H,p.rx,p.ry,0,0,7); cx.fill();
         break; }
       case 5: { // MINI MARKET: long low shop, flat canopy, solid produce bins
-        const f=vol(sx,sy,0,-.05,.42,.24,8*hf,'#ead9b2',{roof:'#a89058'});
-        storefront(f,'R',.06,.94,.46,night);
-        awning3D(f,'R',.42,.16,['#c8442e']);
-        vol(sx,sy,.2,.34,.12,.1,3.2,'#7a5c3e',{roof:'#4a8a3a',noShadow:true});
-        vol(sx,sy,.2,.16,.12,.1,3.2,'#7a5c3e',{roof:'#c84a3a',noShadow:true});
+        const f=V(0,-.05,.42,.24,8*hf,'#ead9b2',{roof:'#a89058'});
+        storefront(f,SD('R'),.06,.94,.46,night);
+        awning3D(f,SD('R'),.42,.16,['#c8442e']);
+        V(.2,.34,.12,.1,3.2,'#7a5c3e',{roof:'#4a8a3a',noShadow:true});
+        V(.2,.16,.12,.1,3.2,'#7a5c3e',{roof:'#c84a3a',noShadow:true});
         break; }
       case 6: { // BOUTIQUE: modern two-storey, full glazing + entrance canopy
         const f=vol(sx,sy,0,0,.30,.28,15*hf,'#e7e2ec',{roof:'#b9b2c6'});
@@ -6693,12 +7025,12 @@ function drawCom(c,sx,sy,cyp,hf,night,z,pk,now){
         awning3D(f,'R',.5,.13,['#4a4458']);
         break; }
       case 7: { // BAKERY: cottage + brick oven chimney, awning + round sign disc
-        const f=vol(sx,sy,.05,.05,.28,.26,9*hf,'#ead6b3',{roof:'#a3543f'});
+        const f=V(.05,.05,.28,.26,9*hf,'#ead6b3',{roof:'#a3543f'});
         gable(f,f.cx,9*hf*z,'#a3543f',z);
-        vol(sx,sy,-.22,-.2,.13,.13,15*hf,'#9c4f3c',{roof:'#7a3a2c',noShadow:true});  // chunky oven flue
-        storefront(f,'R',.1,.9,.52,night);
-        awning3D(f,'R',.48,.13,['#c8883a','#f0e4cc']);
-        const s=facePt(f,'R',.5,.3);                                     // solid round bakery sign
+        V(-.22,-.2,.13,.13,15*hf,'#9c4f3c',{roof:'#7a3a2c',noShadow:true});  // chunky oven flue
+        storefront(f,SD('R'),.1,.9,.52,night);
+        awning3D(f,SD('R'),.48,.13,['#c8883a','#f0e4cc']);
+        const s=facePt(f,SD('R'),.5,.3);                                 // solid round bakery sign
         cx.fillStyle=night?'#f6d98a':'#8a5a2a'; cx.beginPath(); cx.arc(s[0],s[1],2.8*z,0,7); cx.fill();
         break; }
       case 8: { // BOOKSHOP: traditional two-storey shop, window full of books
@@ -6710,7 +7042,7 @@ function drawCom(c,sx,sy,cyp,hf,night,z,pk,now){
         for(let i=0;i<6;i++){ const u=.12+.76*(i+.5)/6, hw=.052, top=.64+((i*37)%5)*.02;
           cx.fillStyle=bcol[i]; quadF(facePt(f,'R',u-hw,top),facePt(f,'R',u+hw,top),facePt(f,'R',u+hw,.93),facePt(f,'R',u-hw,.93)); }
         break; }
-      default: { // ELECTRONICS: modern showroom, big windows of glowing screens
+      case 9: { // ELECTRONICS: modern showroom, big windows of glowing screens
         const f=vol(sx,sy,0,0,.34,.30,12*hf,'#2b3038',{roof:'#1b1f25'});
         signBand(f,'R',.16,.28, night?'#3fd0ff':'#2f8fc0'); signBand(f,'L',.16,.28, night?'#2fb0e0':'#27708f');
         const glass=night?'rgba(28,44,62,.95)':null;
@@ -6718,38 +7050,71 @@ function drawCom(c,sx,sy,cyp,hf,night,z,pk,now){
         const sc=night?['#5ad0ff','#7affd0','#ffb15a']:['#9fcfe6','#a8e0c8','#e0c89a'];   // screens on display
         for (const side of ['R','L']) for(let i=0;i<3;i++){ const u=.16+.68*(i+.5)/3, hw=.075;
           cx.fillStyle=sc[i]; quadF(facePt(f,side,u-hw,.48),facePt(f,side,u+hw,.48),facePt(f,side,u+hw,.72),facePt(f,side,u-hw,.72)); }
+        break; }
+      default: { // DINER: a streamline chrome-banded café, all glass, with a neon pylon sign on the roof
+        const f=vol(sx,sy,0,0,.40,.28,8*hf,'#e7ecf0',{roof:'#b4bcc2'});
+        storefront(f,'R',.06,.94,.46,night); storefront(f,'L',.06,.94,.46,night);          // wraparound glazing
+        signBand(f,'R',.20,.30,'#c83a4a'); signBand(f,'L',.20,.30,'#b23340');               // red enamel stripe
+        signBand(f,'R',.30,.345,'#d6dde2'); signBand(f,'L',.30,.345,'#c2cad0');             // chrome trim line below it
+        awning3D(f,'R',.50,.10,['#cfd6dc']); awning3D(f,'L',.50,.10,['#bcc4cb']);            // slim steel canopy
+        const bx=f.B[0], topY=f.B[1]-9*z;                                                    // rooftop pylon sign on the near corner
+        cx.fillStyle='#9aa2a8'; cx.fillRect(bx-.5*z, topY, 1*z, 9*z);
+        cx.fillStyle=night?'#ff5a6a':'#d8455a'; cx.beginPath(); cx.ellipse(bx, topY, 3.6*z, 2.2*z, 0,0,7); cx.fill();
+        cx.fillStyle=night?'rgba(255,236,170,.95)':'#f0e6d2'; cx.beginPath(); cx.ellipse(bx, topY, 2.1*z, 1.1*z, 0,0,7); cx.fill();
       }
     }
   } else if (c.lv===2){
-    switch(pk(7)){
-      case 0: { // SUPERMARKET: vast low shed + portico + parking
-        const f=vol(sx,sy,-.05,-.12,.52,.30,9*hf,'#e8e3d8',{roof:'#b0a898'});
-        const p2=vol(sx,sy,.18,.30,.16,.10,6*hf,'#e06a2a',{roof:'#c8581e',noShadow:true});
-        cx.fillStyle = night?'#fff2c8':'#fff';
-        cx.fillRect(p2.cx-3.4*z, p2.cy-p2.H+1*z, 6.8*z, 1.8*z);
-        cx.fillStyle='#6b7682'; cx.fillRect(sx+8*z, cyp+3.5*z, 9*z, 2.8*z);
-        cx.strokeStyle='#fff'; cx.lineWidth=.5*z;
-        for(let i=0;i<3;i++){ cx.beginPath(); cx.moveTo(sx+(9.5+i*2.6)*z,cyp+3.8*z); cx.lineTo(sx+(9.5+i*2.6)*z,cyp+6*z); cx.stroke(); }
+    switch(pk(8)){
+      case 0: { // SUPERMARKET: vast low shed + portico + a trolley bay on the forecourt
+        const f=V(-.05,-.12,.52,.30,9*hf,'#e8e3d8',{roof:'#b0a898'});
+        signBand(f,SD('R'),.16,.32,'#2f8f57');                                         // green name fascia along the front
+        storefront(f,SD('R'),.06,.94,.50,night);                                       // full-width glass shopfront
+        const p2=V(.18,.30,.16,.10,6*hf,'#e06a2a',{roof:'#c8581e',noShadow:true});
+        const door = night?'rgba(255,226,150,.95)':'rgba(150,186,214,.95)';            // glazed automatic entrance doors in the portico
+        storefront(p2,SD('L'),.12,.88,.26,night, door); storefront(p2,SD('R'),.12,.88,.26,night, door);
+        // paved forecourt + bay markings that lie on the ground plane (so they read in iso),
+        // with a nested run of trolleys parked beside the doors — the supermarket tell
+        cx.fillStyle='#9298a0'; quadF(PF(.24,.18),PF(.56,.18),PF(.56,.52),PF(.24,.52));
+        cx.strokeStyle='rgba(244,247,250,.5)'; cx.lineWidth=Math.max(.6,.7*z);
+        for(const ox of [.34,.46]){ const a=PF(ox,.22), b=PF(ox,.48); cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.stroke(); }
+        const ts=1.0*z;
+        for(let i=0;i<4;i++){ const [tx,ty]=PF(.30+i*.05,.30); trolley(tx,ty,ts); }
+        { const [tx,ty]=PF(.12,.40); trolley(tx,ty,ts); }                                 // a stray cart left out front
         break; }
-      case 1: { // OFFICE BLOCK: slab tower + rooftop plant room
-        const f=vol(sx,sy,0,0,.34,.22,24*hf,'#6fa0d6',{roof:'#3d5f86'});
-        faceWin(f,Math.max(1,Math.round(4*hf)),4,night);
-        vol(sx,sy,.04,-.04,.12,.10,4*hf+24*hf,'#4d6b8e',{roof:'#3a516b',noShadow:true});
+      case 1: { // OFFICE BLOCK: a tall tower beside a lower wing — both rising from the street
+        const wing=vol(sx,sy,-.13,.05,.16,.18,15*hf,'#6fa0d6',{roof:'#3d5f86'});
+        faceWin(wing,Math.max(1,Math.round(3*hf)),3,night);
+        const tower=vol(sx,sy,.16,.03,.16,.15,26*hf,'#5b8ec6',{roof:'#34557a'});
+        faceWin(tower,Math.max(2,Math.round(5*hf)),3,night);
+        // a real plant room sitting on the tower roof (not a column poking up through the facade)
+        const {T,R,B,L}=tower, fp=(u,v)=>[T[0]+(R[0]-T[0])*u+(L[0]-T[0])*v, T[1]+(R[1]-T[1])*u+(L[1]-T[1])*v];
+        const ph=3.2*z, m=.27, bT=fp(m,m), bR=fp(1-m,m), bB=fp(1-m,1-m), bL=fp(m,1-m);
+        cx.fillStyle=shade('#4d6b8e',.66); quadF(bL,bB,[bB[0],bB[1]-ph],[bL[0],bL[1]-ph]);
+        cx.fillStyle=shade('#4d6b8e',.84); quadF(bB,bR,[bR[0],bR[1]-ph],[bB[0],bB[1]-ph]);
+        cx.fillStyle='#3a516b'; quadF([bT[0],bT[1]-ph],[bR[0],bR[1]-ph],[bB[0],bB[1]-ph],[bL[0],bL[1]-ph]);
         break; }
       case 2: { // RETAIL ROW: three attached shops of differing heights
         vol(sx,sy,-.22,.06,.14,.26,9*hf,'#c08a6a',{roof:'#7a4e3c'});
         vol(sx,sy,0,.06,.14,.26,13*hf,'#9cc97f',{roof:'#5a7a48'});
         const f3=vol(sx,sy,.22,.06,.14,.26,11*hf,'#7fb3c9',{roof:'#4d7b91'});
         break; }
-      case 3: { // BISTRO: gabled house + pergola terrace on posts
-        const f=vol(sx,sy,-.1,-.1,.26,.26,12*hf,'#c9505e',{roof:'#7a2e38'});
-        gable(f,f.cx,12*hf*z,'#7a2e38',z);
-        cx.strokeStyle='#8a6d4e'; cx.lineWidth=1*z;
-        for(const [px3,py3] of [[6,1],[12,4],[6,5],[12,8]]){
-          cx.beginPath(); cx.moveTo(sx+px3*z,cyp+py3*z); cx.lineTo(sx+px3*z,cyp+py3*z-6*z); cx.stroke();
-        }
-        for(let i=0;i<4;i++){ cx.beginPath(); cx.moveTo(sx+5*z,cyp-5*z+i*1.4*z); cx.lineTo(sx+13*z,cyp-2*z+i*1.4*z); cx.stroke(); }
-        if (night){ cx.fillStyle='#ffe9a8'; for(let i=0;i<3;i++){ cx.beginPath(); cx.arc(sx+(7+i*2.6)*z, cyp-3.4*z+i*z, .6*z, 0, 7); cx.fill(); } }
+      case 3: { // BISTRO: a warm corner café — glazed front under a striped awning, terrace tables out front
+        const PAL=[                                                                    // per-bistro accent scheme so a street of them isn't uniform
+          {awn:'#a8323a',sign:'#7a2e2a',tbl:'#b23a42',roof:'#9a3b34'},                 // red
+          {awn:'#2f7d54',sign:'#234f37',tbl:'#357a50',roof:'#2f5d42'},                 // green
+          {awn:'#2f6aa8',sign:'#274f7a',tbl:'#3a6f9e',roof:'#2e4d6b'},                 // blue
+          {awn:'#9a6a2e',sign:'#5d3d20',tbl:'#a8772f',roof:'#6b4a2e'},                 // ochre
+          {awn:'#8a2f5a',sign:'#5d2440',tbl:'#9a3a64',roof:'#6b2848'},                 // plum
+        ][((c.vary*97)|0)%5];
+        const f=vol(sx,sy,-.12,-.10,.28,.26,14*hf,'#e7d8c0',{roof:PAL.roof});
+        faceWin(f,2,3,night,(side,u,vT)=>vT>.5);                                       // upstairs windows only
+        signBand(f,'R',.40,.50,PAL.sign); signBand(f,'L',.40,.50,shade(PAL.sign,.9));  // name fascia
+        storefront(f,'R',.06,.94,.52,night); storefront(f,'L',.06,.94,.52,night);      // café glazing wrapping the corner
+        awning3D(f,'R',.52,.14,[PAL.awn,'#f0e6d2']);                                    // striped awnings in the café's colour
+        awning3D(f,'L',.52,.14,[shade(PAL.awn,.92),'#ece2cc']);
+        cafeTable(sx,sy,.30,.08,PAL.tbl);                                              // pavement terrace
+        cafeTable(sx,sy,.10,.30,PAL.tbl);
+        cafeTable(sx,sy,.32,.32,PAL.tbl);
         break; }
       case 4: { // GYM: barrel-roofed sports hall
         const f=vol(sx,sy,0,-.04,.44,.30,9*hf,'#5d6b7d',{roof:'#4a5663'});
@@ -6759,23 +7124,75 @@ function drawCom(c,sx,sy,cyp,hf,night,z,pk,now){
         cx.fillRect(sx-5.6*z, cyp-9*hf*z-12*hf*z, 1.6*z, 3.2*z);
         cx.fillRect(sx+4*z,  cyp-9*hf*z-12*hf*z, 1.6*z, 3.2*z);
         break; }
-      case 5: { // BANK: temple front — columns, pediment, solid hall behind
-        const hall=vol(sx,sy,.06,.05,.30,.26,13*hf,'#ded8c8',{roof:'#a8a090'});
-        for(let i=0;i<4;i++) cyl(sx,sy,-.28+i*0.0,-.30+i*.18,.05,11*hf,'#e8e3d3');
-        const ped=vol(sx,sy,-.26,-.04,.06,.30,11*hf,'#ded8c8',{roof:'#c8c0ae',noShadow:true});
-        gable(ped,ped.cx,11*hf*z,'#b8b0a0',z);
+      case 5: { // BANK: a marble temple — the cella matches the colonnade width, under one pedimented gable
+        const PT=(ox,oy)=>[sx+(ox-oy)*TW/2*z, sy+TH/2*z+(ox+oy)*TH/2*z];
+        const colY=.34, cellaFront=.26, cellaBack=-.22, hCol=9*hf;
+        // the cella spans exactly the colonnade (ox -.18..+.18), set just behind the porch
+        const f=vol(sx,sy, 0, (cellaFront+cellaBack)/2, .18, (cellaFront-cellaBack)/2, hCol, '#ded8c8', {roof:'#cfc8b6'});
+        faceWin(f,1,3,night);
+        vol(sx,sy,0,.40,.24,.12,1.6,'#d6d0c0',{roof:'#ece5d2',noShadow:true});      // stylobate steps under the portico
+        const cpts=[];
+        for (let i=0;i<4;i++){ const cox=-.18+i*.12; cyl(sx,sy,cox,colY,.045,hCol,'#ece6d4'); cpts.push(PT(cox,colY)); }
+        const bY=hCol*z, c0=cpts[0], cN=cpts[cpts.length-1];
+        const ux=cN[0]-c0[0], uy=cN[1]-c0[1], ul=Math.hypot(ux,uy)||1, ex=ux/ul*2.4*z, ey=uy/ul*2.4*z, cap=.6*z, th=2*z;
+        const E0=[c0[0]-ex,c0[1]-ey-bY+cap], EN=[cN[0]+ex,cN[1]+ey-bY+cap];
+        cx.fillStyle='#dcd6c6';                                                     // entablature beam riding the column tops
+        cx.beginPath(); cx.moveTo(E0[0],E0[1]); cx.lineTo(EN[0],EN[1]); cx.lineTo(EN[0],EN[1]-th); cx.lineTo(E0[0],E0[1]-th); cx.closePath(); cx.fill();
+        const FL=[E0[0],E0[1]-th], FR=[EN[0],EN[1]-th];
+        // the pediment IS the front of one gable roof, extruded straight back over the whole cella
+        pediment3D(FL,FR,4.6*z,(colY-cellaBack)*TW/2*z,'#ccc6b4',z);
+        cx.fillStyle='#b0a578'; cx.beginPath(); cx.arc((FL[0]+FR[0])/2,(FL[1]+FR[1])/2-1.9*z,1.1*z,0,7); cx.fill();   // medallion on the tympanum
+        if (night){ cx.fillStyle='rgba(255,236,180,.4)';
+          for (let i=0;i<cpts.length-1;i++){ const gx=(cpts[i][0]+cpts[i+1][0])/2, gy=(cpts[i][1]+cpts[i+1][1])/2;
+            cx.fillRect(gx-0.5*z, gy-bY+1*z, 1.0*z, bY-2.4*z); } }
         break; }
-      default: { // CINEMA: low lobby with marquee + tall windowless fly tower behind
-        const fly=vol(sx,sy,.12,.10,.24,.22,22*hf,'#3e3a4e',{roof:'#262236'});
-        const lobby=vol(sx,sy,-.2,-.16,.20,.22,8*hf,'#56506b',{roof:'#3e3a4e',noShadow:true});
-        cx.fillStyle = night?'#ffd23f':'#c9b894';
-        cx.beginPath(); cx.moveTo(lobby.L[0],lobby.L[1]+1.4*z); cx.lineTo(lobby.B[0],lobby.B[1]+1.4*z); cx.lineTo(lobby.B[0],lobby.B[1]+4.6*z); cx.lineTo(lobby.L[0],lobby.L[1]+4.6*z); cx.closePath(); cx.fill();
-        if (night){ cx.fillStyle='#fff'; for(let i=0;i<5;i++){ cx.beginPath(); cx.arc(lobby.L[0]+2*z+i*2.6*z, lobby.L[1]+2.8*z+i*1.2*z, .55*z, 0, 7); cx.fill(); } }
-        cx.fillStyle='#c0392b'; cx.fillRect(fly.cx-2*z, fly.cy-fly.H*0.6, 2.6*z, 4*z);
+      case 6: { // CINEMA: one auditorium mass with a lit marquee, blade sign & glowing entrance
+        const hall=vol(sx,sy,0,0,.32,.28,15*hf,'#3f3b52',{roof:'#2a2638'});
+        storefront(hall,'R',.08,.92,.6,night, night?'rgba(255,206,110,.95)':null);       // glazed, glowing entrance
+        storefront(hall,'L',.10,.92,.6,night, night?'rgba(255,206,110,.95)':null);
+        signBand(hall,'R',.30,.44,'#b23a32'); signBand(hall,'L',.30,.44,'#9c322b');       // red name/poster band
+        awning3D(hall,'R',.5,.16,['#caa24a','#f2e3c2']);                                  // bold marquee wrapping the corner
+        awning3D(hall,'L',.5,.16,['#caa24a','#f2e3c2']);
+        for(const side of ['L','R']){                                                     // chase-lights strung along the marquee edge
+          const ov=outV(side), drop=Math.min(2.2*z, hall.H*.16), vH=Math.min(5*z, hall.H*.42);
+          const La=facePt(hall,side,.03,.50), Ra=facePt(hall,side,.97,.50);
+          const Lf=[La[0]+ov[0]*.16, La[1]+ov[1]*.16+drop+vH], Rf=[Ra[0]+ov[0]*.16, Ra[1]+ov[1]*.16+drop+vH];
+          cx.fillStyle = night?'#fff3c0':'#efe2c0';
+          for(let i=0;i<6;i++){ const t=(i+.5)/6; cx.beginPath(); cx.arc(Lf[0]+(Rf[0]-Lf[0])*t, Lf[1]+(Rf[1]-Lf[1])*t, .7*z, 0,7); cx.fill(); }
+        }
+        // vertical blade sign rising past the roofline on the near corner — the unmistakable cinema mark
+        const bX=hall.B[0], topY=hall.B[1]-7*z, botY=hall.B[1]+hall.H*0.45, bw=2.2*z;
+        cx.fillStyle='#2a2733'; cx.fillRect(bX-bw, topY, bw*2, botY-topY);
+        cx.fillStyle='#1d1b25'; cx.beginPath(); cx.moveTo(bX-bw,topY); cx.lineTo(bX,topY-3.4*z); cx.lineTo(bX+bw,topY); cx.closePath(); cx.fill();   // chevron crown
+        const seg=(botY-topY-3*z)/5;
+        cx.fillStyle = night?'#ffd23f':'#d94c44';
+        for(let i=0;i<5;i++) cx.fillRect(bX-1.5*z, topY+2.4*z+i*seg, 3*z, seg*0.62);     // stacked illuminated letter-tiles
+        if(night){
+          cx.fillStyle='rgba(255,228,150,.9)';
+          for(let i=0;i<7;i++){ const yy=topY+1.4*z+i*((botY-topY)/6);
+            cx.beginPath(); cx.arc(bX-bw,yy,.6*z,0,7); cx.fill(); cx.beginPath(); cx.arc(bX+bw,yy,.6*z,0,7); cx.fill(); }
+          const g=cx.createRadialGradient(bX,(topY+botY)/2,1*z,bX,(topY+botY)/2,16*z);
+          g.addColorStop(0,'rgba(255,210,120,.28)'); g.addColorStop(1,'rgba(255,210,120,0)');
+          cx.fillStyle=g; cx.fillRect(bX-16*z,topY-4*z,32*z,botY-topY+12*z);
+        }
+        break; }
+      default: { // CAR DEALERSHIP: a floor-to-ceiling glass showroom + a forecourt of cars under a sign pylon
+        const f=V(-.04,-.10,.30,.24,13*hf,'#dfe6ec',{roof:'#aab4bd'});
+        storefront(f,SD('R'),.04,.96,.12,night); storefront(f,SD('L'),.04,.96,.12,night);  // full-height showroom glass
+        signBand(f,SD('R'),.04,.16,'#2f4a6a'); signBand(f,SD('L'),.04,.16,'#27405d');       // brand fascia above the glass
+        cx.fillStyle='#8a9098'; quadF(PF(.08,.10),PF(.50,.10),PF(.50,.52),PF(.08,.52));     // tarmac forecourt apron
+        cx.strokeStyle='rgba(244,247,250,.4)'; cx.lineWidth=Math.max(.55,.6*z);            // parking bay markings
+        for(const oy of [.24,.38]){ const a=PF(.12,oy), b=PF(.46,oy); cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.stroke(); }
+        const cols=['#c83a3a','#3a72c8','#e6e9ec'];                                        // cars on display, drawn front-to-back
+        for(let i=0;i<3;i++){ const oy=.18+i*.13;
+          V(.30,oy,.09,.06,2.2,cols[i],{roof:shade(cols[i],1.12)});                        // body
+          V(.30,oy-.01,.052,.034,3.3,shade(cols[i],1.05),{roof:'rgba(195,218,238,.92)',noShadow:true}); }   // cabin + glass
+        const py=CY(-.30,.30,.04,17*hf,'#cfd6dc');                                         // tall corner sign pylon
+        cx.fillStyle=night?'#ffd23f':'#2f6ad0'; cx.beginPath(); cx.arc(py.cx,py.cy-py.H,3*z,0,7); cx.fill();
       }
     }
   } else { // lv3
-    switch(pk(5)){
+    switch(pk(6)){
       case 0: { // OFFICE TOWER on a podium
         vol(sx,sy,0,0,.40,.34,8*hf,'#5d7ba0',{roof:'#46618a'});
         const t=vol(sx,sy,0,0,.26,.22,38*hf,'#79b6e8',{roof:'#2e4a6b',noShadow:true});
@@ -6810,20 +7227,60 @@ function drawCom(c,sx,sy,cyp,hf,night,z,pk,now){
         for(let i=0;i<3;i++){
           cx.beginPath(); cx.moveTo(f.L[0],f.L[1]+f.H*(0.22+i*0.26)); cx.lineTo(f.B[0],f.B[1]+f.H*(0.22+i*0.26)); cx.lineTo(f.B[0],f.B[1]+f.H*(0.22+i*0.26)+2.4*z); cx.lineTo(f.L[0],f.L[1]+f.H*(0.22+i*0.26)+2.4*z); cx.closePath(); cx.fill();
         }
+        const GIFTS=[['#c33b4e','#ecd98a'],['#2f7d6b','#e7d3a1'],['#3a5fa8','#e8c45a'],['#b8553a','#efe2c4'],['#7a4b9e','#d8c87a'],['#1f6f8f','#e6b3c2'],['#a8324e','#cfd8e0'],['#4c6b2f','#e9d27a']];
+        const gp=GIFTS[((c.vary*131)|0)%GIFTS.length];                       // per-tile festive wrap so stores don't all look identical
+        giftBox(sx,sy-f.H,0,0,.12,7,gp[0],gp[1]);   // a festive wrapped present perched on the roof (lifted to the roof plane)
         break; }
-      case 3: { // SHOPPING MALL: long wings + glass barrel atrium spine + anchor
-        vol(sx,sy,-.16,.02,.26,.34,11*hf,'#d8d3c8',{roof:'#b8b0a4'});
-        vol(sx,sy,.26,.02,.16,.34,15*hf,'#c8c0b4',{roof:'#a8a094'});
-        const sp=vol(sx,sy,.03,.02,.10,.34,13*hf,'#bcd6e0',{roof:'#9ab8c4',noShadow:true});
-        archRoof(sp,'#cfe2ea',5*hf);
-        cx.fillStyle='#e06a2a'; cx.fillRect(sx-13*z, cyp-7*z, 7*z, 2.4*z);
+      case 3: { // SHOPPING MALL: a large round glazed rotunda crowned by a glass dome
+        const d=cyl(sx,sy,0,0,.46,13*hf,'#acc2d4');
+        const yAt=vy=>(d.cy-d.H)+d.H*vy;                                                       // body height fraction → screen y of that ring's centre
+        const fillBand=(v0,v1,col)=>{ cx.fillStyle=col; cx.beginPath();                        // a crescent ring hugging the visible (front) curve
+          cx.ellipse(d.cx,yAt(v0),d.rx,d.ry,0,0,Math.PI);
+          cx.ellipse(d.cx,yAt(v1),d.rx,d.ry,0,Math.PI,0,true); cx.closePath(); cx.fill(); };
+        fillBand(.86,1,'#6f7782');                                                             // stone plinth at the base
+        fillBand(0,.08,'#cdd8e0');                                                             // parapet at the top
+        cx.strokeStyle='rgba(64,88,108,.45)'; cx.lineWidth=Math.max(.55,.6*z);                 // ribbon-glazing mullions
+        for(const vy of [.30,.50,.70]){ cx.beginPath(); cx.ellipse(d.cx,yAt(vy),d.rx,d.ry,0,0,Math.PI); cx.stroke(); }
+        for(let i=1;i<12;i++){ const a=Math.PI*i/12, px=d.cx+d.rx*Math.cos(a), s2=d.ry*Math.sin(a);
+          cx.beginPath(); cx.moveTo(px,(d.cy-d.H)+s2); cx.lineTo(px,d.cy+s2); cx.stroke(); }
+        // glazed dome on the roof
+        const dr=d.rx*0.6, dh=d.ry*2.7, dcy=d.cy-d.H;
+        cx.fillStyle='#aebfcb'; cx.beginPath(); cx.ellipse(d.cx,dcy,dr,dr*(d.ry/d.rx),0,0,Math.PI); cx.fill();   // lantern base ring
+        const dome=cx.createLinearGradient(d.cx-dr,dcy-dh,d.cx+dr,dcy);
+        dome.addColorStop(0,'#eef5f9'); dome.addColorStop(.55,'#bcd6e6'); dome.addColorStop(1,'#8fb0c6');
+        cx.fillStyle=dome; cx.beginPath(); cx.ellipse(d.cx,dcy,dr,dh,0,Math.PI,2*Math.PI); cx.fill();
+        cx.strokeStyle='rgba(80,104,124,.5)'; cx.lineWidth=Math.max(.6,.7*z);                  // meridian ribs
+        for(const w of [dr*.36,dr*.72]){ cx.beginPath(); cx.ellipse(d.cx,dcy,w,dh,0,Math.PI,2*Math.PI); cx.stroke(); }
+        cx.beginPath(); cx.moveTo(d.cx,dcy-dh); cx.lineTo(d.cx,dcy); cx.stroke();
+        cx.beginPath(); cx.ellipse(d.cx,dcy-dh*0.5,dr*0.7,dh*0.5*(d.ry/d.rx)+0.4,0,0,Math.PI); cx.stroke();      // a latitude rib
+        if(night){ const g=cx.createRadialGradient(d.cx,dcy-dh*0.4,2*z,d.cx,dcy-dh*0.4,dr*1.5);
+          g.addColorStop(0,'rgba(255,236,170,.5)'); g.addColorStop(1,'rgba(255,236,170,0)');
+          cx.fillStyle=g; cx.beginPath(); cx.ellipse(d.cx,dcy,dr,dh,0,Math.PI,2*Math.PI); cx.fill(); }
+        // entrance: glazed doors under a flat canopy at the front of the rotunda
+        const fr=d.cy+d.ry;
+        cx.fillStyle = night?'rgba(255,226,150,.95)':'rgba(120,150,176,.92)';
+        cx.fillRect(d.cx-5*z, fr-7*z, 10*z, 7*z);
+        cx.strokeStyle='rgba(18,24,34,.5)'; cx.lineWidth=Math.max(.5,.6*z);
+        cx.beginPath(); cx.moveTo(d.cx,fr-7*z); cx.lineTo(d.cx,fr); cx.stroke();
+        cx.fillStyle='#b0a89a'; cx.fillRect(d.cx-7*z, fr-7.8*z, 14*z, 1.9*z);
         break; }
-      default: { // TECH CAMPUS: two stacked glass volumes
+      case 4: { // TECH CAMPUS: two stacked glass volumes
         // draw each volume's windows immediately so the front block occludes the back one cleanly
         const a=vol(sx,sy,-.18,-.12,.20,.20,26*hf,'#6ec4b8',{roof:'#2e5b54'});
         faceWin(a,Math.max(2,Math.round(6*hf)),2,night);
         const b2=vol(sx,sy,.20,.16,.18,.18,20*hf,'#7fd0c4',{roof:'#356b62'});
         faceWin(b2,Math.max(2,Math.round(5*hf)),2,night);
+        break; }
+      default: { // CONVENTION CENTER: a broad glazed hall under a curved roof, banner flags out front
+        const f=vol(sx,sy,0,-.02,.46,.34,14*hf,'#aebccb',{roof:'#7e8c9b'});
+        archRoof(f,'#9fb0c0',10*hf);                                                       // sweeping barrel roof
+        storefront(f,'R',.08,.92,.40,night); storefront(f,'L',.08,.92,.40,night);          // full curtain-wall glazing
+        signBand(f,'R',.28,.38,'#2f5d86'); signBand(f,'L',.28,.38,'#274f72');              // entrance fascia
+        const P=(ox,oy)=>[sx+(ox-oy)*TW/2*z, sy+TH/2*z+(ox+oy)*TH/2*z];                     // a row of banner flags along the forecourt
+        const flags=['#c8443a','#caa23a','#3a78c8'];
+        for(let i=0;i<3;i++){ const [px,py]=P(.34, .42-i*.20);
+          cx.fillStyle='#cfd6dc'; cx.fillRect(px-.4*z, py-15*z, .8*z, 15*z);                // pole
+          cx.fillStyle=flags[i]; cx.beginPath(); cx.moveTo(px+.4*z,py-15*z); cx.lineTo(px+6*z,py-13.3*z); cx.lineTo(px+.4*z,py-9.5*z); cx.closePath(); cx.fill(); }
       }
     }
   }
@@ -6920,7 +7377,8 @@ function drawInd(c,sx,sy,cyp,hf,night,z,pk,now){
         cyl(sx,sy,.08,-.22,.10,6*hf+12*hf,'#c8cdd4');
         cx.strokeStyle='#9aa3ad'; cx.lineWidth=1*z;
         cx.beginPath(); cx.moveTo(f.cx-4*z,f.cy-f.H-5*z); cx.lineTo(f.cx+3*z,f.cy-f.H-4*z); cx.stroke();
-        cx.fillStyle='#3a77b8'; cx.fillRect(f.L[0]+1.5*z, f.L[1]+f.H*0.55, 6*z, 2*z);
+        cx.fillStyle='#3a77b8';                                                         // loading door, in the front wall plane
+        quadF(facePt(f,'L',.08,.55),facePt(f,'L',.26,.55),facePt(f,'L',.26,.965),facePt(f,'L',.08,.965));
       }
     }
   } else { // lv3
@@ -6950,10 +7408,8 @@ function drawInd(c,sx,sy,cyp,hf,night,z,pk,now){
         cx.fillStyle='#8b97a5';
         cx.beginPath(); cx.moveTo(f.L[0],f.L[1]+f.H*0.42); cx.lineTo(f.B[0],f.B[1]+f.H*0.42); cx.lineTo(f.B[0]+3*z,f.B[1]+f.H*0.42+3*z); cx.lineTo(f.L[0]+3*z,f.L[1]+f.H*0.42+3*z); cx.closePath(); cx.fill();
         cx.fillStyle='#5d6b7d';
-        for(let i=0;i<4;i++){
-          const u=0.15+i*0.22;
-          const lx2=f.L[0]+(f.B[0]-f.L[0])*u, ly2=f.L[1]+(f.B[1]-f.L[1])*u;
-          cx.fillRect(lx2, ly2+f.H*0.55, 2.6*z, f.H*0.42);
+        for(let i=0;i<4;i++){ const u=0.15+i*0.22, hw=.045;                            // roller dock doors seated in the wall plane
+          quadF(facePt(f,'L',u-hw,.55),facePt(f,'L',u+hw,.55),facePt(f,'L',u+hw,.965),facePt(f,'L',u-hw,.965));
         }
         cx.fillStyle='#d8dde3'; cx.fillRect(sx+8*z, cyp+3*z, 7*z, 3*z);
         cx.fillStyle='#3e4a58'; cx.fillRect(sx+14.4*z, cyp+3.9*z, 2*z, 2.1*z);
@@ -6988,6 +7444,7 @@ function drawInd(c,sx,sy,cyp,hf,night,z,pk,now){
 function render(now){
   BLD_TINT=null;   // safety: never carry a tower tint across frames
   const W=cv.width/DPR, H=cv.height/DPR;
+  if (shoreDirty) recomputeShore();
   updateSeason();
   WX.rain += (WX.target-WX.rain)*0.22;          // once per frame, not once per tile
   // sky
@@ -7113,6 +7570,7 @@ function render(now){
   const sLo=Math.max(0, Math.floor((-200*S.zoom - S.oy)/TH2v));
   const sHi=Math.min(2*(G-1), Math.ceil((H + TH*2*S.zoom - S.oy)/TH2v));
   const dLo=(-TW*S.zoom - S.ox)/TW2v, dHi=(W + TW*S.zoom - S.ox)/TW2v;
+  STRUCT_Q=[];   // collect each band's building superstructures, flushed (height-sorted) after its ground
   for (let s=sLo; s<=sHi; s++){
     const vxA=Math.max(0, s-G+1, Math.ceil((s+dLo)/2)-1);
     const vxB=Math.min(G-1, s,   Math.floor((s+dHi)/2)+1);
@@ -7125,6 +7583,9 @@ function render(now){
       if (map[y][x].bus) drawBusStop(px,py);
       if (map[y][x].rail) drawRail(x,y);
     }
+    // band complete: ground is down → paint the deferred buildings tallest/2×2-first so shorter
+    // single-tile neighbours on this diagonal land on top, then the vehicles riding the same band
+    if (STRUCT_Q.length){ STRUCT_Q.sort((a,b)=>b.k-a.k); for (const e of STRUCT_Q) e.fn(); STRUCT_Q.length=0; }
     // flush every vehicle and pedestrian whose footprint ends on this diagonal
     const cb=carBands.get(s);
     if (cb) for (const e of cb) drawVehicle(e.car, e.fx, e.fy);
@@ -7133,6 +7594,7 @@ function render(now){
     const tbd=trainBands.get(s);
     if (tbd){ tbd.sort((a,b)=>a.key-b.key); for (const e of tbd) drawTrainCar(e.tr, e.k, trNight); }
   }
+  STRUCT_Q=null;   // back to immediate-draw for ghost preview / synthetic-cell renders below
   // smoke
   for (let i=smoke.length-1;i>=0;i--){
     const p=smoke[i]; p.age += 1/60;
@@ -7323,9 +7785,17 @@ function render(now){
         if (WSRC[c.t]) col='rgba(90,200,255,.8)';
         else if (powerNeed(c)>0 || ROADTYPE[c.t]) col = c.wt ? 'rgba(90,170,255,.4)' : 'rgba(255,140,60,.5)';
       } else if (S.overlay==='crime'){
-        const cr2=crime[idx(x,y)];
-        if (map[y][x].t==='police') col='rgba(110,150,255,.85)';
-        else if (cr2>0.5) col=`rgba(255,${Math.max(40,170-cr2*9)|0},60,${Math.min(.55,.10+cr2*.035)})`;
+        if ((S.safetyView||'all')==='fire'){
+          if (c.t!=='water'){
+            const fc=cover.fire[idx(x,y)];
+            if (ZONE[c.t] && c.lv>0) col = fc>0.05 ? `rgba(90,205,180,${Math.min(.5,.14+fc*.34)})` : 'rgba(255,90,70,.42)';
+            else if (fc>0.05) col=`rgba(90,205,180,${Math.min(.32,fc*.30)})`;
+          }
+        } else {
+          const cr2=crime[idx(x,y)];
+          if (c.t==='police') col='rgba(110,150,255,.85)';
+          else if (cr2>0.5) col=`rgba(255,${Math.max(40,170-cr2*9)|0},60,${Math.min(.55,.10+cr2*.035)})`;
+        }
       } else if (S.overlay==='edu'){
         const cv2=cover.school[idx(x,y)];
         if (ZONE[c.t] && c.lv>0) col = cv2>0.05 ? `rgba(190,140,255,${Math.min(.48,.12+cv2*.32)})` : 'rgba(255,80,80,.40)';
@@ -7381,10 +7851,11 @@ function render(now){
       }
     }
     else if (S.overlay==='crime'){
+      const sv=S.safetyView||'all';
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
         const c2=map[y][x]; if (c2.part) continue; const t2=c2.t;
-        if (t2==='police') marker(x,y,fr2('police'),'☂','rgba(110,150,255,.95)');
-        else if (t2==='fire') marker(x,y,fr2('fire'),'▲','rgba(255,110,90,.95)');
+        if (t2==='police' && sv!=='fire') marker(x,y,fr2('police'),'☂','rgba(110,150,255,.95)');
+        else if (t2==='fire' && sv!=='police') marker(x,y,fr2('fire'),'▲','rgba(255,110,90,.95)');
       }
     }
     else if (S.overlay==='power'){
@@ -7417,7 +7888,9 @@ function render(now){
     }
     cx.fillStyle='rgba(233,238,245,.9)'; cx.font="11px 'Chakra Petch'"; cx.textAlign='left';
     const legends={density:'DENSITY — pale L1 → vivid L5 towers & skyscrapers · lots level up with demand, power & water, road access, calm traffic and (for homes & shops) land value · L3 lots merge into 2×2 towers', traffic:'TRAFFIC — green light · red gridlock · 🚏 bus stops calm nearby homes', value:'LAND VALUE — pink low · green high · ❀ marks parks & landmarks with their reach', pollution:'POLLUTION — darker is dirtier · 🏭 marks the plants that cause it',
-      crime:`SAFETY — deeper red is rougher · ☂ police patrols · ▲ fire reach · city average ${(S.crimeAvg||0).toFixed(1)}`,
+      crime:(S.safetyView==='police'?`SAFETY · POLICE — deeper red is rougher · ☂ patrol reach · city average ${(S.crimeAvg||0).toFixed(1)}`
+            :S.safetyView==='fire'?'SAFETY · FIRE — teal lots are in reach of a station · red lots aren\'t · ▲ fire reach'
+            :`SAFETY — deeper red is rougher · ☂ police patrols · ▲ fire reach · city average ${(S.crimeAvg||0).toFixed(1)}`),
       edu:`EDUCATION — violet lots are in reach of schools · red lots aren't · workforce ${Math.round((S.edu||0)*100)}% educated`,
       health:`HEALTH — green lots are in reach of care · red lots aren't`,
       power:`POWER — ${Math.round(S.powerUse)}/${S.powerCap} MW · ⚡ plants with direct reach · green served · red unserved`,
@@ -9481,7 +9954,12 @@ function togglePolicy(id){
 renderPolicies();
 
 /* ---------- overlay views ---------- */
+function syncSafetySub(){
+  const ss=document.getElementById('safetySub'); if (!ss) return;
+  ss.classList.toggle('show', S.overlay==='crime');
+}
 function viewsBtnSync(){
+  syncSafetySub();
   const vb=document.getElementById('viewsBtn'); if (!vb) return;
   const active=S.overlay && S.overlay!=='none';
   vb.classList.toggle('on', !!active);
@@ -9498,6 +9976,11 @@ document.querySelectorAll('#views button[data-v]').forEach(b=>b.onclick=()=>{
   S.overlay = off ? 'none' : b.dataset.v;
   document.querySelectorAll('#views button[data-v]').forEach(o=>o.classList.toggle('on', !off && o===b));
   viewsBtnSync(); dirty=true;
+});
+document.querySelectorAll('#safetySub button[data-sv]').forEach(b=>b.onclick=()=>{
+  S.safetyView=b.dataset.sv;
+  document.querySelectorAll('#safetySub button[data-sv]').forEach(o=>o.classList.toggle('on', o===b));
+  dirty=true;
 });
 /* low-rise: flatten skyscrapers so streets and small buildings stay workable */
 S.flatten=false;
@@ -10462,14 +10945,15 @@ function renderCatalog(){
     S.zoom=oldZ;
   }};
   groups.push(['RESIDENTIAL', [
-    mk('Cottage',cell('res',1,.1)), mk('Ranch house',cell('res',1,.35)), mk('Cabin',cell('res',1,.6)), mk('Duplex',cell('res',1,.9)),
-    mk('Townhouses',cell('res',2,.1)), mk('Brownstone',cell('res',2,.35)), mk('Garden flats',cell('res',2,.6)), mk('Stacked flats',cell('res',2,.9)),
-    mk('Apartments',cell('res',3,.15)), mk('Condo',cell('res',3,.5)), mk('Mixed-use',cell('res',3,.85)), mk('Mansion',cell('res',3,.1),85),
+    mk('Cottage',cell('res',1,.1)), mk('Ranch house',cell('res',1,.3)), mk('Cabin',cell('res',1,.5)), mk('Modern house',cell('res',1,.7)), mk('Duplex',cell('res',1,.9)),
+    mk('Townhouses',cell('res',2,.1)), mk('Brownstone',cell('res',2,.3)), mk('Garden flats',cell('res',2,.5)), mk('Corner block',cell('res',2,.7)), mk('Stacked flats',cell('res',2,.9)),
+    mk('Apartments',cell('res',3,.125)), mk('Condo',cell('res',3,.375)), mk('Terraced condo',cell('res',3,.625)), mk('Mixed-use',cell('res',3,.875)), mk('Mansion',cell('res',3,.1),85),
   ]]);
   towerGroups('res','RESIDENTIAL TOWERS').forEach(g=>groups.push(g));
-  groups.push(['COMMERCIAL — SHOPS', COM_NAMES[1].map((n,i)=>mk(n,cell('com',1,(i+0.5)/10)))]);
-  groups.push(['COMMERCIAL — MID', COM_NAMES[2].map((n,i)=>mk(n,cell('com',2,(i+0.5)/7)))]);
-  groups.push(['COMMERCIAL — MAJOR', COM_NAMES[3].map((n,i)=>mk(n,cell('com',3,(i+0.5)/5)))]);
+  // vary = bucket centre (i+0.5)/N where N = the level's variant count, so pk() picks exactly variant i
+  groups.push(['COMMERCIAL — SHOPS', COM_NAMES[1].map((n,i,a)=>mk(n,cell('com',1,(i+0.5)/a.length)))]);
+  groups.push(['COMMERCIAL — MID', COM_NAMES[2].map((n,i,a)=>mk(n,cell('com',2,(i+0.5)/a.length)))]);
+  groups.push(['COMMERCIAL — MAJOR', COM_NAMES[3].map((n,i,a)=>mk(n,cell('com',3,(i+0.5)/a.length)))]);
   towerGroups('com','COMMERCIAL TOWERS').forEach(g=>groups.push(g));
   groups.push(['INDUSTRY — LIGHT', IND_NAMES[1].map((n,i)=>mk(n,cell('ind',1,(i+0.5)/5)))]);
   groups.push(['INDUSTRY — MID', IND_NAMES[2].map((n,i)=>mk(n,cell('ind',2,(i+0.5)/5)))]);
