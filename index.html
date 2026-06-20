@@ -712,6 +712,7 @@
   <button id="scenMenuBtn"><span class="mi" data-mi="scenario"></span><span class="mlbl">Scenarios</span></button>
   <div class="msep"></div>
   <button id="newMenuBtn"><span class="mi" data-mi="newcity"></span><span class="mlbl">New city</span></button>
+  <button id="expandMenuBtn"><span class="mi" data-mi="expand"></span><span class="mlbl">Expand city</span></button>
   <button id="saveMenuBtn"><span class="mi" data-mi="save"></span><span class="mlbl">Save/Load</span></button>
   <div class="msep"></div>
   <button id="photoBtn"><span class="mi" data-mi="photo"></span><span class="mlbl">Photo</span></button>
@@ -988,7 +989,8 @@ const TOOLS = [
       { id:'stadium',    n:'Stadium',     c:1100, ic:'◎', col:'#b86a8f', d:'2×2 grounds · value +12 over 6 tiles' },
       { id:'arena',      n:'Arena',       c:1400, ic:'◍', col:'#8f6ab8', d:'2×2 grounds · value +12 over 6 tiles · light show' },
       { id:'zoo',        n:'City Zoo',    c:2600, ic:'🦁', col:'#c79a5b', d:'3×3 grounds · home to dozens of animals · value +16 over 8 tiles' },
-      { id:'airport',    n:'Airport',     c:9000, ic:'✈', col:'#9ab8d8', d:'4×2 runway · rotatable · tourism income scales with population', lockAt:6 } ] },
+      { id:'airport',    n:'Airport',     c:9000, ic:'✈', col:'#9ab8d8', d:'4×2 runway · rotatable · tourism income scales with population', lockAt:6 },
+      { id:'port',       n:'Seaport',     c:1800, ic:'⚓', col:'#3a77b8', d:'2×2 waterfront dock · ships sail the river · value +9 over 5 tiles' } ] },
   { id:'cityhall', n:'City Hall', c:1500, ic:'⚖', col:'#c9b87a', sub:[
       { id:'church',   n:'Church',   c:700,  ic:'✝', col:'#e0d8c6', d:'a neighbourhood landmark with a steeple · value +12 over 6 tiles' },
       { id:'cityhall', n:'City Hall', c:1500, ic:'⚖', col:'#c9b87a', d:'value +14 over 6 tiles', lockAt:3 },
@@ -1016,6 +1018,7 @@ const MENU_IC={
   disaster: MI('<path d="M12 3 22 20H2z"/><path d="M12 9v5"/><circle cx="12" cy="17" r=".9" fill="currentColor" stroke="none"/>'),
   scenario: MI('<path d="M6 21V4"/><path d="M6 4h11l-2.5 3.5L17 11H6"/>'),
   newcity: MI('<path d="M12 3v6M9 6h6"/><path d="M5 21V12l3-2v11M19 21v-7l-3-2v9"/><path d="M3 21h18"/>'),
+  expand: MI('<rect x="4" y="4" width="11" height="11" rx="1.5"/><path d="M15 9h5v11H9v-5"/><path d="M12.5 12.5l5.5 5.5M18 14v4h-4"/>'),
   save: MI('<path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><path d="M4 17v3h16v-3"/>'),
   load: MI('<path d="M12 13V3"/><path d="M8 7l4-4 4 4"/><path d="M4 17v3h16v-3"/>'),
   audio: MI('<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11"/>'),
@@ -1251,13 +1254,13 @@ const TOOLDEF={};
 for (const t of TOOLS){ if (t.id) TOOLDEF[t.id]=t; if (t.sub) for (const o of t.sub) TOOLDEF[o.id]=o; }
 TOOLDEF.cityhall.lockAt=3; TOOLDEF.monument.lockAt=5;
 TOOLDEF.botanic.lockAt=6; TOOLDEF.museum.lockAt=7; TOOLDEF.titan.lockAt=9; TOOLDEF.airport.lockAt=6;
-const UPKEEP = { power:30, solar:6, nuclear:95, fusion:280, police:22, fire:22, school:14, highschool:26, university:60, hospital:28, clinic:14, medcenter:55, park:2, playground:3, plaza:4, pump:14, tower:9, garden:5, pool:15, stadium:46, arena:58, cityhall:30, monument:12, botanic:18, museum:26, titan:60, airport:42, spaceport:75, landfill:16, recycling:34, incinerator:48, zoo:40, church:10 };
+const UPKEEP = { power:30, solar:6, nuclear:95, fusion:280, police:22, fire:22, school:14, highschool:26, university:60, hospital:28, clinic:14, medcenter:55, park:2, playground:3, plaza:4, pump:14, tower:9, garden:5, pool:15, stadium:46, arena:58, cityhall:30, monument:12, botanic:18, museum:26, titan:60, airport:42, spaceport:75, landfill:16, recycling:34, incinerator:48, zoo:40, church:10, port:24 };
 const PLANT = { power:{cap:400,pol:30,polR:5,r:5}, solar:{cap:120,pol:0,polR:0,r:3}, nuclear:{cap:1600,pol:3,polR:3,r:7}, fusion:{cap:4200,pol:1,polR:2,r:9} };
 const WSRC  = { pump:{cap:600,r:5}, tower:{cap:240,r:3} };
 /* sanitation sinks: garbage capacity reached over the road network; each also emits some smog */
 const WSTSRC = { landfill:{cap:1600,pol:10,polR:4}, recycling:{cap:3000,pol:2,polR:2}, incinerator:{cap:4200,pol:6,polR:3} };
 /* leisure buildings raise land value over their own radius — bigger venues reach further */
-const LEIS = { park:[3,7], playground:[3,8.5], garden:[4,13], pool:[4,10], plaza:[4,10], stadium:[6,12], arena:[6,12.5], cityhall:[6,14], monument:[7,16], botanic:[8,15], museum:[8,17], titan:[9,20], airport:[5,8], spaceport:[8,18], zoo:[8,16], church:[6,12] };
+const LEIS = { park:[3,7], playground:[3,8.5], garden:[4,13], pool:[4,10], plaza:[4,10], stadium:[6,12], arena:[6,12.5], cityhall:[6,14], monument:[7,16], botanic:[8,15], museum:[8,17], titan:[9,20], airport:[5,8], spaceport:[8,18], zoo:[8,16], church:[6,12], port:[5,9] };
 function powerNeed(c){
   if (ZONE[c.t]) return c.part?0 : [0,3,6,12,30,55,95,150][c.lv]||0;
   if (SVC[c.t] && !PLANT[c.t] && !WSRC[c.t]) return 5;
@@ -1333,6 +1336,79 @@ function setWorldSize(n){
   S.ox = window.innerWidth/2;
   S.oy = window.innerHeight/2 - (G*TH/2)/2;
 }
+// Grow the (square) world in place by adding a `pad`-tile ring on ALL four sides,
+// keeping every existing cell. Existing land shifts by `pad`, so tower roots (grp)
+// shift with it and tile-coord agents/disasters (which can't follow) are dropped —
+// the sim respawns them within a tick. Repeatable up to MAX_G; cost is quadratic,
+// so the cap guards the O(G²) sim.
+const MAX_G = 120;
+function blankCell(){ return { t:'grass', lv:0, dev:0, pw:false, wt:false, ws:false, fire:0, vary:Math.random(), grp:null, part:false, bld:0, bridge:false, rz:null }; }
+function expandWorld(pad){
+  pad=pad|0; if (pad<=0) return false;
+  const oldG=G;
+  const nG=Math.min(MAX_G, oldG+pad*2);
+  if (nG<=oldG) return false;                      // already at the frontier
+  pad=(nG-oldG)>>1;                                // honour the cap, staying symmetric (G stays even)
+  const grid=[];
+  for (let y=0;y<nG;y++) grid[y]=new Array(nG).fill(null);
+  // re-seat existing cells offset by `pad` on every side; tower roots move with them
+  for (let oy=0;oy<oldG;oy++) for (let ox=0;ox<oldG;ox++){
+    const c=map[oy][ox];
+    if (c.grp) c.grp=[c.grp[0]+pad, c.grp[1]+pad];
+    grid[oy+pad][ox+pad]=c;
+  }
+  // fill the border ring: continue water (rivers/coast) straight out from the
+  // nearest original edge tile; everything else is fresh buildable grass
+  const lo=pad, hi=nG-1-pad, newTiles=[];
+  for (let y=0;y<nG;y++) for (let x=0;x<nG;x++){
+    if (grid[y][x]) continue;
+    const src=grid[Math.max(lo,Math.min(hi,y))][Math.max(lo,Math.min(hi,x))];
+    const cell=blankCell();
+    if (src && src.t==='water') cell.t='water';
+    grid[y][x]=cell;
+    newTiles.push([x,y]);
+  }
+  map.length=0; for (const row of grid) map.push(row);
+  G=nG;
+  // every G²-sized buffer re-strides on G change; realloc + recompute repopulates
+  // the derived fields (traffic/scratch are decayed/recomputed by the sim anyway)
+  allocFields();
+  traffic = new Float32Array(G*G);
+  jobCost = new Float32Array(G*G);
+  homeCost = new Float32Array(G*G);
+  shopCost = new Float32Array(G*G);
+  leisureCost = new Float32Array(G*G);
+  stepCost = new Float32Array(G*G);
+  congSnap = new Float32Array(G*G);
+  // agents & any live disaster hold tile coords the shift invalidated — drop them
+  cars.length=0; svc.length=0; peds.length=0; smoke.length=0; copters.length=0; planes.length=0;
+  trains.length=0; railComp=null; carPairOrd.clear(); DIS=null;
+  cachedRoads=[]; dirtyRoads=true; cachedWalk=[]; dirtyWalk=true; shoreDirty=true;
+  undoStack.length=0; redoStack.length=0; updateUndoUI();   // pre-expand snaps no longer meaningful
+  recomputeNets(); recomputeFields();
+  S.hover=null;
+  S.ox = window.innerWidth/2;
+  S.oy = window.innerHeight/2 - (G*TH/2)/2;
+  dirty=true;
+  // celebrate the new frontier with the same construction juice as placing tiles,
+  // swept diagonally across the ring so the land visibly "builds in" (sampled +
+  // staggered to stay under the FX budget and read as one bloom)
+  newTiles.sort((a,b)=>(a[0]+a[1])-(b[0]+b[1]));
+  const cap=Math.min(newTiles.length, 54), span=newTiles.length/cap, t0=performance.now();
+  for (let i=0;i<cap;i++){
+    const [tx,ty]=newTiles[Math.floor(i*span)];
+    spawnPlaceFX(tx, ty, 'build', '#7fd0a0', t0 + i*16);
+  }
+  spawnFloat((G-1)/2, (G-1)/2, '+'+(pad*2)+' tiles · '+G+'×'+G, '#7fd0a0');
+  sfxPlace(6);
+  return true;
+}
+function doExpand(){
+  if (!S.started){ msg('Start a city first.'); return; }
+  if (expandWorld(2)) msg('<b>City expanded</b> — 2 tiles of new land on every side. Now '+G+'×'+G+'.');
+  else msg('The city is already at its maximum size ('+G+'×'+G+').');
+  updateHUD();
+}
 function genMap(seed){
   if (seed===undefined) seed=(Math.random()*1e9)|0;
   const rnd=mulberry32(seed^0x9e3779b9);
@@ -1345,7 +1421,7 @@ function genMap(seed){
 
 /* ---------- helpers ---------- */
 const ZONE = { res:1, com:1, ind:1 };
-const SVC  = { power:1, park:1, police:1, fire:1, school:1, hospital:1, pump:1, tower:1, garden:1, pool:1, stadium:1, solar:1, nuclear:1, fusion:1, highschool:1, university:1, clinic:1, medcenter:1, playground:1, plaza:1, arena:1, cityhall:1, monument:1, botanic:1, museum:1, titan:1, airport:1, spaceport:1, landfill:1, recycling:1, incinerator:1, zoo:1, church:1 };
+const SVC  = { power:1, park:1, police:1, fire:1, school:1, hospital:1, pump:1, tower:1, garden:1, pool:1, stadium:1, solar:1, nuclear:1, fusion:1, highschool:1, university:1, clinic:1, medcenter:1, playground:1, plaza:1, arena:1, cityhall:1, monument:1, botanic:1, museum:1, titan:1, airport:1, spaceport:1, landfill:1, recycling:1, incinerator:1, zoo:1, church:1, port:1 };
 const ROADTYPE = { road:1, avenue:1 };
 const WALKTYPE = { road:1, avenue:1, path:1 };
 function isWalk(x,y){ return inB(x,y) && WALKTYPE[map[y][x].t]; }
@@ -1450,7 +1526,7 @@ function recomputePower(){
   S.powerUse=use;
 }
 /* buildings conduct utilities to their neighbors: a watered lot shares with the lot next door */
-const CONDUCT = { res:1, com:1, ind:1, park:1, police:1, fire:1, school:1, hospital:1, power:1, pump:1, tower:1, garden:1, pool:1, stadium:1, solar:1, nuclear:1, fusion:1, highschool:1, university:1, clinic:1, medcenter:1, playground:1, plaza:1, arena:1, cityhall:1, monument:1, botanic:1, museum:1, titan:1, airport:1, spaceport:1, landfill:1, recycling:1, incinerator:1, zoo:1, church:1 };
+const CONDUCT = { res:1, com:1, ind:1, park:1, police:1, fire:1, school:1, hospital:1, power:1, pump:1, tower:1, garden:1, pool:1, stadium:1, solar:1, nuclear:1, fusion:1, highschool:1, university:1, clinic:1, medcenter:1, playground:1, plaza:1, arena:1, cityhall:1, monument:1, botanic:1, museum:1, titan:1, airport:1, spaceport:1, landfill:1, recycling:1, incinerator:1, zoo:1, church:1, port:1 };
 function spreadThroughBuildings(key){
   const q=[];
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
@@ -1870,10 +1946,14 @@ function place(x, y, quiet){
     let [fw,fh]=FOOT[t];
     if (S.bOrient && fw!==fh) [fw,fh]=[fh,fw];
     if (x+fw>G || y+fh>G){ if(!quiet) msg('<b>No room</b> — '+def.n+' needs a '+fw+'×'+fh+' footprint inside the map.'); return false; }
+    let byWater=false;
     for (const [qx,qy] of footCells(x,y,fw,fh)){
       const q=map[qy][qx];
       if (!buildClear(q)){ if(!quiet) msg('<b>'+def.n+' needs a clear '+fw+'×'+fh+' footprint.</b> Bulldoze or pick open ground.'); return false; }
+      if (t==='port') for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
+        if (inB(qx+dx,qy+dy) && map[qy+dy][qx+dx].t==='water') byWater=true;
     }
+    if (t==='port' && !byWater){ if(!quiet) msg('<b>Seaports must sit on the waterfront.</b> Set the dock so it touches a river or lake.'); return false; }
     if (S.money < def.c){ if(!quiet) msg('<b>Not enough funds</b> — '+def.n+' costs '+fmt(def.c)+'.'); return 'nofunds'; }
     S.money -= def.c;
     const vr=Math.random();
@@ -1886,6 +1966,7 @@ function place(x, y, quiet){
     dirty=true; recomputeNets(); recomputeFields(); updateHUD();
     if (!quiet){
       if (t==='airport') msg('<b>The airport is open!</b> Tourists fly in — income scales with your population. Keep it powered and connected by road.');
+      else if (t==='port') msg('<b>Seaport open.</b> Ships now ply the waterway — keep it powered and it lifts nearby land value.');
       else msg('<b>'+def.n+' built</b> on its '+fw+'×'+fh+' grounds.');
     }
     return true;
@@ -1929,7 +2010,7 @@ const CAP = {
 const EDU_SMOOTH=0.02;
 /* ---------- multi-tile footprints ---------- */
 /* base [w,h]; non-square types can be rotated at placement (R / the ↻ chip) */
-const FOOT = { airport:[4,2], stadium:[2,2], arena:[2,2], nuclear:[2,2], fusion:[2,2], university:[2,2], medcenter:[2,2], botanic:[2,2], museum:[2,2], titan:[2,2], spaceport:[2,2], zoo:[3,3] };
+const FOOT = { airport:[4,2], stadium:[2,2], arena:[2,2], nuclear:[2,2], fusion:[2,2], university:[2,2], medcenter:[2,2], botanic:[2,2], museum:[2,2], titan:[2,2], spaceport:[2,2], zoo:[3,3], port:[2,2] };
 function footCells(bx,by,w,h){ const r=[]; for(let dy=0;dy<h;dy++)for(let dx=0;dx<w;dx++) r.push([bx+dx,by+dy]); return r; }
 function grpRoot(c){ return map[c.grp[1]][c.grp[0]]; }
 function grpCells(c){ const [bx,by]=c.grp, r=grpRoot(c); return footCells(bx,by, r.fw||2, r.fh||2); }
@@ -3721,6 +3802,23 @@ function drawCell(x,y,now){
       cx.bezierCurveTo(tk.cx-2.2*z, tk.cy-tk.H*.58+3*z, tk.cx-2.6*z, tk.cy-tk.H*.58, tk.cx, tk.cy-tk.H*.58-3*z);
       cx.closePath(); cx.fill();
       break; }
+    case 'port': { // quay apron per tile, full wharf anchored on the view-bottom tile
+      diamond(sx,sy); cx.fillStyle=shade('#7d8893',.96+c.vary*.05); cx.fill();
+      cx.strokeStyle='rgba(38,54,64,.30)'; cx.lineWidth=1; diamond(sx,sy,.98); cx.stroke();
+      if (!c.grp) break;
+      const r=grpRoot(c), [abx,aby]=c.grp, fw=r.fw||2, fh=r.fh||2;
+      let lastX=-1,lastY=-1,best=-1;
+      for (const [qx,qy] of grpCells(c)){
+        const [vqx,vqy]=g2v(qx,qy);
+        if (vqx+vqy>best){ best=vqx+vqy; lastX=qx; lastY=qy; }
+      }
+      if (x===lastX && y===lastY){
+        const [vcx,vcy]=rotC(abx+fw/2, aby+fh/2);
+        const [amx,amy]=toScreen(vcx-.5,vcy-.5);
+        drawPort(amx,amy,z,night,now, fw,fh, r.pw);
+      }
+      break;
+    }
     case 'tower': {
       diamond(sx,sy); cx.fillStyle='#8ba398'; cx.fill();
       const cyp=sy+TH/2*z;
@@ -4946,9 +5044,9 @@ function roofPyramid(f, peak, col){
   return [ax,ay];
 }
 /* glass/metal DOME seated on roof frame f — a half-ellipsoid with meridian ribs. returns apex. */
-function roofDome(f, col){
+function roofDome(f, col, hScale=1){
   const z=S.zoom, tcx=(f.L[0]+f.R[0])/2, tcy=(f.T[1]+f.B[1])/2;
-  const rx=(f.R[0]-f.L[0])/2*0.60, ry=(f.B[1]-f.T[1])/2*0.60, dh=rx*1.25;
+  const rx=(f.R[0]-f.L[0])/2*0.60, ry=(f.B[1]-f.T[1])/2*0.60, dh=rx*1.25*hScale;
   // far rim peeking behind the dome, so it reads as sitting on a round base, not floating
   cx.fillStyle=shade(col,.58); cx.beginPath(); cx.ellipse(tcx,tcy,rx,ry,0,0,7); cx.fill();
   // dome shell: upper dome arc (radiusY dh) closed by the FRONT base arc (radiusY ry) → seated 3D bulge
@@ -5040,7 +5138,7 @@ function massing(x, s){
   }
   const c=s.crown||{kind:'flat'};
   if (c.kind==='pyramid'){ const [ax,ay]=roofPyramid(f,(c.peak||26)*z, c.col||'#3f8f86'); if(c.finial) spire(ax,ay,c.finial,c.finialCol); return null; }
-  if (c.kind==='dome'){ const [dx,dy]=roofDome(f, c.col||'#4f9a86'); if(c.finial){ cx.fillStyle=c.finialCol||'#caa84e'; cx.beginPath(); cx.arc(dx,dy-2*z,1.4*z,0,7); cx.fill(); } return null; }
+  if (c.kind==='dome'){ const [dx,dy]=roofDome(f, c.col||'#4f9a86', c.hScale||1); if(c.finial){ cx.fillStyle=c.finialCol||'#caa84e'; cx.beginPath(); cx.arc(dx,dy-2*z,1.4*z,0,7); cx.fill(); } return null; }
   if (c.kind==='frustum'){ const top=roofFrustum(f,(c.peak||24)*z, c.inset==null?0.5:c.inset, c.col||'#4a5560'); if(c.dormers) frustumDormers(f, top, c.dormers, night); return null; }
   if (c.kind==='antenna'){ const d=box(msx,msy,(c.deckW||0.84), H, c.deckCol||shade(body,1.06), {roof:c.deckRoof||roofCol, line:true}); windows(d,1,3,night);
     const top=(d.T[1]+d.B[1])/2, m=(c.mast||22);
@@ -5057,7 +5155,7 @@ TOWER_EXTRA.com[5] = [ spec({ w:1.46, body:'#cdbb98', roof:'#7a6a4e', win:{cols:
   crown:{kind:'pyramid', col:'#3f8f86', peak:28, finial:7, finialCol:'#caa84e'} }) ];
 // COM lv4 (Office Tower): pale stone HQ crowned by a verdigris copper dome (bank/old-HQ look)
 TOWER_EXTRA.com[4] = [ spec({ w:1.5, body:'#dfe1e4', roof:'#9aa0a8', win:{cols:5,rscale:6},
-  crown:{kind:'dome', col:'#4f9a86', finial:true} }) ];
+  crown:{kind:'dome', col:'#4f9a86', finial:true, hScale:0.82} }) ];
 // COM lv6 (Highrise): glass tower with a setback observation deck + rooftop antenna farm
 TOWER_EXTRA.com[6] = [ spec({ tiers:[{w:1.55,h:0.9}], body:'#6f93b4', roof:'#2c4258', glass:true, win:{cols:6,rscale:8},
   crown:{kind:'antenna', deckW:0.84, deckCol:'#86abc9', deckRoof:'#34546e', mast:22} }) ];
@@ -5098,7 +5196,7 @@ TOWER_EXTRA.com[4].push( spec({ w:1.5, body:'#c2cad3', roof:'#5d6b7d', win:{cols
   crown:{kind:'frustum', col:'#47535f', peak:24, inset:0.5, dormers:2} }) );
 // COM lv5: blue glass tower crowned by a faceted glass dome
 TOWER_EXTRA.com[5].push( spec({ w:1.46, body:'#6f9ec4', roof:'#2c4a66', glass:true, win:{cols:5,rscale:8},
-  crown:{kind:'dome', col:'#86c0e6', finial:true} }) );
+  crown:{kind:'dome', col:'#86c0e6', finial:true, hScale:0.82} }) );
 // COM lv6: glass shaft tapering to a pyramidal crystal crown
 TOWER_EXTRA.com[6].push( spec({ w:1.5, body:'#6f93b4', roof:'#2c4258', glass:true, win:{cols:6,rscale:9},
   crown:{kind:'pyramid', col:'#3f6f8f', peak:30, finial:8, finialCol:'#cfe2f0'} }) );
@@ -5107,7 +5205,7 @@ TOWER_EXTRA.com[7].push( spec({ tiers:[{w:1.62,h:0.5},{w:1.08,h:0.82}], body:'#3
   crown:{kind:'pyramid', col:'#caa84e', peak:30, finial:12, finialCol:'#ffe08a'} }) );
 // RES lv4 (no prior extra): pale-stone apartment block under a green copper dome
 TOWER_EXTRA.res[4] = [ spec({ w:1.5, body:'#cdb89a', roof:'#7c6a50', win:{cols:5,rscale:5},
-  crown:{kind:'dome', col:'#7a9a6a', finial:true} }) ];
+  crown:{kind:'dome', col:'#7a9a6a', finial:true, hScale:0.72} }) ];
 // RES lv5: warm brick residential tower under a slate mansard with dormers
 TOWER_EXTRA.res[5].push( spec({ w:1.5, body:'#c49a78', roof:'#6e5642', win:{cols:5,rscale:8},
   crown:{kind:'frustum', col:'#5a4a3c', peak:24, inset:0.48, dormers:2} }) );
@@ -5116,7 +5214,7 @@ TOWER_EXTRA.res[6].push( spec({ w:1.55, body:'#cdbfa0', roof:'#86694e', win:{col
   crown:{kind:'pyramid', col:'#6e8f6a', peak:26, finial:7, finialCol:'#caa84e'} }) );
 // RES lv7: limestone wedding-cake topped by a glass observation dome
 TOWER_EXTRA.res[7].push( spec({ tiers:[{w:1.7,h:0.46},{w:1.15,h:0.78},{w:0.72,h:1}], body:'#cfb98f', roof:'#8a7452', win:{cols:3,rscale:6},
-  crown:{kind:'dome', col:'#b7c6c0', finial:true} }) );
+  crown:{kind:'dome', col:'#b7c6c0', finial:true, hScale:0.82} }) );
 function towerHeight(t, lv){
   if (lv>=7) return t==='res'?134:162;
   if (lv===6) return t==='res'?106:128;
@@ -5853,6 +5951,61 @@ function drawFusionCampus(mx,my,z,night,now){
   for (let k=0;k<3;k++){ const ph=((now/1300)+k*0.34)%1; E(tcx+Math.sin((ph+k)*5)*3*u, tbase-9*u-(ph*10)*u, (3+ph*4)*u, (1.6+ph*2.4)*u, 'rgba(225,245,250,'+(0.16*(1-ph)).toFixed(3)+')'); }
   if (night){ cx.fillStyle='rgba(120,235,255,'+(0.12+0.1*pulse).toFixed(3)+')'; cx.beginPath(); cx.ellipse(tcx, tbase-4*u, 22*u, 12*u, 0,0,7); cx.fill(); }
 }
+function drawPort(mx,my,u,night,now, fw=2, fh=2, on=true){
+  const z=S.zoom;
+  const long = fw>=fh;
+  const [avx,avy]=rotD(long?1:0, long?0:1);             // view-space long axis
+  const [pvx,pvy]=[-avy,avx];
+  const P=(du,dv)=>{                                    // footprint-plane offset → screen
+    const dX=avx*du+pvx*dv, dY=avy*du+pvy*dv;
+    return [mx+(dX-dY)*(TW/2)*z, my+TH/2*z+(dX+dY)*(TH/2)*z];
+  };
+  const poly=(pts,fill)=>{ cx.fillStyle=fill; cx.beginPath();
+    pts.forEach((q,k)=>{ const [qx,qy]=P(q[0],q[1]); k?cx.lineTo(qx,qy):cx.moveTo(qx,qy); });
+    cx.closePath(); cx.fill(); };
+  const L=Math.max(fw,fh)/2, W2=Math.min(fw,fh)/2;
+  // unified concrete deck across the whole footprint
+  poly([[-L,-W2],[L,-W2],[L,W2],[-L,W2]], '#828d98');
+  // timber wharf running the seaward long edge, with plank seams + a kerb shadow
+  poly([[-L,W2-0.34],[L,W2-0.34],[L,W2],[-L,W2]], '#6f5a44');
+  cx.strokeStyle='rgba(38,26,16,.40)'; cx.lineWidth=Math.max(.6,.8*z);
+  for (let k=-3;k<=3;k++){ const [a0,b0]=P(k*L/3.2, W2-0.34), [a1,b1]=P(k*L/3.2, W2); cx.beginPath(); cx.moveTo(a0,b0); cx.lineTo(a1,b1); cx.stroke(); }
+  // mooring bollards along the quay edge
+  cx.fillStyle='#2c3540';
+  for (const du of [-L*0.72,-L*0.12,L*0.5]){ const [bx,by]=P(du, W2-0.12); cx.beginPath(); cx.ellipse(bx,by,1.5*z,1.05*z,0,0,7); cx.fill(); }
+  // main warehouse along the landward edge
+  { const [wx,wy]=P(-L*0.34,-W2+0.36);
+    const f=vol(wx,wy-TH/2*z,0,0,.66,.30,12,'#b5683a',{roof:'#d8c0a0',line:true});
+    cx.fillStyle = night&&on ? 'rgba(255,236,170,.7)' : 'rgba(150,172,194,.5)';   // big roller-door / glazing on the camera face
+    cx.beginPath(); cx.moveTo(f.L[0]+1.5*z,f.L[1]+f.H*0.42); cx.lineTo(f.B[0],f.B[1]+f.H*0.42); cx.lineTo(f.B[0],f.B[1]+f.H); cx.lineTo(f.L[0]+1.5*z,f.L[1]+f.H); cx.closePath(); cx.fill();
+  }
+  // a smaller cargo shed
+  { const [wx,wy]=P(L*0.5,-W2+0.32); vol(wx,wy-TH/2*z,0,0,.34,.22,8,'#c98a4a',{roof:'#e0c8a0',line:true}); }
+  // stacked shipping containers in the yard
+  const cols=['#3f6f9c','#3f8f57','#c7913a','#a64a4a','#5a7d8c'];
+  let ci=(now/4000|0);
+  for (const [du,dv,h] of [[-L*0.12,0.02,0],[-L*0.12,0.02,1],[L*0.16,0.10,0],[L*0.16,0.10,1],[L*0.5,-0.06,0]]){
+    const [gx2,gy2]=P(du,dv);
+    cx.fillStyle=cols[ci%cols.length]; ci++;
+    cx.fillRect(gx2-5*z, gy2-7*z-h*5*z, 10*z, 5*z);
+    cx.fillStyle='rgba(0,0,0,.12)'; cx.fillRect(gx2-5*z, gy2-7*z-h*5*z, 10*z, 1.3*z);
+    cx.fillStyle='rgba(255,255,255,.09)'; cx.fillRect(gx2-5*z, gy2-7*z-h*5*z, 10*z, 0.6*z);
+  }
+  // dockside gantry crane: legs straddling the wharf, boom cantilevered over the water
+  const legH=23*z;
+  const [le_x,le_y]=P(L*0.62,-W2+0.55), [re_x,re_y]=P(L*0.62,W2-0.04);
+  const [bo_x,bo_y]=P(L*0.62, W2+0.55);
+  cx.strokeStyle='#d8b13a'; cx.lineWidth=2.4*z; cx.lineCap='round';
+  cx.beginPath(); cx.moveTo(le_x,le_y); cx.lineTo(le_x,le_y-legH); cx.stroke();
+  cx.beginPath(); cx.moveTo(re_x,re_y); cx.lineTo(re_x,re_y-legH); cx.stroke();
+  cx.beginPath(); cx.moveTo(le_x,le_y-legH); cx.lineTo(re_x,re_y-legH); cx.lineTo(bo_x,bo_y-legH+2*z); cx.stroke();
+  cx.strokeStyle='#3a4651'; cx.lineWidth=Math.max(.9,1.1*z);                       // hoist cable + red spreader bar
+  const hxp=(re_x+bo_x)/2, hyp=(re_y+bo_y)/2-legH+1*z;
+  cx.beginPath(); cx.moveTo(hxp,hyp); cx.lineTo(hxp,hyp+11*z); cx.stroke();
+  cx.fillStyle='#c44a36'; cx.fillRect(hxp-2.6*z, hyp+11*z, 5.2*z, 2.2*z);
+  if (night && on){ cx.fillStyle=((now/600|0)%2===0)?'#ff5a5a':'rgba(255,90,90,.3)'; cx.beginPath(); cx.arc(le_x,le_y-legH-1.5*z,1.1*z,0,7); cx.fill(); }
+  cx.lineCap='butt';
+}
 function drawAirport(mx,my,u,night,now, fw=2, fh=2){
   const z=S.zoom;
   const long = fw>=fh;                                  // long axis in grid terms
@@ -6272,6 +6425,113 @@ function drawPlanes(night,now){
     // project the grid-view heading into screen space (iso squashes Y vs X) so the nose lines up with the contrail
     const shx=(hvx-hvy)*TW, shy=(hvx+hvy)*TH;
     drawJetSprite(px, py+TH/2*z, z*(p.ph==='over'?1.05:0.92), shx, shy, night, now, p.alt*z*0.5);
+  }
+}
+/* ---------- harbour traffic: ships threading the waterways while a port stands ---------- */
+const ships=[];
+function portRoots(){
+  const r=[];
+  for (let y=0;y<G;y++) for (let x=0;x<G;x++){
+    const c=map[y][x];
+    if (c.t==='port' && !c.part) r.push([x,y]);
+  }
+  return r;
+}
+function waterBorderTiles(){
+  const r=[];
+  for (let x=0;x<G;x++){ if (map[0][x].t==='water') r.push([x,0]); if (map[G-1][x].t==='water') r.push([x,G-1]); }
+  for (let y=0;y<G;y++){ if (map[y][0].t==='water') r.push([0,y]); if (map[y][G-1].t==='water') r.push([G-1,y]); }
+  return r;
+}
+function waterPath(a,b){
+  // BFS across open water from edge tile a to edge tile b — ships only sail where the channel actually connects
+  if (map[a[1]][a[0]].t!=='water' || map[b[1]][b[0]].t!=='water') return null;
+  const goalI=idx(b[0],b[1]);
+  const prev=new Map(); const q=[a]; prev.set(idx(a[0],a[1]),null);
+  while (q.length){
+    const [qx,qy]=q.shift(); const qi=idx(qx,qy);
+    if (qi===goalI){ const path=[]; let cur=qi; while(cur!==null){ path.push([cur%G,(cur/G)|0]); cur=prev.get(cur);} return path.reverse(); }
+    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=qx+dx, ny=qy+dy, ni=idx(nx,ny);
+      if (inB(nx,ny) && map[ny][nx].t==='water' && !prev.has(ni)){ prev.set(ni,qi); q.push([nx,ny]); }
+    }
+  }
+  return null;
+}
+function shipPos(sh){
+  const p=sh.path; let i=Math.floor(sh.u);
+  if (i<0) i=0; if (i>p.length-2) i=p.length-2;
+  const f=sh.u-i;
+  const ax=p[i][0]+.5, ay=p[i][1]+.5, bx=p[i+1][0]+.5, by=p[i+1][1]+.5;
+  return [ax+(bx-ax)*f, ay+(by-ay)*f, bx-ax, by-ay];
+}
+function stepShips(dt){
+  const ports=portRoots();
+  const lit=ports.some(([x,y])=>map[y][x].pw);                    // a dark port draws no trade
+  if (ports.length && lit && ships.length<Math.min(4,1+ports.length) && Math.random()<dt*0.09){
+    const edges=waterBorderTiles();
+    if (edges.length>1){
+      const a=edges[(Math.random()*edges.length)|0];
+      const b=edges[(Math.random()*edges.length)|0];
+      if (a!==b){
+        const path=waterPath(a,b);
+        if (path && path.length>6) ships.push({path, u:0, sp:0.55+Math.random()*0.45, big:Math.random()<0.5, hue:Math.random()});
+      }
+    }
+  }
+  for (let i=ships.length-1;i>=0;i--){
+    const sh=ships[i]; sh.u+=sh.sp*dt;
+    if (sh.u>sh.path.length-1) ships.splice(i,1);
+  }
+}
+function drawShipSprite(px,py,u,shx,shy,night,now,big,hue){
+  let ang=Math.atan2(shy,shx), mir=1;
+  if (Math.cos(ang)<0){ ang-=Math.PI; mir=-1; }
+  const L=big?13:9.5;
+  cx.save();
+  cx.translate(px,py);
+  cx.rotate(ang);
+  cx.scale(mir,1);
+  // foamy wake trailing astern
+  cx.fillStyle='rgba(235,248,255,.30)';
+  cx.beginPath(); cx.ellipse(-(L+5)*u,0,(L+6)*u,2.4*u,0,0,7); cx.fill();
+  // hull
+  cx.fillStyle = big ? '#37414c' : '#7a2e26';
+  cx.beginPath();
+  cx.moveTo(L*u,0); cx.quadraticCurveTo((L-2)*u,2.7*u,-(L-2)*u,2.3*u);
+  cx.lineTo(-L*u,-2.3*u); cx.quadraticCurveTo((L-2)*u,-2.7*u,L*u,0); cx.closePath(); cx.fill();
+  // deck
+  cx.fillStyle = big ? '#5a6470' : '#cdbf9a';
+  cx.beginPath();
+  cx.moveTo((L-2)*u,0); cx.quadraticCurveTo((L-3.5)*u,1.7*u,-(L-3)*u,1.5*u);
+  cx.lineTo(-(L-2.6)*u,-1.5*u); cx.quadraticCurveTo((L-3.5)*u,-1.7*u,(L-2)*u,0); cx.closePath(); cx.fill();
+  if (big){
+    // container freighter: stacked rows of boxes
+    const cols=['#3f6f9c','#3f8f57','#c7913a','#a64a4a'];
+    for (let r=0;r<4;r++){
+      cx.fillStyle=cols[(r+(hue*4|0))%4];
+      cx.fillRect((-7+r*3.2)*u, -1.5*u, 2.7*u, 3*u);
+    }
+    // bridge house at the stern
+    cx.fillStyle='#dfe6ec'; cx.fillRect(-(L-1.5)*u, -1.6*u, 2.6*u, 3.2*u);
+  } else {
+    // small craft: a cabin and a stubby funnel
+    cx.fillStyle='#e0e6ea'; cx.fillRect(-1.5*u,-1.3*u, 3.4*u, 2.6*u);
+    cx.fillStyle='#b5683a'; cx.fillRect(-3.3*u,-1.0*u, 1.4*u, 2.0*u);
+  }
+  if (night){ cx.fillStyle='#ffe9a0'; cx.beginPath(); cx.arc((L-0.5)*u,0,0.7*u,0,7); cx.fill(); }
+  cx.restore();
+}
+function drawShips(night,now){
+  const z=S.zoom;
+  for (const sh of ships){
+    const [gx,gy,dx,dy]=shipPos(sh);
+    if (gx<-3||gy<-3||gx>G+2||gy>G+2) continue;
+    const [vx,vy]=rotC(gx,gy);
+    const [px,py]=toScreen(vx-.5,vy-.5);
+    const [hvx,hvy]=rotD(dx,dy);
+    const shx=(hvx-hvy)*TW, shy=(hvx+hvy)*TH;
+    drawShipSprite(px, py+TH/2*z, z*(sh.big?1.0:0.85), shx, shy, night, now, sh.big, sh.hue);
   }
 }
 /* ---------- spaceport launches: ceremonial liftoffs, vertical and rare ----------
@@ -7731,6 +7991,8 @@ function render(now){
       cx.fillText('not enough funds — will build what you can afford', lx, ly+16);
     }
   }
+  // ships ride the water surface, under the open sky
+  drawShips(dk>0.5, now);
   // ambient flights soar above everything on the ground
   drawPlanes(dk>0.5, now);
   drawCopters(dk>0.5, now);
@@ -8375,7 +8637,7 @@ function refreshOrientChip(){
 { const ch=document.getElementById('orientChip');
   if (ch) ch.onclick=()=>{ S.bOrient=!S.bOrient; refreshOrientChip(); }; }
 const tipEl=document.getElementById('tip');
-const NAMES={grass:'Open land',tree:'Woodland',water:'River',road:'Road',avenue:'Avenue',res:'Residential',com:'Commercial',ind:'Industrial',park:'Park',power:'Power plant',pump:'Water pump',tower:'Water tower',police:'Police station',fire:'Fire station',school:'School',hospital:'Hospital',rubble:'Burned ruins',garden:'Garden',pool:'Public pool',stadium:'Stadium',solar:'Solar farm',nuclear:'Nuclear plant',fusion:'Fusion plant',highschool:'High school',university:'University',clinic:'Clinic',medcenter:'Medical center',playground:'Playground',plaza:'Plaza',arena:'Arena',path:'Footpath',cityhall:'City Hall',monument:'Monument',botanic:'Botanic Gardens',museum:'Grand Museum',titan:'Titan Tower',airport:'Airport',rstation:'Rail station',landfill:'Landfill',incinerator:'Incinerator',recycling:'Recycling center',spaceport:'Spaceport',zoo:'City Zoo',church:'Church'};
+const NAMES={grass:'Open land',tree:'Woodland',water:'River',road:'Road',avenue:'Avenue',res:'Residential',com:'Commercial',ind:'Industrial',park:'Park',power:'Power plant',pump:'Water pump',tower:'Water tower',police:'Police station',fire:'Fire station',school:'School',hospital:'Hospital',rubble:'Burned ruins',garden:'Garden',pool:'Public pool',stadium:'Stadium',solar:'Solar farm',nuclear:'Nuclear plant',fusion:'Fusion plant',highschool:'High school',university:'University',clinic:'Clinic',medcenter:'Medical center',playground:'Playground',plaza:'Plaza',arena:'Arena',path:'Footpath',cityhall:'City Hall',monument:'Monument',botanic:'Botanic Gardens',museum:'Grand Museum',titan:'Titan Tower',airport:'Airport',rstation:'Rail station',landfill:'Landfill',incinerator:'Incinerator',recycling:'Recycling center',spaceport:'Spaceport',zoo:'City Zoo',church:'Church',port:'Seaport'};
 /* ---------- land value breakdown (mirrors recomputeFields) ---------- */
 function lvBreak(x,y){
   const pol = Math.min(45, pollution[idx(x,y)]);
@@ -10009,7 +10271,7 @@ function toggleCommute(){
 }
 
 /* ---------- save / load ---------- */
-const TYPE_IDS=['grass','tree','water','road','avenue','res','com','ind','park','power','pump','tower','police','fire','school','hospital','rubble','garden','pool','stadium','solar','nuclear','highschool','university','clinic','medcenter','playground','plaza','arena','path','cityhall','monument','botanic','museum','titan','airport','rstation','landfill','incinerator','recycling','fusion','spaceport','zoo','church'];
+const TYPE_IDS=['grass','tree','water','road','avenue','res','com','ind','park','power','pump','tower','police','fire','school','hospital','rubble','garden','pool','stadium','solar','nuclear','highschool','university','clinic','medcenter','playground','plaza','arena','path','cityhall','monument','botanic','museum','titan','airport','rstation','landfill','incinerator','recycling','fusion','spaceport','zoo','church','port'];
 /* ---- municipal loans: one at a time, fixed 24-month amortized terms ---- */
 const LOAN_OFFERS=[8000, 20000, 50000];
 const LOAN_TERM=24;
@@ -10572,7 +10834,7 @@ function loop(now){
     return;
   }
   lastR=now;
-  if (S.started && S.speed>0){ stepCars(carAcc); stepSvc(carAcc); stepPlanes(carAcc*(S.speed||1)); stepCopters(carAcc*(S.speed||1)); stepRockets(carAcc*(S.speed||1)); stepTrains(carAcc*(S.speed||1)); }
+  if (S.started && S.speed>0){ stepCars(carAcc); stepSvc(carAcc); stepPlanes(carAcc*(S.speed||1)); stepCopters(carAcc*(S.speed||1)); stepRockets(carAcc*(S.speed||1)); stepTrains(carAcc*(S.speed||1)); stepShips(carAcc*(S.speed||1)); }
   carAcc=0;
   if (S.msgT && now-S.msgT>9000){ const tk=document.getElementById('ticker'); tk.style.opacity=0; tk.style.display='none'; S.msgT=0; if (document.body.classList.contains('mob')) bbarMeasure(); }
   if (S.started) stepDisaster(now);
@@ -11223,6 +11485,11 @@ document.querySelectorAll('#moreMenu button, #setList button').forEach(b=>b.oncl
     document.getElementById('mapCancel').style.display = restarting?'':'none';
     document.getElementById('mapKeepNote').style.display = restarting?'':'none';
     document.getElementById('mapModal').classList.add('open');
+    return;
+  }
+  if (b.id==='expandMenuBtn'){
+    moreMenu.classList.remove('open');
+    doExpand();
     return;
   }
   if (b.id==='saveMenuBtn'){
