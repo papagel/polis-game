@@ -920,6 +920,7 @@ const S = {
   powerCap:0, powerUse:0, waterCap:0, waterUse:0,
   fund: { police:100, fire:100, school:100, health:100 },
   policy: {},   // active ordinances by id — each trades money for a field/demand/mood effect
+  coachLast: null, zoneHinted: false,   // onboarding nudges: last coached tip + one-shot first-zone hint
 };
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 /* power saver: caps the frame rate (30fps running / ~12fps paused) and renders at a slightly
@@ -2208,6 +2209,24 @@ function buildClear(c){
   return c.t==='grass' || c.t==='tree' ||
     (ZONE[c.t] && c.lv===0 && !c.grp && !c.part && !c.fire);
 }
+/* the silent dead-lot is the #1 newbie trap: you zone, and nothing ever happens because there's
+   no road/power/water nearby — and the game never says so. Fire one gentle explanation the first
+   time a mayor zones without the support in place. Stays quiet if they already set it up right. */
+function firstZoneHint(x,y){
+  if (S.zoneHinted) return;
+  let plants=0, wsrc=0;
+  for (let yy=0;yy<G;yy++) for (let xx=0;xx<G;xx++){ const tt=map[yy][xx].t; if (PLANT[tt]) plants++; if (WSRC[tt]) wsrc++; }
+  const road = roadAdj(x,y) || hasFrontage(x,y);
+  if (plants && wsrc && road) return;          // set up correctly — no nagging
+  S.zoneHinted=true;
+  const need=[];
+  if (!road)   need.push('a <b>road</b> alongside');
+  if (!plants) need.push('<b>power</b>');
+  if (!wsrc)   need.push('<b>water</b>');
+  msg('<b>Zoned — but nobody can move in yet.</b> A lot needs '+need.join(', ')
+    +' before it grows. Roads carry power &amp; water, so run a road from a plant and a pump to your zone.'
+    +' <span style="color:#6d8096">· tap 💡 Advisor anytime for guidance</span>');
+}
 function place(x, y, quiet){
   actionNote(x,y);
   if (!inB(x,y)) return false;
@@ -2346,6 +2365,7 @@ function place(x, y, quiet){
     S.money -= def.c;
     c.t=t; c.dev=Math.min(c.dev, 20); c.rz=null;
     dirty=true; recomputeNets(); recomputeFields();
+    if (!quiet) firstZoneHint(x,y);
     return true;
   }
   if (!buildClear(c)){ if(!quiet) msg('Bulldoze first to build here.'); return false; }
@@ -2366,6 +2386,7 @@ function place(x, y, quiet){
     if (t==='power') msg('Power plant online. It electrifies nearby roads — and pollutes nearby homes.');
     if (t==='pump') msg('Pump running. Water mains follow your roads — buildings need water to grow past level 1.');
     if (t==='avenue') msg('Avenue laid. Triple the capacity of a road — congestion relief for busy districts.');
+    if (ZONE[t]) firstZoneHint(x,y);
   }
   dirty = true;
   recomputeNets(); recomputeFields();
@@ -2732,6 +2753,14 @@ function simTick(){
   if (dry>5 && S.day%23===0) msg('<b>Water shortage.</b> Lots without water are stuck at level 1 — add a riverbank pump or a water tower.');
   if (congested>6 && S.day%19===0) msg('<b>Gridlock.</b> Citizens are stuck in traffic and growth has stalled — upgrade busy streets to avenues or add parallel routes.');
   if (access>0.15 && S.day%21===0) msg('<b>Stranded neighborhoods.</b> Some homes have no road route to any jobs — connect them to your commercial and industrial districts.');
+
+  // early-game coach: a new mayor should never be left guessing why the city won't grow. While the
+  // place is still finding its feet, push the Advisor's single top diagnosis into the ticker, then go
+  // quiet once it's established (by then the loop is learned). This makes the Advisor push, not just pull.
+  if (S.pop < 2500 && S.day>3 && S.day%15===0){
+    const tip=adviseCity()[0];
+    if (tip && tip[0]!=='✓' && tip[1]!==S.coachLast){ msg('💡 <b>'+tip[1]+'</b> — '+tip[2]); S.coachLast=tip[1]; }
+  }
 
   // periodic network + land-value refresh so organic growth (and post-disaster topology)
   // keeps the power/water/sanitation flags and capacities honest, not just on player edits
@@ -12274,6 +12303,7 @@ function scenFresh(size,diff,seed,name){
   S.edu=null; S.health=100;
   S.loan=null; S.loanPay=0; refreshLoanBox();
   S.milestone=0; hist=[]; histStep=30;
+  S.coachLast=null; S.zoneHinted=false;   // fresh city → onboarding nudges arm again
   WX.target=0; WX.rain=0; WX.until=0;
   SEAS._init=false; updateSeason();
   S.cityName=name||'Polis';
@@ -12588,6 +12618,7 @@ document.getElementById('mapBegin').onclick=()=>{
   S.edu=null; S.health=100;
   S.loan=null; S.loanPay=0; refreshLoanBox();
   S.milestone=0; hist=[]; histStep=30;
+  S.coachLast=null; S.zoneHinted=false;   // fresh city → onboarding nudges arm again
   WX.target=0; WX.rain=0; WX.until=0;
   SEAS._init=false; updateSeason();
   document.getElementById('taxSlider').value=9;

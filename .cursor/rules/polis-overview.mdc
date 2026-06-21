@@ -5,23 +5,26 @@ alwaysApply: true
 
 # POLIS — Project Overview
 
-POLIS is an isometric **city-builder game** that lives entirely in a single
-self-contained file: `index.html` (~8500 lines). No build step, no
+POLIS is an isometric **city-builder game** whose game lives entirely in a
+single self-contained file: `index.html` (~12950 lines). No build step, no
 dependencies, no framework — vanilla JS + Canvas 2D. The only external
-resources are Google Fonts (loaded via CDN `<link>`).
+resources are Google Fonts (loaded via CDN `<link>`). The repo also carries a
+headless test suite (`tests/`) and CI, but the game itself ships as that one
+file.
 
 ## File layout (all in `index.html`)
 
 | Lines | Section |
 |-------|---------|
-| `1`–`415` | `<head>` + all CSS (custom-property design tokens at `:root`) |
-| `415`–`811` | `<body>` — the DOM: canvas `#c`, HUD, panels, modals |
-| `811`–`8485` | `<script>` — the entire game engine |
+| `1`–`480` | `<head>` + all CSS (custom-property design tokens at `:root`) |
+| `480`–`899` | `<body>` — the DOM: canvas `#c`, HUD, panels, modals |
+| `899`–`12948` | `<script>` — the entire game engine |
 
 Because everything is global and in one file, **use line ranges and symbol
-names to navigate** rather than expecting modules. Key entry points:
-`loop()` (~7016, the rAF frame loop), `simTick()` (~1688, one game day),
-`render()` (~4565, draws a frame).
+names to navigate** rather than expecting modules. Line numbers drift as the
+file grows, so treat them as approximate and confirm by symbol name. Key entry
+points: `loop()` (~11294, the rAF frame loop), `simTick()` (~2542, one game
+day), `render()` (~8147, draws a frame).
 
 ## Run locally
 
@@ -44,5 +47,8 @@ Do not rename `index.html` (it is the Pages document root) or delete `CNAME`.
 
 - This is a polished, hand-tuned game. Prefer **surgical edits**; preserve the
   terse existing style and the extensive balance-tuning comments.
+- A headless Playwright suite lives in `tests/` and runs in CI on every push/PR
+  (`.github/workflows/test.yml`). It loads the real `index.html` and asserts
+  sim **invariants**, not golden numbers — see `polis-conventions` (Testing).
 - See `polis-simulation` for the gameplay/economy model and `polis-conventions`
   for editing rules (save format, redraw flags, balance tables).

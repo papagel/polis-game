@@ -32,24 +32,26 @@ the frame governor skips redraws when idle.
 
 Tile types are serialized **by array index**, so order is load-bearing:
 
-- [ ] Append the id to **`TYPE_IDS`** (~6509) — **never reorder or remove**
+- [ ] Append the id to **`TYPE_IDS`** (~10738) — **never reorder or remove**
       existing entries, or every saved city breaks.
-- [ ] Add a display name in `NAMES` (~5434).
+- [ ] Add a display name in `NAMES` (~9104).
 - [ ] Register it in the relevant trait tables so systems pick it up:
       `ZONE`/`SVC`/`ROADTYPE`/`WALKTYPE`/`CONDUCT`, plus `UPKEEP`, and
       `CAP`/`PLANT`/`WSRC`/`LEIS`/`FOOT` as applicable.
-- [ ] Add it to the `TOOLS` catalog (~858) with cost `c`, icon, group.
+- [ ] Add it to the `TOOLS` catalog (~963) with cost `c`, icon, group.
 - [ ] Give it a draw path in `render()` / a `draw*` function.
-- [ ] Handle placement in `place()` (~1445) if it needs special rules.
+- [ ] Handle placement in `place()` (~2211) if it needs special rules.
 
 ## Save format
 
-`makeSave()` (~6557) / `loadSave()` (~6566) encode the city as
-`TLV3.<base64(JSON)>`: per-cell `[typeIndex, lv, dev, mergeFlag]` plus `S`
-fields. If you change the cell payload shape, **bump the version prefix**
-(`TLV3`→`TLV4`) and keep `loadSave` able to read older codes (it already
-branches on `TLV2`/`TLV3` stride). Persistent slots go through `store`
-(artifact API → localStorage fallback); autosave fires monthly.
+`makeSave()` (~10798) / `loadSave()` (~10803) encode the city as
+`TLV5.<base64(JSON)>`: per-cell `[typeIndex, lv, dev, overlayBitmask]` plus `S`
+fields (the current `TLV5` also carries player terrain heights `eh`). If you
+change the cell payload shape, **bump the version prefix** (`TLV5`→`TLV6`) and
+keep `loadSave` able to read older codes — it already branches by version on
+stride/bitmask (`TLV2` stride 3, `TLV3` enum 4th value, `TLV4`/`TLV5` overlay
+bitmask). Persistent slots go through `store` (artifact API → localStorage
+fallback); autosave fires monthly.
 
 ## Balance tuning
 
@@ -60,8 +62,18 @@ over editing per-tile logic.
 
 ## Testing changes
 
-Open `index.html` (or `python3 -m http.server`) and verify in-browser. Useful
-quick checks: load a demo with `loadDemo(EXAMPLE_CITY)`, watch the stats charts
-modal, and confirm save→reload round-trips after any `TYPE_IDS`/save change.
-The game is **mobile-first** (pointer events, pinch-zoom, DPR-aware canvas) —
+There is a headless **Playwright** suite in `tests/` (`cd tests && npm ci &&
+npm test`; CI runs it on every push/PR via `.github/workflows/test.yml`). It
+loads the real `index.html` via `file://` so every global exists, and asserts
+**invariants** — save round-trips, the budget accounting identity, growth
+gating, network flood-fill, loan amortization — instead of golden numbers, so
+honest balance tuning stays green. Determinism leans on the test-only RNG seam
+`__seedRng`/`__unseedRng` (~937); in normal play the RNG is `Math.random`.
+Add/extend a `*.spec.js` when you touch the sim, and keep new assertions
+invariant-based. If you change `TYPE_IDS` or the save payload, the round-trip
+specs are the safety net — run them.
+
+Also verify in-browser: open `index.html` (or `python3 -m http.server`), load a
+demo with `loadDemo(EXAMPLE_CITY)`, and watch the stats charts modal. The game
+is **mobile-first** (pointer events, pinch-zoom, DPR-aware canvas) —
 sanity-check touch interactions when touching input or layout.
