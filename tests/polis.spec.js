@@ -1,4 +1,5 @@
 import { test, expect } from './harness.js';
+import { inPage } from './citybuild.js';
 
 // Phase 1: deterministic, invariant-based tests. They assert *relationships*
 // (round-trips, monotonicity, accounting identities, finiteness) rather than
@@ -16,6 +17,47 @@ test('save format round-trips (TYPE_IDS / payload stability)', async ({ game }) 
   });
   expect(a.startsWith('TLV5.')).toBe(true);
   expect(b).toBe(a);
+});
+
+test('save round-trips a tower + stacked road overlays (bitmask payload)', async ({ game }) => {
+  // EXAMPLE_CITY doesn't exercise the fragile parts of the save format: the
+  // grp/part tower markers and the 4th-value overlay bitmask. Build a city that
+  // does, then assert the format is idempotent AND the structure actually
+  // survives the load (so stability can't be vacuous data-dropping).
+  const res = await game.eval(inPage(`
+    resetGrid();
+    hroad(20, 8, 16);
+    // a hand-built 2x2 residential tower (root + three part cells)
+    const bx=10, by=18, root=set(bx,by,'res');
+    root.grp=[bx,by]; root.part=false; root.lv=4; root.dev=400; root.fw=2; root.fh=2;
+    for (const [x,y] of [[bx+1,by],[bx,by+1],[bx+1,by+1]]){
+      const c=set(x,y,'res'); c.grp=[bx,by]; c.part=true;
+    }
+    // stacked overlays on distinct road tiles
+    map[20][9].bus=true;
+    map[20][11].rail=true;
+    map[20][13].bridge=true;
+    map[20][15].tunnel=true;
+    const s1=makeSave();
+    loadSave(s1);
+    const s2=makeSave();
+    return {
+      s1, s2,
+      part: map[18][11].part,            // a tower part cell rebuilt
+      grouped: !!map[18][11].grp,
+      bus: map[20][9].bus,
+      rail: map[20][11].rail,
+      bridge: map[20][13].bridge,
+      tunnel: map[20][15].tunnel,
+    };
+  `));
+  expect(res.s2).toBe(res.s1);           // idempotent: no serialization drift
+  expect(res.grouped).toBe(true);        // the 2x2 tower came back
+  expect(res.part).toBe(true);
+  expect(res.bus).toBe(true);            // each overlay bit survived
+  expect(res.rail).toBe(true);
+  expect(res.bridge).toBe(true);
+  expect(res.tunnel).toBe(true);
 });
 
 test('budget accounting identity holds', async ({ game }) => {

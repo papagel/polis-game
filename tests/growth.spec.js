@@ -1,34 +1,10 @@
 import { test, expect } from './harness.js';
+import { inPage } from './citybuild.js';
 
 // Phase 2: growth-gating tests. These exercise the heart of the sim — a zoned
 // lot only densifies when road + power + water + demand all line up — and rely
 // on the seedable RNG (__seedRng) so the probabilistic growth rolls are
 // reproducible. In normal play the RNG is Math.random, so this seam is test-only.
-//
-// page.evaluate runs in the browser, so the city builder must live inside the
-// evaluated function. We ship it as a string and prepend it to each snippet.
-
-// Builds a tiny city: a horizontal road with a water pump (and, when `powered`,
-// a power plant) feeding a strip of residential lots. Returns the lot coords.
-const BUILD = `
-  function build(powered){
-    S.scen = 0; S.started = false; S.diff = 1; S.day = 0; S.edu = 0;
-    for (let y=0;y<G;y++) for (let x=0;x<G;x++) map[y][x] = blankCell();
-    const ry = 20;
-    for (let x=10;x<=18;x++) map[ry][x].t = 'road';
-    if (powered) map[ry+1][10].t = 'power';
-    map[ry+1][11].t = 'pump';
-    const lots = [[12,19],[13,19],[14,19],[15,19]];
-    for (const [x,y] of lots) map[y][x].t = 'res';
-    recomputeNets();
-    recomputeFields();
-    return lots;
-  }
-`;
-
-// Wrap a function body so it has access to build(); Playwright serializes the
-// resulting function and runs it in the page.
-const inPage = (body) => new Function(`${BUILD}\nreturn (function(){ ${body} })();`);
 
 test('a fully-served residential lot densifies', async ({ game }) => {
   const maxLv = await game.eval(inPage(`
