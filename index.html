@@ -929,6 +929,22 @@ try{ if (localStorage.getItem('tlv_saver')==='0') PERF.saver=false; }catch(_){}
 const YEAR_DAYS=1080, MONTH_DAYS=YEAR_DAYS/12;   // the displayed calendar runs 3× slower than the old one,
                                                  // so each season lasts ~2.5 minutes at normal speed
 
+/* Simulation RNG — swappable so the test harness can run the sim deterministically.
+   In normal play RNG === Math.random, so players see zero behaviour change. Only
+   simTick's growth/fire rolls route through rnd(); rendering jitter stays on Math.random. */
+let RNG = Math.random;
+function rnd(){ return RNG(); }
+function __seedRng(seed){                 // mulberry32 — for tests only, never used in play
+  let a = seed>>>0;
+  RNG = function(){
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a>>>15), 1 | a);
+    t = (t + Math.imul(t ^ (t>>>7), 61 | t)) ^ t;
+    return ((t ^ (t>>>14)) >>> 0) / 4294967296;
+  };
+}
+function __unseedRng(){ RNG = Math.random; }
+
 /* cell: {t:type, lv:level, dev:progress, pw:powered, fire:0, vary:noise} */
 const map = [];
 let pollution, leisure, crime, landVal, cover;
@@ -2531,8 +2547,8 @@ function simTick(){
   }
   { const _km=DIFF[S.diff]&&DIFF[S.diff].km;
     if ((DISRND||_km) && !DIS && S.day%MONTH_DAYS===0 && typeof triggerDisaster==='function'
-        && Math.random() < 0.035*(_km?kmRamp().dis:1))
-      triggerDisaster(['quake','typhoon','flood'][Math.random()*3|0]); }  let pop=0, comJ=0, indJ=0, unp=0, dry=0, congested=0, strandedPop=0, devLots=0, noWaste=0;
+        && rnd() < 0.035*(_km?kmRamp().dis:1))
+      triggerDisaster(['quake','typhoon','flood'][rnd()*3|0]); }  let pop=0, comJ=0, indJ=0, unp=0, dry=0, congested=0, strandedPop=0, devLots=0, noWaste=0;
   const D = S.demand;
   // traffic decays each day
   for (let i=0;i<traffic.length;i++) traffic[i]*=0.80;
@@ -2541,8 +2557,8 @@ function simTick(){
     const c = map[y][x];
     if (c.fire>0){
       c.fire--;
-      if (Math.random()<.06){ // spread
-        const [dx,dy]=[[1,0],[-1,0],[0,1],[0,-1]][Math.random()*4|0];
+      if (rnd()<.06){ // spread
+        const [dx,dy]=[[1,0],[-1,0],[0,1],[0,-1]][rnd()*4|0];
         const n = inB(x+dx,y+dy) ? map[y+dy][x+dx] : null;
         if (n && ZONE[n.t] && n.lv>0 && !n.fire) { n.fire = 14; msgAt('<b>The fire is spreading!</b>', x+dx, y+dy); }
       }
@@ -2586,7 +2602,7 @@ function simTick(){
         if (lh<35) c.dev -= 0.8;            // toxic, neglected districts slowly empty out
       }
       if (!c.ws && S.pop>300) p *= 0.8;     // uncollected streets grow slower
-      if (Math.random() < p) c.dev = Math.min(c.grp?780:430, c.dev + 8 + Math.random()*14);
+      if (rnd() < p) c.dev = Math.min(c.grp?780:430, c.dev + 8 + rnd()*14);
       if (c.dev>30  && c.lv<1) { c.lv=1; c.bld=1; dirty=true; recomputeFields(); }
       // industry is exempt from the land-value gate: its own pollution suppresses value,
       // which used to lock factories at warehouses-and-breweries forever. Industry levels
@@ -2597,31 +2613,31 @@ function simTick(){
       const eduOK = c.t==='res' || (S.edu||0) >= (c.t==='com'?0.35:0.25);
       if (c.dev>230 && c.lv<3 && cellWt && !jam && valOK3 && eduOK) { c.lv=3; c.bld=1; dirty=true; recomputeFields(); }
       // mature towers in prime districts rise into skyscrapers
-      if (c.lv===4 && c.t!=='ind' && c.dev>440 && lvReq>72 && Math.random()<0.02){
+      if (c.lv===4 && c.t!=='ind' && c.dev>440 && lvReq>72 && rnd()<0.02){
         c.lv=5; c.bld=1; c.dev=520; dirty=true; recomputeFields();
         msgAt(`<b>A ${c.t==='res'?'residential':'commercial'} skyscraper crowns the skyline.</b>`, x, y);
       }
       // beyond skyscrapers: highrises need an educated city, megatowers a pampered one
-      if (c.lv===5 && c.t!=='ind' && c.dev>600 && lvReq>80 && (S.edu||0)>=0.80 && cellWt && !jam && Math.random()<0.012){
+      if (c.lv===5 && c.t!=='ind' && c.dev>600 && lvReq>80 && (S.edu||0)>=0.80 && cellWt && !jam && rnd()<0.012){
         c.lv=6; c.bld=1; c.dev=660; dirty=true; recomputeFields();
         msgAt(`<b>A ${c.t==='res'?'residential':'commercial'} highrise tops out.</b> Educated cities build tall.`, x, y);
       }
-      if (c.lv===6 && c.t!=='ind' && c.dev>720 && lvReq>88 && (S.edu||0)>=0.92 && leisure[idx(x,y)]>=10 && cellWt && !jam && Math.random()<0.008){
+      if (c.lv===6 && c.t!=='ind' && c.dev>720 && lvReq>88 && (S.edu||0)>=0.92 && leisure[idx(x,y)]>=10 && cellWt && !jam && rnd()<0.008){
         c.lv=7; c.bld=1; c.dev=780; dirty=true; recomputeFields();
         msgAt(`<b>A megatower pierces the clouds.</b> ${c.t==='res'?'Twelve hundred residents':'A vertical district of jobs'} in one block — the city's new crown.`, x, y);
       }
       // industry scales vertically into heavy complexes — no land-value/leisure gate (it makes its own smog),
       // but the upper tiers need a skilled, educated workforce. Tops out at lv6 (megaplant), never a glass megatower.
-      if (c.lv===4 && c.t==='ind' && c.dev>460 && cellWt && !jam && (S.edu||0)>=0.30 && Math.random()<0.02){
+      if (c.lv===4 && c.t==='ind' && c.dev>460 && cellWt && !jam && (S.edu||0)>=0.30 && rnd()<0.02){
         c.lv=5; c.bld=1; c.dev=540; dirty=true; recomputeFields();
         msgAt(`<b>An industrial complex scales up to heavy industry.</b> Hundreds more jobs in one block.`, x, y);
       }
-      if (c.lv===5 && c.t==='ind' && c.dev>640 && cellWt && !jam && (S.edu||0)>=0.55 && Math.random()<0.012){
+      if (c.lv===5 && c.t==='ind' && c.dev>640 && cellWt && !jam && (S.edu||0)>=0.55 && rnd()<0.012){
         c.lv=6; c.bld=1; c.dev=700; dirty=true; recomputeFields();
         msgAt(`<b>A heavy-industry megaplant comes online.</b> A vertical district of jobs.`, x, y);
       }
       // mature lv3 lots try to merge with three matching neighbors into a tower
-      if (c.lv===3 && !c.grp && c.dev>260 && dem>-0.3 && Math.random()<0.08){
+      if (c.lv===3 && !c.grp && c.dev>260 && dem>-0.3 && rnd()<0.08){
         tryMerge(x,y) || tryMerge(x-1,y) || tryMerge(x,y-1) || tryMerge(x-1,y-1);
       }
       // dry or jammed lots above their sustainable level slowly slip back
@@ -2654,7 +2670,7 @@ function simTick(){
     // every developed lot sends commuters onto nearby streets
     if (c.lv>0) emitTraffic(x,y,c.lv,c.t);
     // fire risk — odds and severity vary by what the building is (factory ≫ shop ≫ home)
-    if (Math.random() < fireChance(c,x,y)){
+    if (rnd() < fireChance(c,x,y)){
       c.fire = FIRE_BURN[c.t]||14;
       const what = c.t==='ind'?'factory' : c.t==='com'?'shop' : 'home';
       const covd = cover.fire[idx(x,y)]>0.05;
@@ -2950,7 +2966,7 @@ const cars=[];
    decorative traffic above). Firetrucks dispatch to fires and put them out; police
    patrol; garbage trucks run rounds from sanitation depots. Transient, never saved. */
 const svc=[];
-function carTarget(){ return clamp(Math.floor(S.pop/22), S.pop>0?2:0, 42); }
+function carTarget(){ return clamp(Math.floor(S.pop/(PERF.saver?34:22)), S.pop>0?2:0, PERF.saver?24:42); }
 function roadList(){ const r=[]; for(let y=0;y<G;y++)for(let x=0;x<G;x++) if(ROADTYPE[map[y][x].t]) r.push([x,y]); return r; }
 function stepCars(dt){
   if (WX.kind==='snow' && WX.rain>0.1) dt *= (1-0.18*WX.rain);   // everyone slows in the snow
@@ -3055,7 +3071,7 @@ function stepCars(dt){
 /* ---------- pedestrians: little folks on the sidewalks of lively streets ---------- */
 const peds=[];
 function stepPeds(dt){
-  const want = clamp(Math.floor(S.pop/45), 0, 42);   // a quiet stroll, not rush hour
+  const want = clamp(Math.floor(S.pop/(PERF.saver?64:45)), 0, PERF.saver?24:42);   // a quiet stroll, not rush hour
   if (dirtyWalk || dirtyRoads){ cachedWalk=walkList(); dirtyWalk=false; }
   if (peds.length < want && cachedWalk.length){
     // spawn beside streets that touch developed homes or shops
@@ -11180,7 +11196,7 @@ function updateHUD(){
    MAIN LOOP
    ============================================================ */
 function resize(){
-  DPR=Math.min(PERF.saver?1.5:2, window.devicePixelRatio||1);
+  DPR=Math.min(PERF.saver?1.25:2, window.devicePixelRatio||1);
   cv.width=window.innerWidth*DPR; cv.height=window.innerHeight*DPR;
   cv.style.width=window.innerWidth+'px'; cv.style.height=window.innerHeight+'px';
   cx.setTransform(DPR,0,0,DPR,0,0);
@@ -11288,9 +11304,11 @@ function loop(now){
   }
   carAcc += dt;
   // frame governor: the sim above always runs at full speed; drawing is what eats the battery.
-  // running: 30fps in saver mode (60 otherwise) · paused: ~12fps, but instant during interaction
+  // running: ~20fps in saver mode (60 otherwise) · paused: ~12fps, or 0 when fully idle
   const interacting = dragging || painting || pend || pinch;
-  const minGap = S.speed>0 ? (PERF.saver?30:0) : (interacting?0:78);   // 30 aligns with 16.7ms frames → a true 30fps
+  // 40 skips to every 3rd 16.7ms vsync → ~20fps in saver (still smooth for gentle city motion);
+  // 0 = uncapped 60. paused renders at ~12fps, but instantly during interaction.
+  const minGap = S.speed>0 ? (PERF.saver?40:0) : (interacting?0:78);
   if (now-lastR < minGap){
     if (S.msgT && now-S.msgT>9000){ const tk=document.getElementById('ticker'); tk.style.opacity=0; tk.style.display='none'; S.msgT=0; if (document.body.classList.contains('mob')) bbarMeasure(); }
     return;
@@ -11300,7 +11318,13 @@ function loop(now){
   carAcc=0;
   if (S.msgT && now-S.msgT>9000){ const tk=document.getElementById('ticker'); tk.style.opacity=0; tk.style.display='none'; S.msgT=0; if (document.body.classList.contains('mob')) bbarMeasure(); }
   if (S.started) stepDisaster(now);
+  // idle skip: when paused, the last frame stays on the canvas — only repaint if something
+  // actually changed (`dirty`, set by every mutation) or is still animating on its own.
+  // Running (speed>0) and interaction always fall through, so live play is untouched.
+  if (S.started && S.speed===0 && !interacting && !dirty && !DIS && !ROTA
+      && WX.rain<0.03 && !smoke.length && !S.hover && !commuteViz) return;
   render(now);
+  dirty=false;
 }
 requestAnimationFrame(loop);
 
@@ -11933,7 +11957,7 @@ document.querySelectorAll('#moreMenu button, #setList button').forEach(b=>b.oncl
     try{ localStorage.setItem('tlv_saver', PERF.saver?'1':'0'); }catch(_){}
     resize(); dirty=true;
     { const l=b.querySelector('.mlbl'); if (l) l.textContent='Power saver: '+(PERF.saver?'On':'Off'); }
-    msg(PERF.saver?'<b>Power saver on</b> — 30fps cap and lighter rendering. The simulation runs exactly the same.':'<b>Power saver off</b> — full 60fps and maximum sharpness.');
+    msg(PERF.saver?'<b>Power saver on</b> — 20fps cap and lighter rendering. The simulation runs exactly the same.':'<b>Power saver off</b> — full 60fps and maximum sharpness.');
     return;
   }
   if (b.id==='newMenuBtn'){
