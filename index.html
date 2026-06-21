@@ -42,7 +42,10 @@
     --blue:#5ab2ff;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  html,body{height:100%;overflow:hidden;background:#0a121c;font-family:'Inter',system-ui,sans-serif;color:var(--ink)}
+  /* kill the mobile long-press text selection / copy-paste callout everywhere by default */
+  html,body{height:100%;overflow:hidden;background:#0a121c;font-family:'Inter',system-ui,sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  /* but real text fields must stay selectable/editable */
+  input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
   #c{position:fixed;inset:0;display:block;touch-action:none;cursor:crosshair}
   .hud{position:fixed;z-index:5;font-size:13px}
   .panel{background:rgba(16,26,38,.92);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(6px);box-shadow:0 6px 24px rgba(0,0,0,.35)}
@@ -294,7 +297,7 @@
   .dragGrip{height:14px;cursor:grab;display:flex;align-items:center;justify-content:center;color:#44556b;font-size:9px;letter-spacing:3px;user-select:none;touch-action:none}
   .dragGrip:active{cursor:grabbing}
   #saveModal.open,#catModal.open,#advModal.open,#statsModal.open,#mapModal.open,#helpModal.open{display:flex}
-  #saveModal .inner{width:min(480px,94vw);padding:18px}
+  #saveModal .inner{width:min(480px,94vw);padding:18px;max-height:calc(100dvh - 36px);display:flex;flex-direction:column;min-height:0}
   #catModal .inner,#advModal .inner,#statsModal .inner,#mapModal .inner,#helpModal .inner{padding:20px}
   #catModal h3,#advModal h3,#statsModal h3,#mapModal h3,#helpModal h3{font-family:'Chakra Petch';color:var(--amber);font-size:15px;margin-bottom:10px}
   #saveModal h3{font-family:'Chakra Petch';color:var(--amber);font-size:15px;margin-bottom:8px}
@@ -315,6 +318,7 @@
   .catDN.night{color:#cdd9ff;border-color:#3a4a6a;background:#141d31}
   #saveModal button{padding:9px 16px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer;font-family:'Chakra Petch';font-size:12px}
   #saveModal button.primary{background:var(--amber);color:#1a1206;border-color:var(--amber);font-weight:700}
+  #slotList{overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
   #slotList .slot{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;margin-bottom:7px;background:#0a121c}
   #slotList .slot .nm{font-family:'Chakra Petch';font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .slot .thumb{width:46px;height:46px;border-radius:7px;flex:none;border:1px solid var(--line);image-rendering:pixelated;object-fit:cover;background:#13202f;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:18px}
@@ -1003,7 +1007,9 @@ const TOOLS = [
   { id:'tree', n:'Terrain', c:8, ic:'🌲', col:'#3e8d54', sub:[
       { id:'tree',  n:'Plant trees',  c:8,  ic:'🌲', col:'#3e8d54', d:'woodland · lifts nearby land value · drag to paint' },
       { id:'water', n:'Dig lake',     c:40, ic:'≈',  col:'#2e7fb8', d:'carve open water · roads & rail bridge it · drag to paint' },
-      { id:'grass', n:'Level ground', c:15, ic:'▱',  col:'#4f7a44', d:'fill water or clear trees back to open land · drag to paint' } ] },
+      { id:'grass', n:'Level ground', c:15, ic:'▱',  col:'#4f7a44', d:'fill water or clear trees back to open land · drag to paint' },
+      { id:'raise', n:'Raise land',   c:6,  ic:'⛰',  col:'#7a8a5a', d:'sculpt hills on open land — drag to raise the ground' },
+      { id:'lower', n:'Lower land',   c:6,  ic:'⤓',  col:'#6a7a8a', d:'sink the ground back down — drag to lower it' } ] },
   { g:'Other' },
   { id:'inspect',  n:'Inspect',     c:0,   ic:'?', col:'#a9b6c6' },
   { id:'pan',      n:'Pan view',    c:0,   ic:'✥', col:'#a9b6c6' },
@@ -1342,7 +1348,7 @@ function setWorldSize(n){
 // the sim respawns them within a tick. Repeatable up to MAX_G; cost is quadratic,
 // so the cap guards the O(G²) sim.
 const MAX_G = 120;
-function blankCell(){ return { t:'grass', lv:0, dev:0, pw:false, wt:false, ws:false, fire:0, vary:Math.random(), grp:null, part:false, bld:0, bridge:false, rz:null }; }
+function blankCell(){ return { t:'grass', lv:0, dev:0, pw:false, wt:false, ws:false, fire:0, vary:Math.random(), grp:null, part:false, bld:0, bridge:false, rz:null, tunnel:false }; }
 function expandWorld(pad){
   pad=pad|0; if (pad<=0) return false;
   const oldG=G;
@@ -1383,12 +1389,14 @@ function expandWorld(pad){
   // agents & any live disaster hold tile coords the shift invalidated — drop them
   cars.length=0; svc.length=0; peds.length=0; smoke.length=0; copters.length=0; planes.length=0;
   trains.length=0; railComp=null; carPairOrd.clear(); DIS=null;
-  cachedRoads=[]; dirtyRoads=true; cachedWalk=[]; dirtyWalk=true; shoreDirty=true;
+  cachedRoads=[]; dirtyRoads=true; cachedWalk=[]; dirtyWalk=true; shoreDirty=true; elevDirty=true;
   undoStack.length=0; redoStack.length=0; updateUndoUI();   // pre-expand snaps no longer meaningful
   recomputeNets(); recomputeFields();
   S.hover=null;
-  S.ox = window.innerWidth/2;
-  S.oy = window.innerHeight/2 - (G*TH/2)/2;
+  // keep the view exactly where it was: every existing tile shifts +pad in BOTH
+  // view axes (true for all 4 rotations), so its iso-x is unchanged and its iso-y
+  // drops by pad*TH·zoom — counter that one offset instead of recentering.
+  S.oy -= pad*TH*S.zoom;
   dirty=true;
   // celebrate the new frontier with the same construction juice as placing tiles,
   // swept diagonally across the ring so the land visibly "builds in" (sampled +
@@ -1416,7 +1424,8 @@ function genMap(seed){
   for (let y=0; y<G; y++){ map[y]=[];
     for (let x=0; x<G; x++) map[y][x] = { t:T[y][x], lv:0, dev:0, pw:false, wt:false, ws:false, fire:0, vary: rnd(), grp:null, part:false, bld:0, bridge:false, rz:null };
   }
-  shoreDirty=true;
+  EHAND=null;                 // a fresh map starts with no player-sculpted terrain
+  shoreDirty=true; elevDirty=true;
 }
 
 /* ---------- helpers ---------- */
@@ -1623,17 +1632,17 @@ function tickLandfills(){
   let landActiveCap=0, totalCap=0; const lf=[];
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     const c=map[y][x]; if (!WSTSRC[c.t] || c.part) continue;
-    if (c.t==='landfill'){ if ((c.dev||0)<100){ landActiveCap+=WSTSRC.landfill.cap; totalCap+=WSTSRC.landfill.cap; lf.push(c); } }
+    if (c.t==='landfill'){ if ((c.dev||0)<100){ landActiveCap+=WSTSRC.landfill.cap; totalCap+=WSTSRC.landfill.cap; lf.push([c,x,y]); } }
     else totalCap+=WSTSRC[c.t].cap;            // processors always take their share
   }
   if (!lf.length) return;
   const collected=Math.min(S.wasteUse||0, totalCap);
   const toLandfills= totalCap>0 ? collected*(landActiveCap/totalCap) : 0;
   const per= toLandfills / lf.length;          // equal-capacity tips split the load evenly
-  let justFull=false;
-  for (const c of lf){ const was=c.dev||0; c.dev=Math.min(100, was + per/LANDFILL_LIFE*100); if (was<100 && c.dev>=100) justFull=true; }
+  let justFull=null;
+  for (const [c,x,y] of lf){ const was=c.dev||0; c.dev=Math.min(100, was + per/LANDFILL_LIFE*100); if (was<100 && c.dev>=100) justFull=[x,y]; }
   if (justFull){ recomputeNets(); recomputeFields(); dirty=true;
-    msg('<b>A landfill is full.</b> It stops taking refuse (and still smells) — bulldoze it to reclaim the land, or lean on recycling centers and incinerators.'); }
+    msgAt('<b>A landfill is full.</b> It stops taking refuse (and still smells) — bulldoze it to reclaim the land, or lean on recycling centers and incinerators.', justFull[0], justFull[1]); }
 }
 /* sanitation network: like water, it floods from each facility across roads + buildings,
    then caps by total facility capacity — the farthest lots overflow first when short */
@@ -1780,7 +1789,15 @@ function recomputeFields(){
 let SHORE=null, SHORECELL=null, shoreDirty=true;
 function recomputeShore(){
   shoreDirty=false;
-  const isW=(cx2,cy2)=> cx2>=0&&cy2>=0&&cx2<G&&cy2<G && map[cy2][cx2].t==='water';
+  // bridges carry road over the river, but the WATER flows on unbroken beneath them — so a
+  // bridged tile counts as water here, keeping the bank smooth across the crossing
+  const isW=(cx2,cy2)=>{ if(cx2<0||cy2<0||cx2>=G||cy2>=G) return false; const c2=map[cy2][cx2]; return c2.t==='water'||c2.bridge; };
+  // "natural" = open land whose bank may bend: only water, grass and woods. Everything paved
+  // (roads, avenues, paths AND bridges) is excluded so it holds a straight grid edge at the water.
+  // A paved tile fills its WHOLE footprint with asphalt; if its bank bowed into the river that
+  // asphalt spilled out as a dark triangle, and the lifted bridge decks (drawn on the raw grid)
+  // need the water beneath them on the grid too. Pinning paved edges gives a clean embankment and
+  // lets the river still curve freely a tile away through the grass.
   const nat=(cx2,cy2)=>{ if(cx2<0||cy2<0||cx2>=G||cy2>=G) return false; const t=map[cy2][cx2].t; return t==='water'||t==='grass'||t==='tree'; };
   const KV=(a,b)=>a*(G+1)+b;                       // vertex key, gx/gy in 0..G
   const adj=new Map(), opos=new Map(), pin=new Set();
@@ -1820,11 +1837,230 @@ function recomputeShore(){
 }
 function vGrid(gx,gy){ const s=SHORE&&SHORE.get(gx*(G+1)+gy); return s||[gx,gy]; }
 function isShoreCell(x,y){ return SHORECELL ? SHORECELL.has(y*G+x) : false; }
-/* trace a ground tile's four (possibly displaced) corners — isometric + rotation aware */
+
+/* ---------- terrain elevation (cosmetic small hills) ----------
+   A per-GRID-VERTEX height field (px, pre-zoom) lifts the ground polygon in groundPath. It only
+   rises over NATURAL land (grass/woods): a vertex pins back to 0 the moment any tile touching it is
+   paved/built/water/off-map, so every boundary eases down to the flat plane. That single rule keeps
+   the surface watertight (neighbours share the same lifted corner) AND keeps toGrid()/place()/saves
+   on the flat world untouched — you only ever click a tile that is, by construction, at height 0.
+   The base bumps are static per map (seeded from the water layout so reloads are stable); the pin is
+   evaluated live, so building on a rise simply flattens it. */
+let EBASE=null, EHAND=null, EVERT=null, ELEVCELL=null, elevDirty=true;
+const ELEV_MAX=34;                                   // procedural peak lift in px (pre-zoom)
+const EHAND_MAX=240;                                 // hard cap on the combined surface (sculpt ceiling)
+function natElev(x,y){ if(x<0||y<0||x>=G||y>=G) return false; const t=map[y][x].t; return t==='grass'||t==='tree'; }
+/* seed from the (essentially permanent) water layout, so a city's hills survive save→reload even as
+   it develops — building/zoning never shifts the highlands, only the local pin flattens them. */
+function hashElev(){ let h=(2166136261^G)>>>0; for (let y=0;y<G;y++) for (let x=0;x<G;x++){ if (map[y][x].t==='water'){ h=(h^Math.imul(x+1,73856093)^Math.imul(y+1,19349663))>>>0; h=Math.imul(h,16777619)>>>0; } } return h||1; }
+function ensureEHAND(){ const n=(G+1)*(G+1); if (!EHAND||EHAND.length!==n) EHAND=new Float32Array(n); }
+/* recombine procedural base + player-sculpted layer into the displayed field, clamped to the
+   sculpt band, and re-flag which tiles must follow the height field. Cheap — call after any edit. */
+function applyElev(){
+  if (!EBASE){ EVERT=null; ELEVCELL=new Set(); return; }
+  const NV=G+1; ensureEHAND();
+  EVERT=new Float32Array(NV*NV); ELEVCELL=new Set();
+  for (let i=0;i<EVERT.length;i++) EVERT[i]=Math.max(0, Math.min(EHAND_MAX, EBASE[i]+EHAND[i]));
+  for (let y=0;y<G;y++) for (let x=0;x<G;x++)
+    if (EVERT[y*NV+x]>0.01||EVERT[y*NV+x+1]>0.01||EVERT[(y+1)*NV+x]>0.01||EVERT[(y+1)*NV+x+1]>0.01)
+      ELEVCELL.add(y*G+x);
+}
+function recomputeElev(){
+  elevDirty=false;
+  const NV=G+1;
+  EBASE=new Float32Array(NV*NV);
+  ensureEHAND();
+  if (G<8){ applyElev(); return; }                   // tiny worlds stay flat (manual layer still applies)
+  const rnd=mulberry32(hashElev());
+  const HT=new Float32Array(G*G);                    // tile-centre heights
+  const nC=Math.max(2, Math.round(G*G/520));         // a few clustered highlands
+  for (let i=0;i<nC;i++){
+    let cx0=0, cy0=0, ok=false;
+    for (let t=0; t<40 && !ok; t++){ cx0=2+(rnd()*(G-4))|0; cy0=2+(rnd()*(G-4))|0; ok=natElev(cx0,cy0); }
+    if (!ok) continue;
+    const R=2.2+rnd()*3, A=(0.6+rnd()*0.4)*ELEV_MAX, ph=rnd()*6.28, wob=0.18+rnd()*0.22;
+    for (let y=Math.max(0,(cy0-R-1)|0); y<Math.min(G,cy0+R+2); y++)
+      for (let x=Math.max(0,(cx0-R-1)|0); x<Math.min(G,cx0+R+2); x++){
+        const dx=x-cx0, dy=y-cy0, d=Math.hypot(dx,dy); if (d>R) continue;
+        const u=1-d/R; let s=u*u*(3-2*u);            // smoothstep dome
+        s *= 1 + wob*Math.sin(Math.atan2(dy,dx)*3+ph);   // gentle non-circular wobble
+        HT[y*G+x]+=A*s;
+      }
+  }
+  // tile heights → vertex heights: average the up-to-4 touching tiles, but only NATURAL ones
+  // contribute and we always divide by 4, so borders (and any paved/built/water neighbour) ease to 0.
+  for (let gy=0; gy<NV; gy++) for (let gx=0; gx<NV; gx++){
+    let s=0;
+    for (const [tx,ty] of [[gx-1,gy-1],[gx,gy-1],[gx-1,gy],[gx,gy]])
+      if (elevContrib(tx,ty)) s+=HT[ty*G+tx];
+    EBASE[gy*NV+gx]=s/4;
+  }
+  applyElev();
+}
+/* ---- player terraforming: a soft radial brush on the manual height layer (cosmetic) ----
+   raises/lowers the grid vertices around a tile, with smooth falloff, on open land only. The
+   combined surface is clamped in applyElev; built/paved tiles draw flat at 0 (with a cliff wall at
+   the seam), so picking and placement stay on the flat plane. The brush is wide so tall peaks build
+   over a broad base instead of spiking. */
+const TF_STEP=12, TF_R=3;                             // px per application · brush radius in tiles
+function terraform(x,y,dir){
+  if (!natElev(x,y)) return false;                    // sculpt open land/woods only
+  ensureEHAND();
+  const NV=G+1, cx0=x+0.5, cy0=y+0.5;
+  let any=false;
+  for (let gy=Math.max(0,Math.floor(cy0-TF_R)); gy<=Math.min(G,Math.ceil(cy0+TF_R)); gy++)
+    for (let gx=Math.max(0,Math.floor(cx0-TF_R)); gx<=Math.min(G,Math.ceil(cx0+TF_R)); gx++){
+      const d=Math.hypot(gx-cx0,gy-cy0); if (d>TF_R) continue;
+      let w=Math.cos(d/TF_R*Math.PI/2); w*=w;          // smooth dome falloff, 0 at the rim
+      const i=gy*NV+gx;
+      const lo=-(EBASE?EBASE[i]:0);                     // floor: cancel the procedural base, never crater below 0
+      const nv=Math.max(lo, Math.min(EHAND_MAX, EHAND[i]+dir*TF_STEP*w));
+      if (nv!==EHAND[i]){ vertNote(i); EHAND[i]=nv; any=true; }   // record undo only on a real change
+    }
+  if (any){ applyElev(); dirty=true; }
+  return any;
+}
+/* true terrain height at a vertex (px, pre-zoom). The surface is NO LONGER pinned to 0 at
+   built/paved/water seams — instead natural tiles keep their full height to the edge and a vertical
+   cliff wall (drawCliffWalls) bridges the drop to the flat neighbour. Only natural tiles ride this in
+   groundPath; paved/water draw at 0, so the seam is exactly the wall. The world rim stays at sea
+   level for a clean coastline. Picking/placement never read height, so the flat plane is intact. */
+function vertElev(gx,gy){
+  if (!EVERT) return 0;
+  if (gx<=0||gy<=0||gx>=G||gy>=G) return 0;          // clamp the outer rim to sea level
+  return EVERT[gy*(G+1)+gx];
+}
+function terrainH(x,y){ return (vertElev(x,y)+vertElev(x+1,y)+vertElev(x+1,y+1)+vertElev(x,y+1))*0.25; }
+/* ground height (px, pre-zoom) at a CONTINUOUS grid point — bilinear over the tile's pinned corners.
+   Lets scatter (tree trunks) sit on the actual surface under each item, so a tree on a downslope
+   rides the slope down to the waterline instead of floating at the tile's average height. */
+function sampleElev(gx,gy){
+  const x=Math.floor(gx), y=Math.floor(gy), fu=gx-x, fv=gy-y;
+  const h0=vertElev(x,y)*(1-fu)+vertElev(x+1,y)*fu;
+  const h1=vertElev(x,y+1)*(1-fu)+vertElev(x+1,y+1)*fu;
+  return h0*(1-fv)+h1*fv;
+}
+function isElevCell(x,y){ return ELEVCELL ? ELEVCELL.has(y*G+x) : false; }
+function tileMaxH(x,y){ return Math.max(vertElev(x,y),vertElev(x+1,y),vertElev(x+1,y+1),vertElev(x,y+1)); }
+function tileMinH(x,y){ return Math.min(vertElev(x,y),vertElev(x+1,y),vertElev(x+1,y+1),vertElev(x,y+1)); }
+/* ground too high/steep to plonk a building on — zones & buildings must be levelled first (roads cut). */
+const BUILD_FLAT_MAX=12;                                  // px; gentler ground still auto-levels under a build
+function groundTooHigh(x,y){ return !!EVERT && isElevCell(x,y) && tileMaxH(x,y) > BUILD_FLAT_MAX; }
+/* how cliff-like a tile is (0..1) from its corner height spread — steep faces paint as bare rock,
+   so a road cut through a hill (and tall mountain flanks) read as a rocky canyon, not a green bowl */
+function cliffMix(x,y){ if(!EVERT||!isElevCell(x,y)) return 0; return Math.max(0, Math.min(1, (tileMaxH(x,y)-tileMinH(x,y)-26)/26)); }
+/* a road/avenue laid across a BIG mountain bores a tunnel instead of cutting a canyon: the tile
+   keeps feeding the height field (so the peak survives over it) and renders the rock cap with portal
+   mouths where the road re-emerges. TUNNEL_H is high — only genuinely tall (mostly sculpted) peaks
+   bore a tunnel; ordinary hills still get the rocky canyon cut. elevContrib lets tunnel tiles count
+   as terrain for the height field. */
+const TUNNEL_H=70;
+function isTunnel(x,y){ if(!inB(x,y)) return false; const c=map[y][x]; return !!c.tunnel && (c.t==='road'||c.t==='avenue'); }
+function elevContrib(x,y){ return natElev(x,y) || isTunnel(x,y); }
+/* tools NOT subject to the "level it first" rule: terrain brushes, overlays, and the linear infra
+   (road/avenue/path) that is allowed to CUT a corridor through high ground instead of being blocked */
+const FLAT_EXEMPT={tree:1,water:1,grass:1,raise:1,lower:1,bulldoze:1,inspect:1,pan:1,rail:1,busstop:1,road:1,avenue:1,path:1};
+/* relief shading: light the up-facing slopes, shadow the down-facing ones (per-tile height
+   gradient) — that flank contrast is what reads as 3D. The slope term SATURATES smoothly and the
+   result is hard-clamped so steep faces (a hill dropping to a pinned road/river) read as a dark
+   green cliff or a bright sunlit bank, never blowing out to pure black or white. */
+function elevShade(x,y){
+  const a=vertElev(x,y), b=vertElev(x+1,y), c=vertElev(x+1,y+1), d=vertElev(x,y+1);
+  const slope=((b+c)-(a+d)) + ((d+c)-(a+b));         // sun from the back-left
+  const t=slope/40, lit=t/Math.sqrt(1+t*t);          // smooth saturation → lit ∈ (-1,1)
+  const h=(a+b+c+d)*0.00045;                          // very gentle hilltop lift
+  return Math.max(-0.30, Math.min(0.22, h - lit*0.26));
+}
+
+/* trace a ground tile's four (possibly displaced + lifted) corners — isometric + rotation aware */
 function groundPath(x,y){
-  const P=(gx,gy)=>{ const v=vGrid(gx,gy); const [rx,ry]=rotC(v[0],v[1]); return toScreen(rx,ry); };
+  const lift = natElev(x,y);                          // only natural terrain rides the height field
+  const P=(gx,gy)=>{ const v=vGrid(gx,gy); const [rx,ry]=rotC(v[0],v[1]); const s=toScreen(rx,ry); return [s[0], s[1]-(lift?vertElev(gx,gy):0)*S.zoom]; };
   const A=P(x,y),B=P(x+1,y),C=P(x+1,y+1),D=P(x,y+1);
   cx.beginPath(); cx.moveTo(A[0],A[1]); cx.lineTo(B[0],B[1]); cx.lineTo(C[0],C[1]); cx.lineTo(D[0],D[1]); cx.closePath();
+}
+/* vertical cliff faces: where elevated natural land meets a flat neighbour (paved/water/build or the
+   world edge), drop a wall from the terrain height to 0 so the seam reads as a real cliff instead of a
+   stretched ramp. ALL four faces are drawn (a near-zero drop draws nothing, so gentle banks stay
+   beaches) and this is called BEFORE the grass/tree cap: the cap then paints over the inner parts,
+   leaving each wall only where it pokes past the tile's silhouette. That fills the gaps the old
+   front/back culling left behind tall thin peaks without bleeding rock onto the grass top.
+   Shaded as bare rock, the two screen-axis faces lit differently for relief. */
+function drawCliffWalls(x,y){
+  if (!EVERT) return;
+  const z=S.zoom, cv0=rotC(x+0.5,y+0.5);
+  const PT=(gx,gy,h)=>{ const vv=vGrid(gx,gy); const [rx,ry]=rotC(vv[0],vv[1]); const s=toScreen(rx,ry); return [s[0], s[1]-h*z]; };
+  const E=[
+    {d:[1,0],  a:[x+1,y],   b:[x+1,y+1]},
+    {d:[0,1],  a:[x+1,y+1], b:[x,y+1]},
+    {d:[-1,0], a:[x,y+1],   b:[x,y]},
+    {d:[0,-1], a:[x,y],     b:[x+1,y]},
+  ];
+  for (const e of E){
+    const nx=x+e.d[0], ny=y+e.d[1];
+    if (inB(nx,ny) && elevContrib(nx,ny)) continue;    // terrain (or a tunnel) meets terrain → continuous, no wall
+    const h1=vertElev(e.a[0],e.a[1]), h2=vertElev(e.b[0],e.b[1]);
+    if (h1<0.5 && h2<0.5) continue;                    // no real drop → no wall (gentle bank)
+    const t1=PT(e.a[0],e.a[1],h1), t2=PT(e.b[0],e.b[1],h2), b2=PT(e.b[0],e.b[1],0), b1=PT(e.a[0],e.a[1],0);
+    const mv=rotC((e.a[0]+e.b[0])/2,(e.a[1]+e.b[1])/2);
+    cx.fillStyle = (Math.abs(mv[0]-cv0[0])>=Math.abs(mv[1]-cv0[1])) ? '#6c625a' : '#615850';   // flat rock, faint two-tone relief
+    cx.beginPath(); cx.moveTo(t1[0],t1[1]); cx.lineTo(t2[0],t2[1]); cx.lineTo(b2[0],b2[1]); cx.lineTo(b1[0],b1[1]); cx.closePath(); cx.fill();
+  }
+}
+/* a tunnel road tile: render the mountain rock cap over the buried road (so the peak survives) and
+   punch a dark portal mouth into the cliff face on each side where the road re-emerges. The height
+   field still carries the peak here because the tile counts as elevContrib. */
+function drawTunnelTile(x,y){
+  if (!EVERT) return;
+  const z=S.zoom, c=map[y][x];
+  const PT=(gx,gy,h)=>{ const vv=vGrid(gx,gy); const [rx,ry]=rotC(vv[0],vv[1]); const s=toScreen(rx,ry); return [s[0], s[1]-h*z]; };
+  drawCliffWalls(x,y);                                  // rock skirt first; the cap below hides its inner parts
+  // lifted rock cap (groundPath pins paved tiles to 0, so trace the elevated corners directly)
+  const A=PT(x,y,vertElev(x,y)), B=PT(x+1,y,vertElev(x+1,y)), C=PT(x+1,y+1,vertElev(x+1,y+1)), D=PT(x,y+1,vertElev(x,y+1));
+  cx.beginPath(); cx.moveTo(A[0],A[1]); cx.lineTo(B[0],B[1]); cx.lineTo(C[0],C[1]); cx.lineTo(D[0],D[1]); cx.closePath();
+  cx.fillStyle=shade(SEAS.grass, 0.95+c.vary*0.1+elevShade(x,y)); cx.fill();
+  const ck=cliffMix(x,y); if (ck>0){ cx.fillStyle='rgba(122,112,98,'+(ck*0.45).toFixed(3)+')'; cx.fill(); }
+  // portal mouths: a built concrete facade punched into the cliff wherever a non-tunnel road
+  // re-emerges. Roads get a single wide bore; avenues get a taller facade with TWIN bores split
+  // by a central pier — so the two read clearly apart.
+  const ave=c.t==='avenue';
+  const cT=rotC(x+0.5,y+0.5);
+  const E=[
+    {d:[1,0],  a:[x+1,y],   b:[x+1,y+1]},
+    {d:[0,1],  a:[x+1,y+1], b:[x,y+1]},
+    {d:[-1,0], a:[x,y+1],   b:[x,y]},
+    {d:[0,-1], a:[x,y],     b:[x+1,y]},
+  ];
+  for (const e of E){
+    const nx=x+e.d[0], ny=y+e.d[1];
+    if (!isRoad(nx,ny) || isTunnel(nx,ny)) continue;     // a portal only where the road actually re-emerges
+    const cN=rotC(nx+0.5,ny+0.5);
+    if (cN[0]+cN[1] <= cT[0]+cT[1]) continue;            // back face (hidden behind the cap this rotation)
+    const lerp=(u)=>[e.a[0]+(e.b[0]-e.a[0])*u, e.a[1]+(e.b[1]-e.a[1])*u];
+    const P=(u,h)=>{ const g=lerp(u); return PT(g[0],g[1],h); };
+    const faceH=Math.min(vertElev(e.a[0],e.a[1]), vertElev(e.b[0],e.b[1]));
+    // --- stone facade slab (bigger, framed — reads as engineered, not a raw hole) ---
+    const fL=ave?0.05:0.15, fR=ave?0.95:0.85, hFace=Math.min(faceH*0.94, ave?32:26);
+    const poly=(pts,fill)=>{ cx.fillStyle=fill; cx.beginPath(); for(let i=0;i<pts.length;i++){ i?cx.lineTo(pts[i][0],pts[i][1]):cx.moveTo(pts[i][0],pts[i][1]); } cx.closePath(); cx.fill(); };
+    poly([P(fL,0),P(fL,hFace),P(fR,hFace),P(fR,0)],'#7c736b');
+    poly([P(fL,hFace*0.8),P(fL,hFace),P(fR,hFace),P(fR,hFace*0.8)],'#948a80');   // lighter cornice band
+    cx.strokeStyle='#564f49'; cx.lineWidth=Math.max(.6,0.9*z); cx.lineJoin='round';
+    cx.beginPath(); cx.moveTo(P(fL,0)[0],P(fL,0)[1]); cx.lineTo(P(fL,hFace)[0],P(fL,hFace)[1]); cx.lineTo(P(fR,hFace)[0],P(fR,hFace)[1]); cx.lineTo(P(fR,0)[0],P(fR,0)[1]); cx.stroke();
+    // --- bore openings ---
+    const bores=ave?[[0.13,0.45],[0.55,0.87]]:[[0.26,0.74]];
+    const hB=Math.min(faceH*0.8, ave?25:22);
+    for (const [bL,bR] of bores){
+      const m=(bL+bR)/2;
+      poly([P(bL,0),P(bR,0),P(m,0.45)],'#39434f');                                // asphalt apron at the floor
+      const BL=P(bL,0),TL=P(bL,hB),AP=P(m,hB*1.16),TR=P(bR,hB),BR=P(bR,0);
+      cx.fillStyle='#0a0f15';
+      cx.beginPath(); cx.moveTo(BL[0],BL[1]); cx.lineTo(TL[0],TL[1]); cx.quadraticCurveTo(AP[0],AP[1],TR[0],TR[1]); cx.lineTo(BR[0],BR[1]); cx.closePath(); cx.fill();
+      poly([P(m-0.05,hB*0.82),P(m-0.03,hB*1.04),P(m+0.03,hB*1.04),P(m+0.05,hB*0.82)],'#a89e93');   // keystone
+      cx.strokeStyle='#b8a89a'; cx.lineWidth=Math.max(.8,1.3*z); cx.lineJoin='round';
+      cx.beginPath(); cx.moveTo(BL[0],BL[1]); cx.lineTo(TL[0],TL[1]); cx.quadraticCurveTo(AP[0],AP[1],TR[0],TR[1]); cx.lineTo(BR[0],BR[1]); cx.stroke();
+    }
+    cx.lineJoin='miter';
+  }
 }
 /* pull a point inside a convex quad (ray from its centroid), inset units in from the edges —
    used to keep scatter (e.g. tree trunks) off the water where a bank has reshaped the tile */
@@ -1841,6 +2077,110 @@ function clampQuad(px,py,q,inset){
   }
   if (tmin<0) tmin=0;
   return [c0+dx*tmin, c1+dy*tmin];
+}
+
+/* ---------- bridges ----------
+   A bridge is a contiguous run of c.bridge road/avenue tiles over water. We cache, per tile,
+   the span axis + index + length so the deck can sit flat (ramping onto land instead of at the
+   waterline) and long spans can grow piers. Rebuilt lazily with the shore (shoreDirty). */
+let BRIDGE=null;
+function recomputeBridges(){
+  BRIDGE=new Map();
+  for (let y=0;y<G;y++) for (let x=0;x<G;x++){
+    if (!map[y][x].bridge) continue;
+    let ax=0, ay=0;                                   // span axis: a line with bridge neighbours
+    for (const [dx,dy] of [[1,0],[0,1]]){
+      if ((inB(x+dx,y+dy)&&map[y+dy][x+dx].bridge) || (inB(x-dx,y-dy)&&map[y-dy][x-dx].bridge)){ ax=dx; ay=dy; break; }
+    }
+    if (!ax&&!ay){ for (const [dx,dy] of [[1,0],[0,1]]) if (isRoad(x+dx,y+dy)||isRoad(x-dx,y-dy)){ ax=dx; ay=dy; break; } }
+    if (!ax&&!ay) ax=1;
+    let back=0; while (inB(x-ax*(back+1),y-ay*(back+1)) && map[y-ay*(back+1)][x-ax*(back+1)].bridge) back++;
+    let fwd=0;  while (inB(x+ax*(fwd+1), y+ay*(fwd+1))  && map[y+ay*(fwd+1)][x+ax*(fwd+1)].bridge)  fwd++;
+    // a second bridge span crossing perpendicular here makes this a junction tile (a 4-way deck over
+    // water). We size the shared junction lift to the longer of the two spans so it reads as one deck.
+    const px=-ay, py=ax;
+    const cross = (inB(x+px,y+py)&&map[y+py][x+px].bridge) || (inB(x-px,y-py)&&map[y-py][x-px].bridge);
+    let len2=1;
+    if (cross){
+      let b2=0; while (inB(x-px*(b2+1),y-py*(b2+1)) && map[y-py*(b2+1)][x-px*(b2+1)].bridge) b2++;
+      let f2=0; while (inB(x+px*(f2+1),y+py*(f2+1)) && map[y+py*(f2+1)][x+px*(f2+1)].bridge) f2++;
+      len2=b2+f2+1;
+    }
+    BRIDGE.set(y*G+x, { ax, ay, idx:back, len:back+fwd+1, cross, len2 });
+  }
+}
+/* deck height (px, pre-zoom) grows gently with span so long bridges sit higher and read as supported */
+function bridgeLift(len, z){ return (4.5 + Math.min(7,(len-1)*0.9))*z; }
+/* the deck's height at a bridge tile's CENTRE — full lift over the interior, half on the ramped end
+   tiles, ~0 on a single-tile causeway. Agents (cars/peds) interpolate this between tiles so they ride
+   on the deck instead of a fixed height. Returns 0 for non-bridge tiles. */
+function bridgeDeckH(x,y,z){
+  const bd = BRIDGE && BRIDGE.get(y*G+x);
+  if (!bd) return 0;
+  const lift=bridgeLift(bd.len,z);
+  const Lf=(bd.idx===0)?0:lift, Ln=(bd.idx===bd.len-1)?0:lift;
+  return (Lf+Ln)/2;
+}
+function bridgeW2(ave){ return ave?0.48:0.24; }   // half-deck width — sized to the road/avenue surface beneath
+/* a support under the deck: slim twin pylons for short spans, a stout pier for long ones */
+function drawPier(sx, wy, lift, z, big, ave){
+  const top=wy-lift;
+  cx.fillStyle='rgba(8,18,28,.20)';
+  cx.beginPath(); cx.ellipse(sx, wy+1.5*z, (big?7:5)*z, (big?3:2.2)*z, 0,0,7); cx.fill();
+  if (big){
+    const pw=(ave?5.5:4.2)*z;
+    cx.fillStyle='#6a7480'; cx.fillRect(sx-pw, top, pw*2, lift+2*z);
+    cx.fillStyle='#828d99'; cx.fillRect(sx-pw, top, pw*0.55, lift+2*z);     // lit face
+    cx.fillStyle='#566069'; cx.fillRect(sx-pw-1.5*z, top-1.8*z, pw*2+3*z, 2.6*z);   // pier cap
+  } else {
+    cx.fillStyle='#7a838f';
+    cx.fillRect(sx-7*z, top, 2.2*z, lift+2*z);
+    cx.fillRect(sx+5*z, top, 2.2*z, lift+2*z);
+  }
+}
+/* one tile of deck along axis (ax,ay): the -axis edge at height Lf, the +axis edge at Ln (px).
+   avenue → wide asphalt with solid parapets + double amber line; road → narrow concrete deck
+   with steel railings + a dashed line. Uses the global ctx; heights are already zoom-scaled. */
+function bridgeDeck(cxg,cyg,ax,ay,W2,Lf,Ln,ave,z,junc){
+  const perpx=-ay, perpy=ax;
+  const Pt=(gx,gy,L)=>{ const [rx,ry]=rotC(gx,gy); const p=toScreen(rx,ry); return [p[0], p[1]-L]; };
+  const qf=(a,b,c2,d)=>{ cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.lineTo(c2[0],c2[1]); cx.lineTo(d[0],d[1]); cx.closePath(); cx.fill(); };
+  const cFL=[cxg-ax*0.5-perpx*W2, cyg-ay*0.5-perpy*W2], cFR=[cxg-ax*0.5+perpx*W2, cyg-ay*0.5+perpy*W2];
+  const cNL=[cxg+ax*0.5-perpx*W2, cyg+ay*0.5-perpy*W2], cNR=[cxg+ax*0.5+perpx*W2, cyg+ay*0.5+perpy*W2];
+  const fL=Pt(cFL[0],cFL[1],Lf), fR=Pt(cFR[0],cFR[1],Lf);
+  const nL=Pt(cNL[0],cNL[1],Ln), nR=Pt(cNR[0],cNR[1],Ln);
+  // side faces: a slim slab fascia on the lifted interior, growing into a full concrete abutment
+  // wall down to the ground on the end tiles (where the span ramps to meet its bank). Draw the
+  // camera-far edge first, then the near one, so the solid side reads cleanly.
+  const th=(ave?3:2.4)*z, end=(Lf<1||Ln<1)&&!junc;
+  const wall=(tf,tn,cf,cn)=>{
+    if (end){ cx.fillStyle='#54606b'; qf(tf,tn,Pt(cn[0],cn[1],0),Pt(cf[0],cf[1],0)); }
+    else    { cx.fillStyle=ave?'#2c343d':'#454e58'; qf(tf,tn,[tn[0],tn[1]+th],[tf[0],tf[1]+th]); }
+  };
+  if ((fL[1]+nL[1])>=(fR[1]+nR[1])){ wall(fR,nR,cFR,cNR); wall(fL,nL,cFL,cNL); }
+  else                             { wall(fL,nL,cFL,cNL); wall(fR,nR,cFR,cNR); }
+  cx.fillStyle=ave?'#3a4450':'#56616e'; qf(fL,nL,nR,fR);                    // deck top
+  if (ave){
+    const ph=2.7*z;                                                         // solid parapet walls + pale cap
+    if (!junc) for (const [eF,eN] of [[fL,nL],[fR,nR]]){                     // junctions break the parapet so crossing roads pass
+      cx.fillStyle='#79858f'; qf([eF[0],eF[1]-ph],[eN[0],eN[1]-ph],[eN[0],eN[1]],[eF[0],eF[1]]);
+      cx.strokeStyle='#c4ccd4'; cx.lineWidth=Math.max(1,z);
+      cx.beginPath(); cx.moveTo(eF[0],eF[1]-ph); cx.lineTo(eN[0],eN[1]-ph); cx.stroke();
+    }
+    // markings mirror the land avenue so the deck reads as one continuous street: a solid amber
+    // median down the centre + dashed white lane lines at ±0.21, same colours/weights/dash
+    const ma=Pt(cxg-ax*0.5,cyg-ay*0.5,Lf), mb=Pt(cxg+ax*0.5,cyg+ay*0.5,Ln);
+    cx.strokeStyle='rgba(255,196,90,.85)'; cx.lineWidth=Math.max(1,1.5*z); cx.setLineDash([]);
+    cx.beginPath(); cx.moveTo(ma[0],ma[1]); cx.lineTo(mb[0],mb[1]); cx.stroke();
+    cx.strokeStyle='rgba(240,244,248,.55)'; cx.lineWidth=Math.max(1,1.1*z); cx.setLineDash([3.5*z,4*z]);
+    for (const s of [1,-1]){ const a=Pt(cxg-ax*0.5+perpx*0.21*s,cyg-ay*0.5+perpy*0.21*s,Lf), b=Pt(cxg+ax*0.5+perpx*0.21*s,cyg+ay*0.5+perpy*0.21*s,Ln); cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.stroke(); }
+  } else {
+    cx.strokeStyle='#aeb8c2'; cx.lineWidth=Math.max(1,1.1*z);               // thin steel railings
+    if (!junc) for (const [eF,eN] of [[fL,nL],[fR,nR]]){ cx.beginPath(); cx.moveTo(eF[0],eF[1]-1.7*z); cx.lineTo(eN[0],eN[1]-1.7*z); cx.stroke(); }
+    cx.strokeStyle='rgba(235,225,160,.6)'; cx.lineWidth=Math.max(1,1.2*z); cx.setLineDash([3*z,5*z]);
+    const a=Pt(cxg-ax*0.5,cyg-ay*0.5,Lf), b=Pt(cxg+ax*0.5,cyg+ay*0.5,Ln); cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.stroke();
+  }
+  cx.setLineDash([]);
 }
 
 /* ---------- placement ---------- */
@@ -1898,8 +2238,21 @@ function place(x, y, quiet){
     if (S.money < 5) { msg('<b>Not enough funds.</b>'); return 'nofunds'; }
     S.money -= 5;
     if (c.grp){ const [bx,by]=c.grp; const cs=grpCells(c); unmerge(bx,by,'clear'); for (const [qx,qy] of cs) traffic[idx(qx,qy)]=0; }
-    else { c.t = c.bridge?'water':'grass'; c.bridge=false; c.bus=false; c.rz=null; c.lv=0; c.dev=0; c.fire=0; c.bld=0; traffic[idx(x,y)]=0; }
+    else { if (c.tunnel) elevDirty=true; c.t = c.bridge?'water':'grass'; c.bridge=false; c.bus=false; c.rz=null; c.tunnel=false; c.lv=0; c.dev=0; c.fire=0; c.bld=0; traffic[idx(x,y)]=0; }
     dirty=true; recomputeNets(); recomputeFields(); return true;
+  }
+  if (t==='raise'||t==='lower'){
+    if (!natElev(x,y)){ if(!quiet) msg('<b>Terraforming</b> reshapes open land and woods — bulldoze buildings, roads or water first.'); return false; }
+    if (S.money < def.c){ if(!quiet) msg('<b>Not enough funds.</b>'); return 'nofunds'; }
+    if (!terraform(x,y, t==='raise'?1:-1)) return false;   // already at the floor/ceiling here
+    S.money -= def.c; updateHUD();
+    return true;
+  }
+  if (!FLAT_EXEMPT[t]){
+    // zones & buildings need flat ground — steep/high terrain must be levelled first (roads cut through)
+    let fc=[[x,y]];
+    if (FOOT[t]){ let [fw,fh]=FOOT[t]; if (S.bOrient&&fw!==fh)[fw,fh]=[fh,fw]; if (x+fw<=G&&y+fh<=G) fc=footCells(x,y,fw,fh); }
+    for (const [qx,qy] of fc) if (groundTooHigh(qx,qy)){ if(!quiet) msg('<b>Level this ground first.</b> Use <b>Terrain → Lower</b> to flatten the hill, then build.'); return false; }
   }
   if (t==='tree'||t==='water'||t==='grass'){
     // terraform brushes: reshape only natural ground, never built tiles. 'grass' is the
@@ -1988,7 +2341,11 @@ function place(x, y, quiet){
   }
   if (S.money < def.c){ msg('<b>Not enough funds</b> — ' + def.n + ' costs ' + fmt(def.c) + '.'); return 'nofunds'; }
   S.money -= def.c;
-  c.t = t; c.lv = 0; c.dev = 0; c.fire = 0;
+  // a road/avenue crossing a big mountain bores a tunnel: read the (still-intact) height BEFORE
+  // paving, and if it's tall enough flag the tile so it keeps the peak and renders portals.
+  const boreTunnel=(t==='road'||t==='avenue') && isElevCell(x,y) && tileMaxH(x,y)>TUNNEL_H;
+  c.t = t; c.lv = 0; c.dev = 0; c.fire = 0; c.tunnel = boreTunnel;
+  if (boreTunnel){ elevDirty=true; if(!quiet) msg('<b>Tunnel bored.</b> The road threads through the mountain instead of cutting it down.'); }
   if (!quiet){
     if (t==='power') msg('Power plant online. It electrifies nearby roads — and pollutes nearby homes.');
     if (t==='pump') msg('Pump running. Water mains follow your roads — buildings need water to grow past level 1.');
@@ -2060,7 +2417,7 @@ function tryMerge(bx,by){
   root.lv=4; root.dev=400; root.bld=1;
   dirty=true; recomputeFields();
   const what = t==='res'?'A residential tower':'A '+(t==='com'?'commercial high-rise':'industrial complex');
-  msg(`<b>${what} is rising.</b> Four lots merged into one 2×2 block.`);
+  msgAt(`<b>${what} is rising.</b> Four lots merged into one 2×2 block.`, bx, by);
   return true;
 }
 function unmerge(bx,by,mode){
@@ -2242,26 +2599,26 @@ function simTick(){
       // mature towers in prime districts rise into skyscrapers
       if (c.lv===4 && c.t!=='ind' && c.dev>440 && lvReq>72 && Math.random()<0.02){
         c.lv=5; c.bld=1; c.dev=520; dirty=true; recomputeFields();
-        msg(`<b>A ${c.t==='res'?'residential':'commercial'} skyscraper crowns the skyline.</b>`);
+        msgAt(`<b>A ${c.t==='res'?'residential':'commercial'} skyscraper crowns the skyline.</b>`, x, y);
       }
       // beyond skyscrapers: highrises need an educated city, megatowers a pampered one
       if (c.lv===5 && c.t!=='ind' && c.dev>600 && lvReq>80 && (S.edu||0)>=0.80 && cellWt && !jam && Math.random()<0.012){
         c.lv=6; c.bld=1; c.dev=660; dirty=true; recomputeFields();
-        msg(`<b>A ${c.t==='res'?'residential':'commercial'} highrise tops out.</b> Educated cities build tall.`);
+        msgAt(`<b>A ${c.t==='res'?'residential':'commercial'} highrise tops out.</b> Educated cities build tall.`, x, y);
       }
       if (c.lv===6 && c.t!=='ind' && c.dev>720 && lvReq>88 && (S.edu||0)>=0.92 && leisure[idx(x,y)]>=10 && cellWt && !jam && Math.random()<0.008){
         c.lv=7; c.bld=1; c.dev=780; dirty=true; recomputeFields();
-        msg(`<b>A megatower pierces the clouds.</b> ${c.t==='res'?'Twelve hundred residents':'A vertical district of jobs'} in one block — the city's new crown.`);
+        msgAt(`<b>A megatower pierces the clouds.</b> ${c.t==='res'?'Twelve hundred residents':'A vertical district of jobs'} in one block — the city's new crown.`, x, y);
       }
       // industry scales vertically into heavy complexes — no land-value/leisure gate (it makes its own smog),
       // but the upper tiers need a skilled, educated workforce. Tops out at lv6 (megaplant), never a glass megatower.
       if (c.lv===4 && c.t==='ind' && c.dev>460 && cellWt && !jam && (S.edu||0)>=0.30 && Math.random()<0.02){
         c.lv=5; c.bld=1; c.dev=540; dirty=true; recomputeFields();
-        msg(`<b>An industrial complex scales up to heavy industry.</b> Hundreds more jobs in one block.`);
+        msgAt(`<b>An industrial complex scales up to heavy industry.</b> Hundreds more jobs in one block.`, x, y);
       }
       if (c.lv===5 && c.t==='ind' && c.dev>640 && cellWt && !jam && (S.edu||0)>=0.55 && Math.random()<0.012){
         c.lv=6; c.bld=1; c.dev=700; dirty=true; recomputeFields();
-        msg(`<b>A heavy-industry megaplant comes online.</b> A vertical district of jobs.`);
+        msgAt(`<b>A heavy-industry megaplant comes online.</b> A vertical district of jobs.`, x, y);
       }
       // mature lv3 lots try to merge with three matching neighbors into a tower
       if (c.lv===3 && !c.grp && c.dev>260 && dem>-0.3 && Math.random()<0.08){
@@ -2750,7 +3107,7 @@ function drawVehicle(car,fx,fy){
   const gx=fx+.5+car.lox, gy=fy+.5+car.loy;
   const [rcx,rcy]=rotC(gx,gy);
   const [sx0,sy0]=toScreen(rcx-.5,rcy-.5);
-  const tl=(qx,qy)=>(inB(qx,qy)&&map[qy][qx].bridge)?4.5*z:0;
+  const tl=(qx,qy)=>(inB(qx,qy)&&map[qy][qx].bridge)?bridgeDeckH(qx,qy,z):0;
   const lift = tl(car.px,car.py)*(1-car.t) + tl(car.x,car.y)*car.t;
   const cxp=sx0, cyp=sy0+TH/2*z-lift;
   // forward direction on screen
@@ -3005,7 +3362,7 @@ function drawPed(p,now){
   const [rcx,rcy]=rotC(fx+.5,fy+.5);
   const [psx0,psy0]=toScreen(rcx-.5,rcy-.5);
   const bob=S.speed?Math.sin(now/90+p.t*9)*0.6*z:0;
-  const ptl=(qx,qy)=>(inB(qx,qy)&&map[qy][qx].bridge)?4.5*S.zoom:0;
+  const ptl=(qx,qy)=>(inB(qx,qy)&&map[qy][qx].bridge)?bridgeDeckH(qx,qy,S.zoom):0;
   const plift = ptl(p.px,p.py)*(1-p.t) + ptl(p.x,p.y)*p.t;
   const psx=psx0, psy=psy0+TH/2*z - 2*z + bob - plift;
   if (z>2.5){
@@ -3539,16 +3896,32 @@ function drawCell(x,y,now){
       break;
     }
     case 'grass': {
-      const g = 0.95 + v*0.1;
-      if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
+      const elev = isElevCell(x,y);
+      const g = 0.95 + v*0.1 + (elev?elevShade(x,y):0);
+      if (elev) drawCliffWalls(x,y);                 // cliff skirt first; the cap below hides its inner parts
+      if (isShoreCell(x,y)||elev) groundPath(x,y); else diamond(sx,sy);
       cx.fillStyle=shade(SEAS.grass,g); cx.fill();
+      const gck=elev?cliffMix(x,y):0; if (gck>0){ cx.fillStyle='rgba(122,112,98,'+(gck*0.4).toFixed(3)+')'; cx.fill(); }
       if (SEAS.snow && v>.55){ cx.fillStyle='rgba(255,255,255,.5)'; cx.beginPath(); cx.ellipse(sx+(v-0.55)*40*z-8*z, sy+TH*.5*z, 4.5*z, 2*z, 0, 0, 7); cx.fill(); }
       else if (v>.93){ cx.fillStyle='rgba(255,255,255,.25)'; cx.fillRect(sx+(v-0.93)*200*z-6*z, sy+TH*.45*z, 2*z, 2*z); }
       break; }
     case 'tree': {
-      const shore = isShoreCell(x,y);
-      if (shore) groundPath(x,y); else diamond(sx,sy);
-      cx.fillStyle=shade(SEAS.treeBase,.95+v*.1); cx.fill();
+      const shore = isShoreCell(x,y), elev = isElevCell(x,y);
+      if (elev) drawCliffWalls(x,y);                 // cliff skirt first; the cap below hides its inner parts
+      if (shore||elev) groundPath(x,y); else diamond(sx,sy);
+      cx.fillStyle=shade(SEAS.treeBase,.95+v*.1+(elev?elevShade(x,y):0)); cx.fill();
+      const tck=elev?cliffMix(x,y):0; if (tck>0){ cx.fillStyle='rgba(122,112,98,'+(tck*0.4).toFixed(3)+')'; cx.fill(); }
+      // cull stands on steep slopes that face AWAY from the camera: the ridge in front of them would
+      // hide them in 3D, but the painter's renderer can't occlude tall sprites, so they'd poke over the
+      // hilltop and float against the sky/water. View-dependent by design — rotate so the slope faces
+      // you and its trees return (the rotation crossfade hides the swap). Ground stays drawn either way.
+      if (elev){
+        const sV=(gx,gy)=>{ const vv=rotC(gx,gy); return vv[0]+vv[1]; };   // view depth of a grid vertex
+        const cs=[[x,y],[x+1,y],[x+1,y+1],[x,y+1]];
+        let fi=0,bi=0;
+        for (let k=1;k<4;k++){ if (sV(cs[k][0],cs[k][1])>sV(cs[fi][0],cs[fi][1])) fi=k; if (sV(cs[k][0],cs[k][1])<sV(cs[bi][0],cs[bi][1])) bi=k; }
+        if (vertElev(cs[fi][0],cs[fi][1]) - vertElev(cs[bi][0],cs[bi][1]) > 15) break;   // steep back-face → skip the stand
+      }
       const n=5+Math.min(3,(v*4)|0);                 // 5..8 trees per block for a richer stand; v re-rolls on re-plant
       const z2=S.zoom, cluster=[], sd=x+v*97.3, spread=0.82;   // mix vary into the seed so re-planting reshapes the stand
       // on a bank the land area has shifted — clamp every trunk base to the real (displaced)
@@ -3564,9 +3937,13 @@ function drawCell(x,y,now){
         if (dq){                                       // grid-space base point, clamped onto the land quad
           let bx=x+0.5+(a+b)/2, by=y+0.5+(b-a)/2;
           [bx,by]=clampQuad(bx,by,dq,0.09);
+          const lh = elev ? sampleElev(bx,by)*z2 : 0;  // lift this trunk by the ground height beneath IT
           const [rgx,rgy]=rotC(bx,by), bsr=toScreen(rgx,rgy);
-          tx=bsr[0]; ty=bsr[1]-TH*0.5*z2;
-        } else { tx=sx+a*TW*0.5*z2; ty=sy+b*TH*0.5*z2; }
+          tx=bsr[0]; ty=bsr[1]-TH*0.5*z2-lh;
+        } else {
+          const lh = elev ? sampleElev(x+0.5+(a+b)/2, y+0.5+(b-a)/2)*z2 : 0;   // ride the slope under this trunk
+          tx=sx+a*TW*0.5*z2; ty=sy+b*TH*0.5*z2-lh;
+        }
         cluster.push([tx, ty, .46+hsh(sd,y,i+40)*.30, hsh(sd,y,i+80)]);
       }
       cluster.sort((p,q)=>p[1]-q[1]);                 // paint back-to-front so nearer trees overlap
@@ -3580,7 +3957,8 @@ function drawCell(x,y,now){
       cx.fillRect(sx-10*z, sy+(10+Math.sin(now/900+x)*3)*z, 14*z, 1.5*z);
       break; }
     case 'path': {
-      diamond(sx,sy); cx.fillStyle=shade('#7da06a',.97+c.vary*.05); cx.fill();
+      if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
+      cx.fillStyle=shade('#7da06a',.97+c.vary*.05); cx.fill();
       const P2=(gx,gy)=>{ const [rx,ry]=rotC(gx,gy); return toScreen(rx,ry); };
       const qf=(a,b2,c2,d2)=>{ cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b2[0],b2[1]); cx.lineTo(c2[0],c2[1]); cx.lineTo(d2[0],d2[1]); cx.closePath(); cx.fill(); };
       const pcon=[];
@@ -3608,59 +3986,46 @@ function drawCell(x,y,now){
       break;
     }
     case 'road': case 'avenue': {
+      if (c.tunnel && isElevCell(x,y)){ drawTunnelTile(x,y); break; }
       const ave = c.t==='avenue';
       const P=(gx,gy)=>{ const [rx,ry]=rotC(gx,gy); return toScreen(rx,ry); };
       const qfill=(a,b2,c2,d2)=>{ cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b2[0],b2[1]); cx.lineTo(c2[0],c2[1]); cx.lineTo(d2[0],d2[1]); cx.closePath(); cx.fill(); };
       const conns=[];
       for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) if (isRoad(x+dx,y+dy)) conns.push([dx,dy]);
       if (c.bridge){
-        // water beneath
-        diamond(sx,sy);
-        const sh = Math.sin(now/700 + (x+y)*1.3)*.06;
-        cx.fillStyle=shade('#3a7fc1', .95+sh); cx.fill();
-        const lift=4.5*z, W2=ave?.46:.36;
-        // pylons down to the water
-        cx.fillStyle='#7a838f';
-        cx.fillRect(sx-7*z, sy+TH/2*z-lift, 2.2*z, lift+2*z);
-        cx.fillRect(sx+5*z, sy+TH/2*z-lift, 2.2*z, lift+2*z);
-        // deck strips — elevated mid-river, ramping down to meet land roads flush
-        const liftedL=(g,L)=>{ const p2=P(g[0],g[1]); return [p2[0], p2[1]-L]; };
-        const lifted=(g)=>liftedL(g,lift);
-        const endLift=(dx,dy)=>{ const nx=x+dx, ny=y+dy; return (inB(nx,ny)&&map[ny][nx].bridge) ? lift : 0; };
-        cx.fillStyle= ave?'#4a5663':'#56616e';
-        const cxg=x+.5, cyg=y+.5;
-        qfill(lifted([cxg-W2,cyg-W2]),lifted([cxg+W2,cyg-W2]),lifted([cxg+W2,cyg+W2]),lifted([cxg-W2,cyg+W2]));
-        for (const [dx,dy] of (conns.length?conns:[[1,0],[-1,0]])){
-          const eL=endLift(dx,dy);
-          const px2=-dy*W2, py2=dx*W2, exg=cxg+dx*.5, eyg=cyg+dy*.5;
-          // abutment under a ramp end
-          if (eL<lift){
-            cx.fillStyle='#7a838f';
-            const [bx3,by3]=P(exg,eyg);
-            cx.fillRect(bx3-2.4*z, by3-1*z, 4.8*z, 2.6*z);
-            cx.fillStyle= ave?'#4a5663':'#56616e';
-          }
-          qfill(lifted([cxg+px2,cyg+py2]),liftedL([exg+px2,eyg+py2],eL),liftedL([exg-px2,eyg-py2],eL),lifted([cxg-px2,cyg-py2]));
-          // railings follow the slope
-          cx.strokeStyle='#aeb8c2'; cx.lineWidth=Math.max(1,1.1*z);
-          for (const sgn of [1,-1]){
-            const a1=lifted([cxg-dy*W2*sgn, cyg+dx*W2*sgn]), a2=liftedL([exg-dy*W2*sgn, eyg+dx*W2*sgn],eL);
-            cx.beginPath(); cx.moveTo(a1[0],a1[1]-1.6*z); cx.lineTo(a2[0],a2[1]-1.6*z-(eL<lift?0.6*z:0)); cx.stroke();
-          }
+        const bd = (BRIDGE && BRIDGE.get(y*G+x)) || { ax:1, ay:0, idx:0, len:1 };
+        const wy = sy+TH/2*z, cxg=x+.5, cyg=y+.5;
+        // water beneath — the bank is pinned straight at the crossing, so a clean diamond reads
+        if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
+        cx.fillStyle=shade('#3a7fc1', .95+Math.sin(now/700+(x+y)*1.3)*.06); cx.fill();
+        if (bd.cross){
+          // two spans meet over water → a flat 4-way deck junction. Draw both axes' strips at one
+          // shared (interior) height plus a stout pier; barriers are dropped so the roads run through.
+          const Lj = bridgeLift(Math.max(bd.len, bd.len2), z);
+          let aw=ave;                                    // widen the junction to the wider of the crossing roads
+          for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
+            if (inB(x+dx,y+dy) && map[y+dy][x+dx].t==='avenue' && (map[y+dy][x+dx].bridge||isRoad(x+dx,y+dy))) aw=true;
+          const Wj = bridgeW2(aw);
+          drawPier(sx, wy, Lj, z, true, aw);
+          bridgeDeck(cxg, cyg,  bd.ax,  bd.ay, Wj, Lj, Lj, aw, z, true);
+          bridgeDeck(cxg, cyg, -bd.ay,  bd.ax, Wj, Lj, Lj, aw, z, true);
+          break;
         }
-        // centerline follows the slope too
-        cx.strokeStyle= ave?'rgba(255,196,90,.85)':'rgba(235,225,160,.5)';
-        cx.lineWidth=Math.max(1,1.2*z); cx.setLineDash(ave?[]:[3*z,5*z]);
-        for (const [dx,dy] of conns){
-          const a1=lifted([cxg,cyg]), a2=liftedL([cxg+dx*.5,cyg+dy*.5],endLift(dx,dy));
-          cx.beginPath(); cx.moveTo(a1[0],a1[1]); cx.lineTo(a2[0],a2[1]); cx.stroke();
-        }
-        cx.setLineDash([]);
+        const lift = bridgeLift(bd.len, z), W2 = bridgeW2(ave);
+        // deck height per along-axis edge: full lift toward the span interior, ramping down to the
+        // ground where the span abuts land. Keeping the ramp on the bridge's OWN end tile leaves the
+        // land road a clean flat road (no parapet/sidewalk overlap) and meets it flush at the shore.
+        const Lf = (bd.idx===0)          ? 0 : lift;     // -axis edge (back)
+        const Ln = (bd.idx===bd.len-1)   ? 0 : lift;     // +axis edge (forward)
+        // supports only under the lifted interior — ends ramp down onto their banks
+        if (bd.idx>0 && bd.idx<bd.len-1) drawPier(sx, wy, lift, z, bd.len>=4 && bd.idx%3===1, ave);
+        bridgeDeck(cxg, cyg, bd.ax, bd.ay, W2, Lf, Ln, ave, z);
         break;
       }
       if (ave){
         // full-width asphalt — tiles butt seamlessly
-        diamond(sx,sy); cx.fillStyle='#39434f'; cx.fill();
+        if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
+        cx.fillStyle='#39434f'; cx.fill();
         // sidewalk curbs ONLY on edges with no road neighbor, so stretches read as one surface
         const EDGE={'1,0':[[x+1,y],[x+1,y+1]], '-1,0':[[x,y],[x,y+1]], '0,1':[[x,y+1],[x+1,y+1]], '0,-1':[[x,y],[x+1,y]]};
         cx.strokeStyle='#8b97a5'; cx.lineWidth=2*z; cx.lineCap='round';
@@ -3725,7 +4090,8 @@ function drawCell(x,y,now){
         }
       } else {
         // narrow country road: grass shoulders + continuous asphalt ribbon
-        diamond(sx,sy); cx.fillStyle=shade('#7da06a',.96+c.vary*.06); cx.fill();
+        if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
+        cx.fillStyle=shade('#7da06a',.96+c.vary*.06); cx.fill();
         const w=.42, hw=w/2, cxg=x+.5, cyg=y+.5;
         cx.fillStyle='#48525f';
         qfill(P(cxg-hw,cyg-hw),P(cxg+hw,cyg-hw),P(cxg+hw,cyg+hw),P(cxg-hw,cyg+hw));   // hub
@@ -4695,19 +5061,46 @@ function drawCell(x,y,now){
       cx.fillStyle='rgba(210,212,218,.5)';                                    // steam plume
       for (let i=0;i<3;i++){ const yy=sbase-sh-2*z2-i*3.4*z2; cx.beginPath(); cx.arc(stx+Math.sin((now/600)+i)*1.6*z2, yy, (1.6+i*0.8)*z2, 0,7); cx.fill(); }
       break; }
-    case 'recycling': { // green sorting centre: open shed, colour-coded skips, spinning chasing-arrows
+    case 'recycling': { // materials-recovery facility: daylit sorting hall w/ solar roof, intake bay, colour-coded skips & baled stock
       const z2=S.zoom, cy2=sy+TH/2*z2;
-      diamond(sx,sy); cx.fillStyle='#5d7a61'; cx.fill();
-      vol(sx,sy,0,0,0.58,0.58,8,'#3f8f57',{roof:'#5cb074'});
-      for (const [bx,by,col] of [[-5.5,3.4,'#3a77b8'],[0,4.4,'#4caf6e'],[5.5,3.4,'#e0a52a']]){    // recycling skips out front
-        cx.fillStyle=col; cx.fillRect(sx+bx*z2-1.6*z2, cy2+by*z2-2.6*z2, 3.2*z2, 2.6*z2);
-        cx.fillStyle='rgba(0,0,0,.18)'; cx.fillRect(sx+bx*z2-1.6*z2, cy2+by*z2-2.6*z2, 3.2*z2, 0.7*z2);
+      diamond(sx,sy); cx.fillStyle='#6a7d63'; cx.fill();                      // green-tinged paved yard
+      cx.strokeStyle='rgba(38,52,36,.3)'; cx.lineWidth=.7; diamond(sx,sy,.82); cx.stroke();
+      // main sorting hall — clean pale industrial shed
+      const f=vol(sx,sy,-0.09,-0.09,0.56,0.46,8,'#cdd2cd',{roof:'#e7ebe6',line:true});
+      // solar array inset on the roof — the 'clean, barely any smog' identity
+      const mx=(f.T[0]+f.R[0]+f.B[0]+f.L[0])/4, my=(f.T[1]+f.R[1]+f.B[1]+f.L[1])/4, k=.66;
+      const sT=[mx+(f.T[0]-mx)*k,my+(f.T[1]-my)*k], sR=[mx+(f.R[0]-mx)*k,my+(f.R[1]-my)*k],
+            sB=[mx+(f.B[0]-mx)*k,my+(f.B[1]-my)*k], sL=[mx+(f.L[0]-mx)*k,my+(f.L[1]-my)*k];
+      cx.fillStyle='#243a55'; cx.beginPath(); cx.moveTo(sT[0],sT[1]); cx.lineTo(sR[0],sR[1]); cx.lineTo(sB[0],sB[1]); cx.lineTo(sL[0],sL[1]); cx.closePath(); cx.fill();
+      cx.strokeStyle='rgba(130,180,225,.45)'; cx.lineWidth=Math.max(.5,.6*z2);
+      for (let i=1;i<4;i++){ const t=i/4;
+        cx.beginPath(); cx.moveTo(sT[0]+(sR[0]-sT[0])*t,sT[1]+(sR[1]-sT[1])*t); cx.lineTo(sL[0]+(sB[0]-sL[0])*t,sL[1]+(sB[1]-sL[1])*t); cx.stroke();
+        cx.beginPath(); cx.moveTo(sT[0]+(sL[0]-sT[0])*t,sT[1]+(sL[1]-sT[1])*t); cx.lineTo(sR[0]+(sB[0]-sR[0])*t,sR[1]+(sB[1]-sR[1])*t); cx.stroke();
       }
-      const rcx=sx, rcy=cy2-9*z2, R=2.6*z2, spin=now/1500;                    // chasing-arrows mark
-      cx.strokeStyle='rgba(255,255,255,.92)'; cx.lineWidth=1.3*z2; cx.lineCap='round';
-      for (let i=0;i<3;i++){ const a=i*2.094+spin, e=a+1.5;
-        cx.beginPath(); cx.arc(rcx, rcy, R, a, e); cx.stroke();
-        const ex=rcx+Math.cos(e)*R, ey=rcy+Math.sin(e)*R;               // arrowhead at the arc tip
+      // green clerestory band along the eave reads as the sorting line inside
+      const eL=facePt(f,'L',.04,.16), eR=facePt(f,'L',.96,.16), eRb=facePt(f,'L',.96,.34), eLb=facePt(f,'L',.04,.34);
+      cx.fillStyle='#3f8f57'; quadF(eL,eR,eRb,eLb);
+      // open intake bay at the front-right, green roof tying to the eco palette
+      const a=vol(sx,sy,0.16,0.22,0.3,0.24,4,'#bcc2bc',{roof:'#4caf6e'});
+      cx.fillStyle='rgba(18,26,20,.5)'; quadF(facePt(a,'R',.12,.2),facePt(a,'R',.88,.2),facePt(a,'R',.88,.96),facePt(a,'R',.12,.96)); // dark open mouth
+      // baled recyclables stacked at the left — crushed, colour-coded cubes
+      for (const [ox,oy,col] of [[-0.3,0.1,'#c79a34'],[-0.3,0.32,'#3d82c4'],[-0.46,0.21,'#4caf6e']])
+        vol(sx,sy,ox,oy,0.15,0.15,3,col,{noShadow:true});
+      // colour-coded intake skips out front, with darker lids
+      for (const [bx,by,col] of [[-3.5,5.6,'#3a77b8'],[0.6,6.4,'#4caf6e'],[4.7,5.6,'#e0a52a']]){
+        cx.fillStyle=col; cx.fillRect(sx+bx*z2-1.7*z2, cy2+by*z2-2.7*z2, 3.4*z2, 2.7*z2);
+        cx.fillStyle=shade(col,.6); cx.fillRect(sx+bx*z2-1.7*z2, cy2+by*z2-2.7*z2, 1*z2, 2.7*z2);
+        cx.fillStyle='rgba(0,0,0,.28)'; cx.fillRect(sx+bx*z2-1.9*z2, cy2+by*z2-3.2*z2, 3.8*z2, 0.8*z2);
+      }
+      // roadside sign pylon with the spinning chasing-arrows emblem
+      const px=sx+8.5*z2, pbase=cy2+5*z2, ph=12*z2;
+      cx.fillStyle='#8a8f86'; cx.fillRect(px-0.7*z2, pbase-ph, 1.4*z2, ph);
+      const rcx=px, rcy=pbase-ph-2.4*z2, R=3.2*z2, spin=now/1500;
+      cx.fillStyle='#2f7d49'; cx.beginPath(); cx.arc(rcx,rcy,R+1.5*z2,0,7); cx.fill();
+      cx.strokeStyle='rgba(255,255,255,.95)'; cx.lineWidth=1.3*z2; cx.lineCap='round';
+      for (let i=0;i<3;i++){ const a2=i*2.094+spin, e=a2+1.5;
+        cx.beginPath(); cx.arc(rcx, rcy, R, a2, e); cx.stroke();
+        const ex=rcx+Math.cos(e)*R, ey=rcy+Math.sin(e)*R;
         cx.beginPath(); cx.moveTo(ex,ey);
         cx.lineTo(ex-Math.cos(e-0.5)*1.7*z2, ey-Math.sin(e-0.5)*1.7*z2);
         cx.moveTo(ex,ey);
@@ -6437,6 +6830,16 @@ function portRoots(){
   }
   return r;
 }
+function portDockTile(root){
+  // the water tile a ship moors at: the seaward neighbour of the 2×2 wharf footprint
+  const [rx,ry]=root;
+  for (const [cx0,cy0] of [[rx,ry],[rx+1,ry],[rx,ry+1],[rx+1,ry+1]])
+    for (const [dx,dy] of [[0,1],[1,0],[0,-1],[-1,0]]){
+      const nx=cx0+dx, ny=cy0+dy;
+      if (inB(nx,ny) && map[ny][nx].t==='water') return [nx,ny];
+    }
+  return null;
+}
 function waterBorderTiles(){
   const r=[];
   for (let x=0;x<G;x++){ if (map[0][x].t==='water') r.push([x,0]); if (map[G-1][x].t==='water') r.push([x,G-1]); }
@@ -6466,61 +6869,86 @@ function shipPos(sh){
   return [ax+(bx-ax)*f, ay+(by-ay)*f, bx-ax, by-ay];
 }
 function stepShips(dt){
-  const ports=portRoots();
-  const lit=ports.some(([x,y])=>map[y][x].pw);                    // a dark port draws no trade
-  if (ports.length && lit && ships.length<Math.min(4,1+ports.length) && Math.random()<dt*0.09){
+  const lit=portRoots().filter(([x,y])=>map[y][x].pw);            // a dark port draws no trade
+  if (lit.length && ships.length<Math.min(5,1+lit.length) && Math.random()<dt*0.11){
     const edges=waterBorderTiles();
     if (edges.length>1){
       const a=edges[(Math.random()*edges.length)|0];
-      const b=edges[(Math.random()*edges.length)|0];
-      if (a!==b){
-        const path=waterPath(a,b);
-        if (path && path.length>6) ships.push({path, u:0, sp:0.55+Math.random()*0.45, big:Math.random()<0.5, hue:Math.random()});
+      if (Math.random()<0.72){
+        // a port call: sail in from the sea, moor at the wharf, then sail back out
+        const dock=portDockTile(lit[(Math.random()*lit.length)|0]);
+        if (dock){
+          const inP=waterPath([a[0],a[1]], dock);
+          const b=edges[(Math.random()*edges.length)|0];
+          const outP=waterPath(dock, [b[0],b[1]]);
+          if (inP && inP.length>3 && outP && outP.length>3)
+            ships.push({ path:inP.concat(outP.slice(1)), u:0, sp:0.42+Math.random()*0.33,
+                         big:Math.random()<0.55, hue:Math.random(), dockU:inP.length-1, dwell:0, moored:false });
+        }
+      } else {
+        const b=edges[(Math.random()*edges.length)|0];                // a passing vessel, just transiting
+        if (a!==b){ const path=waterPath(a,b);
+          if (path && path.length>6) ships.push({ path, u:0, sp:0.55+Math.random()*0.45, big:Math.random()<0.5, hue:Math.random() }); }
       }
     }
   }
   for (let i=ships.length-1;i>=0;i--){
-    const sh=ships[i]; sh.u+=sh.sp*dt;
+    const sh=ships[i];
+    if (sh.dwell>0){ sh.dwell-=dt; continue; }                       // moored: loading/unloading at the quay
+    // reaching the wharf for the first time → hold station while cargo is worked
+    if (sh.dockU!=null && !sh.moored && sh.u<sh.dockU && sh.u+sh.sp*dt>=sh.dockU){
+      sh.u=sh.dockU; sh.moored=true; sh.dwell=3+Math.random()*3; continue;
+    }
+    let sp=sh.sp;
+    if (sh.dockU!=null) sp*=clamp(Math.abs(sh.u-sh.dockU)*0.7+0.25, 0.25, 1);  // ease in to / out of the berth
+    sh.u+=sp*dt;
     if (sh.u>sh.path.length-1) ships.splice(i,1);
   }
 }
-function drawShipSprite(px,py,u,shx,shy,night,now,big,hue){
-  let ang=Math.atan2(shy,shx), mir=1;
-  if (Math.cos(ang)<0){ ang-=Math.PI; mir=-1; }
-  const L=big?13:9.5;
-  cx.save();
-  cx.translate(px,py);
-  cx.rotate(ang);
-  cx.scale(mir,1);
-  // foamy wake trailing astern
-  cx.fillStyle='rgba(235,248,255,.30)';
-  cx.beginPath(); cx.ellipse(-(L+5)*u,0,(L+6)*u,2.4*u,0,0,7); cx.fill();
-  // hull
-  cx.fillStyle = big ? '#37414c' : '#7a2e26';
-  cx.beginPath();
-  cx.moveTo(L*u,0); cx.quadraticCurveTo((L-2)*u,2.7*u,-(L-2)*u,2.3*u);
-  cx.lineTo(-L*u,-2.3*u); cx.quadraticCurveTo((L-2)*u,-2.7*u,L*u,0); cx.closePath(); cx.fill();
-  // deck
-  cx.fillStyle = big ? '#5a6470' : '#cdbf9a';
-  cx.beginPath();
-  cx.moveTo((L-2)*u,0); cx.quadraticCurveTo((L-3.5)*u,1.7*u,-(L-3)*u,1.5*u);
-  cx.lineTo(-(L-2.6)*u,-1.5*u); cx.quadraticCurveTo((L-3.5)*u,-1.7*u,(L-2)*u,0); cx.closePath(); cx.fill();
+/* A ship is drawn on the isometric water plane, not as a flat billboard: its hull is laid out
+   in (along-heading, abeam) tile units and every point is projected through the same iso
+   transform the tiles use, so the vessel foreshortens with its heading and reads as floating
+   level with the water — like the wharf it calls at. fvx/fvy = heading in view-grid space. */
+function drawShipSprite(px,py,z,fvx,fvy,night,now,big,hue,moored){
+  const fl=Math.hypot(fvx,fvy)||1, fx=fvx/fl, fy=fvy/fl;          // unit heading
+  const rx=-fy, ry=fx;                                            // abeam (to starboard)
+  const Fx=(fx-fy)*(TW/2)*z, Fy=(fx+fy)*(TH/2)*z;                 // screen delta per tile, forward
+  const Rx=(rx-ry)*(TW/2)*z, Ry=(rx+ry)*(TH/2)*z;                 // screen delta per tile, abeam
+  const P=(a,b,h=0)=>[px+a*Fx+b*Rx, py+a*Fy+b*Ry-h];             // ship-local → screen (h = height in px)
+  const fill=(pts,col)=>{ cx.fillStyle=col; cx.beginPath(); pts.forEach((q,k)=>k?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1])); cx.closePath(); cx.fill(); };
+  const box=(a,b,da,db,h,base,top,side)=>{                        // a little raised block (deckhouse / container)
+    const lo=[[a-da,b-db],[a+da,b-db],[a+da,b+db],[a-da,b+db]].map(([u,v])=>P(u,v,base));
+    const hi=[[a-da,b-db],[a+da,b-db],[a+da,b+db],[a-da,b+db]].map(([u,v])=>P(u,v,base+h));
+    cx.fillStyle=side; for(let k=0;k<4;k++){ const n=(k+1)%4; cx.beginPath(); cx.moveTo(lo[k][0],lo[k][1]); cx.lineTo(lo[n][0],lo[n][1]); cx.lineTo(hi[n][0],hi[n][1]); cx.lineTo(hi[k][0],hi[k][1]); cx.closePath(); cx.fill(); }
+    fill(hi, top);
+  };
+  const La=big?0.46:0.32, Wa=big?0.155:0.12, hullH=(big?5:4)*z;  // half-length / half-beam in tiles, freeboard in px
+  // wake: a translucent foam fan on the water astern (skipped while moored)
+  if (!moored) fill([P(-La,Wa*0.7),P(-La,-Wa*0.7),P(-La-0.85,-Wa*1.7),P(-La-0.85,Wa*1.7)].map(p=>p), 'rgba(236,248,255,.26)');
+  // hull: pointed bow, transom stern — shell sides then the deck cap
+  const hull=[[La,0],[La*0.5,Wa],[-La,Wa*0.74],[-La,-Wa*0.74],[La*0.5,-Wa]];
+  const lo=hull.map(([a,b])=>P(a,b,0)), hi=hull.map(([a,b])=>P(a,b,hullH));
+  cx.fillStyle = big ? '#2f3842' : '#7a2e26';
+  for(let k=0;k<hull.length;k++){ const n=(k+1)%hull.length; cx.beginPath(); cx.moveTo(lo[k][0],lo[k][1]); cx.lineTo(lo[n][0],lo[n][1]); cx.lineTo(hi[n][0],hi[n][1]); cx.lineTo(hi[k][0],hi[k][1]); cx.closePath(); cx.fill(); }
+  fill(hi, big ? '#525c68' : '#c7b994');                          // deck
   if (big){
-    // container freighter: stacked rows of boxes
-    const cols=['#3f6f9c','#3f8f57','#c7913a','#a64a4a'];
-    for (let r=0;r<4;r++){
-      cx.fillStyle=cols[(r+(hue*4|0))%4];
-      cx.fillRect((-7+r*3.2)*u, -1.5*u, 2.7*u, 3*u);
+    const cols=['#3f6f9c','#3f8f57','#c7913a','#a64a4a','#5a7d8c'];
+    for (let r=0;r<4;r++){                                        // a deckload of stacked containers, two abreast
+      const a=La*0.45 - r*(La*0.9/4);
+      for (const b of [-Wa*0.45, Wa*0.45]){
+        const col=cols[(r+(hue*5|0))%cols.length];
+        box(a,b,La*0.085,Wa*0.42,4.2*z,hullH,col,col,'rgba(0,0,0,.22)');
+      }
     }
-    // bridge house at the stern
-    cx.fillStyle='#dfe6ec'; cx.fillRect(-(L-1.5)*u, -1.6*u, 2.6*u, 3.2*u);
+    box(-La*0.74,0,La*0.1,Wa*0.62,7.5*z,hullH,'#eef2f6','#fbfdff','#b9c2cc'); // bridge house aft
   } else {
-    // small craft: a cabin and a stubby funnel
-    cx.fillStyle='#e0e6ea'; cx.fillRect(-1.5*u,-1.3*u, 3.4*u, 2.6*u);
-    cx.fillStyle='#b5683a'; cx.fillRect(-3.3*u,-1.0*u, 1.4*u, 2.0*u);
+    box(0.02,0,La*0.34,Wa*0.66,4.5*z,hullH,'#e0e6ea','#f0f4f7','#b6bfc7');    // wheelhouse
+    box(-La*0.42,0,La*0.1,Wa*0.34,5.5*z,hullH,'#b5683a','#c97a48','#7e4524'); // stubby funnel
   }
-  if (night){ cx.fillStyle='#ffe9a0'; cx.beginPath(); cx.arc((L-0.5)*u,0,0.7*u,0,7); cx.fill(); }
-  cx.restore();
+  if (night){                                                     // running lights: red to port, green to starboard, white at the bow
+    const L=(col,a,b)=>{ const [x,y]=P(a,b,hullH+1.5*z); cx.fillStyle=col; cx.beginPath(); cx.arc(x,y,0.85*z,0,7); cx.fill(); };
+    L('#ff5a5a', La*0.55,-Wa*0.9); L('#5fe08a', La*0.55,Wa*0.9); L('#fff4cf', La*0.92,0);
+  }
 }
 function drawShips(night,now){
   const z=S.zoom;
@@ -6530,8 +6958,7 @@ function drawShips(night,now){
     const [vx,vy]=rotC(gx,gy);
     const [px,py]=toScreen(vx-.5,vy-.5);
     const [hvx,hvy]=rotD(dx,dy);
-    const shx=(hvx-hvy)*TW, shy=(hvx+hvy)*TH;
-    drawShipSprite(px, py+TH/2*z, z*(sh.big?1.0:0.85), shx, shy, night, now, sh.big, sh.hue);
+    drawShipSprite(px, py+TH/2*z, z, hvx, hvy, night, now, sh.big, sh.hue, sh.dwell>0);
   }
 }
 /* ---------- spaceport launches: ceremonial liftoffs, vertical and rare ----------
@@ -7704,7 +8131,8 @@ function drawInd(c,sx,sy,cyp,hf,night,z,pk,now){
 function render(now){
   BLD_TINT=null;   // safety: never carry a tower tint across frames
   const W=cv.width/DPR, H=cv.height/DPR;
-  if (shoreDirty) recomputeShore();
+  if (shoreDirty){ recomputeShore(); recomputeBridges(); }
+  if (elevDirty) recomputeElev();
   updateSeason();
   WX.rain += (WX.target-WX.rain)*0.22;          // once per frame, not once per tile
   // sky
@@ -7735,6 +8163,7 @@ function render(now){
   const carEntries=[];
   for (const car of (svc.length ? cars.concat(svc) : cars)){
     const fx=car.px+(car.x-car.px)*car.t, fy=car.py+(car.y-car.py)*car.t;
+    if (isTunnel(Math.round(fx), Math.round(fy))) continue;   // hidden inside the mountain
     // the body is drawn at the LANE position — ordering must use exactly the same point
     const [rvx,rvy]=rotC(fx+.5+(car.lox||0), fy+.5+(car.loy||0));
     // careful: hx may legitimately be 0 (vertical travel) — only default when truly unset
@@ -7816,6 +8245,7 @@ function render(now){
   const pedBands=new Map();
   for (const p of peds){
     const fx=p.px+(p.x-p.px)*p.t, fy=p.py+(p.y-p.py)*p.t;
+    if (isTunnel(Math.round(fx), Math.round(fy))) continue;   // hidden inside the mountain
     const [rvx,rvy]=rotC(fx+.5,fy+.5);
     const b=Math.max(0,Math.min(2*(G-1),Math.floor(rvx+rvy-0.5)));
     if(!pedBands.has(b)) pedBands.set(b,[]);
@@ -7887,10 +8317,11 @@ function render(now){
     if (inB(hx,hy)){
       const [px,py]=tileScreen(hx,hy);
       const hc=map[hy][hx];
-      const ghostable = !['pan','inspect','bulldoze'].includes(S.tool);
+      const ghostable = !['pan','inspect','bulldoze','raise','lower'].includes(S.tool);
       // can this tool actually land here?
       let ok;
-      if (S.tool==='busstop') ok = ROADTYPE[hc.t] && !hc.bridge;
+      if (S.tool==='raise'||S.tool==='lower') ok = hc.t==='grass'||hc.t==='tree';
+      else if (S.tool==='busstop') ok = ROADTYPE[hc.t] && !hc.bridge;
       else if (S.tool==='rail') ok = !hc.grp && !hc.part && !hc.bridge && (hc.t==='grass'||hc.t==='tree'||hc.t==='water'||hc.t==='park'||hc.t==='garden'||ROADTYPE[hc.t]);
       else if (S.tool==='road'||S.tool==='avenue') ok = buildClear(hc)||hc.t==='water'||ROADTYPE[hc.t];
       else if (S.tool==='pump') ok = buildClear(hc);
@@ -7898,6 +8329,7 @@ function render(now){
       else if (S.tool==='grass') ok = hc.t==='tree'||hc.t==='water';
       else if (ZONE[S.tool]) ok = hc.t==='grass'||hc.t==='tree' || (ZONE[hc.t] && hc.t!==S.tool && hc.lv===0 && !hc.grp && !hc.part);
       else ok = buildClear(hc);
+      if (!FLAT_EXEMPT[S.tool] && groundTooHigh(hx,hy)) ok = false;   // steep ground needs levelling first
       if (S.tool==='bulldoze'||S.tool==='inspect') ok = true;
       if (FOOT[S.tool]){
         // footprint ghost: tint the whole rectangle, red where it can't land
@@ -7906,7 +8338,7 @@ function render(now){
         let all = hx+fw<=G && hy+fh<=G;
         if (all) for (const [qx,qy] of footCells(hx,hy,fw,fh)){
           const q=map[qy][qx];
-          if (!buildClear(q)){ all=false; break; }
+          if (!buildClear(q) || groundTooHigh(qx,qy)){ all=false; break; }
         }
         for (let dy=0;dy<fh;dy++) for (let dx=0;dx<fw;dx++){
           if (!inB(hx+dx,hy+dy)) continue;
@@ -7918,7 +8350,8 @@ function render(now){
           cx.lineWidth=1; cx.stroke();
         }
       } else {
-      diamond(px,py);
+      const hlift = isElevCell(hx,hy) ? terrainH(hx,hy)*S.zoom : 0;   // ride the sculpted surface
+      diamond(px,py-hlift);
       cx.fillStyle= ok?'rgba(255,255,255,.15)':'rgba(255,80,80,.25)';
       cx.fill();
       cx.strokeStyle= ok?'rgba(255,255,255,.7)':'rgba(255,90,90,.9)';
@@ -8166,7 +8599,7 @@ function render(now){
    ============================================================ */
 let dragging=false, painting=false, lastP=null, pinch=null, tapPend=null, lastTap=null;
 /* ---------- drag-preview (marquee) ---------- */
-const PAINTABLE={road:1,avenue:1,path:1,rail:1,res:1,com:1,ind:1,park:1,garden:1,playground:1,plaza:1,bulldoze:1,landfill:1,incinerator:1,recycling:1,tree:1,water:1,grass:1};
+const PAINTABLE={road:1,avenue:1,path:1,rail:1,res:1,com:1,ind:1,park:1,garden:1,playground:1,plaza:1,bulldoze:1,landfill:1,incinerator:1,recycling:1,tree:1,water:1,grass:1,raise:1,lower:1};
 let pend=null; // {a:[x,y], b:[x,y]} anchor → current while dragging a paintable tool
 function pendingTiles(){
   if (!pend) return [];
@@ -8192,14 +8625,21 @@ function tileBuildable(x,y){
     (c.t==='grass'||c.t==='tree'||c.t==='water'||c.t==='park'||c.t==='garden'||ROADTYPE[c.t]);
   if (S.tool==='tree'||S.tool==='water') return (c.t==='grass'||c.t==='tree') && c.t!==S.tool;
   if (S.tool==='grass') return c.t==='tree'||c.t==='water';
+  if (S.tool==='raise'||S.tool==='lower') return c.t==='grass'||c.t==='tree';
+  if (!FLAT_EXEMPT[S.tool] && groundTooHigh(x,y)) return false;   // must level steep ground first
   if (c.t==='water') return S.tool==='road'||S.tool==='avenue';   // bridges
+  if ((S.tool==='avenue'&&c.t==='road')||(S.tool==='road'&&c.t==='avenue')) return true;   // in-place road↔avenue conversion
   if (ZONE[S.tool] && ZONE[c.t] && c.t!==S.tool && c.lv===0 && !c.grp && !c.part && !c.rail) return true;   // rezone empty zones
   return buildClear(c) && c.t!==S.tool;
 }
 function tileCost(x,y,def){
   if (S.tool==='rail') return def.c;                              // flat pylon cost, even over water
-  if (S.tool==='tree'||S.tool==='water'||S.tool==='grass') return def.c;   // terraform: flat cost, no bridge premium
-  if (map[y][x].t==='water') return S.tool==='road'?60:140;       // bridge premium
+  if (S.tool==='tree'||S.tool==='water'||S.tool==='grass'||S.tool==='raise'||S.tool==='lower') return def.c;   // terraform: flat cost, no bridge premium
+  const c=map[y][x];
+  if (c.t==='water') return S.tool==='road'?60:140;               // bridge premium
+  // in-place road↔avenue conversion charges the difference, not the full price (mirrors place())
+  if (S.tool==='avenue' && c.t==='road') return c.bridge ? 80 : Math.max(10, TOOLDEF.avenue.c - TOOLDEF.road.c);
+  if (S.tool==='road' && c.t==='avenue') return 5;
   return S.tool==='bulldoze'?5:def.c;
 }
 /* a complete working town — for exploring how everything fits together */
@@ -8225,7 +8665,9 @@ function actionNote(x,y){
     if (inB(qx,qy) && !curAction.before.has(k2)) curAction.before.set(k2, snapCell(qx,qy));
   } }
 }
-function beginAction(){ curAction={ before:new Map(), money0:S.money }; }
+function beginAction(){ curAction={ before:new Map(), vbefore:new Map(), money0:S.money }; }
+/* record a height-layer vertex's pre-edit value so terraforming joins the same undo timeline */
+function vertNote(i){ if (curAction && !curAction.vbefore.has(i)) curAction.vbefore.set(i, EHAND?EHAND[i]:0); }
 function endAction(){
   if (!curAction) return;
   const a=curAction; curAction=null;
@@ -8236,7 +8678,10 @@ function endAction(){
     const now=snapCell(snap.x,snap.y);
     if (JSON.stringify(now.cell)!==JSON.stringify(snap.cell)){ kept.push(snap); a.after.push(now); }
   }
-  if (!kept.length) { updateUndoUI(); return; }
+  // keep only height vertices that actually changed
+  a.vb=[]; a.va=[];
+  for (const [i,h0] of a.vbefore){ const h1=EHAND?EHAND[i]:0; if (h1!==h0){ a.vb.push([i,h0]); a.va.push([i,h1]); } }
+  if (!kept.length && !a.vb.length) { updateUndoUI(); return; }
   a.before=kept;
   a.dMoney=S.money-a.money0;
   undoStack.push(a);
@@ -8244,6 +8689,7 @@ function endAction(){
   redoStack.length=0;
   updateUndoUI();
 }
+function applyVerts(list){ if (!list||!list.length) return; ensureEHAND(); for (const [i,h] of list) EHAND[i]=h; applyElev(); dirty=true; }
 function applySnaps(snaps){
   for (const {x,y,cell} of snaps){
     const c=map[y][x];
@@ -8260,6 +8706,7 @@ function doUndo(){
   const a=undoStack.pop();
   if (!a) return;
   applySnaps(a.before);
+  applyVerts(a.vb);
   S.money -= a.dMoney;
   redoStack.push(a);
   updateUndoUI(); updateHUD();
@@ -8269,6 +8716,7 @@ function doRedo(){
   const a=redoStack.pop();
   if (!a) return;
   applySnaps(a.after);
+  applyVerts(a.va);
   S.money += a.dMoney;
   undoStack.push(a);
   updateUndoUI(); updateHUD();
@@ -8508,7 +8956,7 @@ cv.addEventListener('pointerup', e=>{
   if (pend) commitPending();
   else if (tapPend && !pinch && touches.size<2) placeSingle(tapPend[0], tapPend[1]);  // a real tap, not the start of a pinch
   // double-tap to zoom (touch): two quick taps near the same spot
-  if (e.pointerType!=='mouse' && !pinch && touches.size<2){
+  if (e.pointerType!=='mouse' && !pinch && touches.size<2 && (S.tool==='pan'||S.tool==='inspect')){
     const [px,py]=eventPos(e), now=performance.now();
     if (lastTap && now-lastTap.t<300 && Math.hypot(px-lastTap.x,py-lastTap.y)<32){
       zoomAt(px,py, 1.6); dirty=true; lastTap=null;
@@ -8526,13 +8974,13 @@ cv.addEventListener('wheel', e=>{
 },{passive:false});
 // double-click zooms in toward the cursor (mouse only; touch uses double-tap below)
 cv.addEventListener('dblclick', e=>{
-  if (ROTA || pinch) return;
+  if (ROTA || pinch || (S.tool!=='pan' && S.tool!=='inspect')) return;
   e.preventDefault();
   const [px,py]=eventPos(e);
   zoomAt(px,py, 1.6); dirty=true;
 });
 function zoomAt(px,py,f){
-  const nz=clamp(S.zoom*f, .45, 4.8);
+  const nz=clamp(S.zoom*f, .22, 4.8);
   S.ox = px - (px-S.ox)*(nz/S.zoom);
   S.oy = py - (py-S.oy)*(nz/S.zoom);
   S.zoom=nz;
@@ -10323,17 +10771,21 @@ function makeSave(){
   const cells=[];
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     const c=map[y][x];
-    // 4th value is a bitmask so road overlays can stack: 1=grp root,2=grp part,4=bridge,8=bus,16=rail
-    const mg=(c.grp?(c.part?2:1):0)|(c.bridge?4:0)|(c.bus?8:0)|(c.rail?16:0);
+    // 4th value is a bitmask so road overlays can stack: 1=grp root,2=grp part,4=bridge,8=bus,16=rail,32=tunnel
+    const mg=(c.grp?(c.part?2:1):0)|(c.bridge?4:0)|(c.bus?8:0)|(c.rail?16:0)|(c.tunnel?32:0);
     cells.push(TYPE_IDS.indexOf(c.t), c.t==='rubble'?Math.max(0,TYPE_IDS.indexOf(c.rz||'grass')):c.lv, Math.round(c.dev), mg);
   }
-  const data={v:4,g:G,m:Math.round(S.money),tx:S.tax,d:S.day,p:S.pop,c:cells,fd:S.fund,df:S.diff,ms:S.milestone,hs:packHist(),wx:S.weather?1:0,au:settingsSnapshot(),cn:S.cityName,ln:S.loan||0,sc:S.scen||0,po:S.policy||{}};
-  return 'TLV4.'+btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+  // player-sculpted terrain: a sparse [vertexIndex, roundedHeight, …] list (omitted if flat)
+  let eh=0;
+  if (EHAND){ const a=[]; for (let i=0;i<EHAND.length;i++){ const q=Math.round(EHAND[i]); if (q) a.push(i,q); } if (a.length) eh=a; }
+  const data={v:5,g:G,m:Math.round(S.money),tx:S.tax,d:S.day,p:S.pop,c:cells,fd:S.fund,df:S.diff,ms:S.milestone,hs:packHist(),wx:S.weather?1:0,au:settingsSnapshot(),cn:S.cityName,ln:S.loan||0,sc:S.scen||0,po:S.policy||{},eh};
+  return 'TLV5.'+btoa(unescape(encodeURIComponent(JSON.stringify(data))));
 }
 function loadSave(code){
   code=code.trim();
   let stride, bits=false;
-  if (code.startsWith('TLV4.')){ stride=4; bits=true; }   // 4th value is a bitmask (stackable overlays)
+  if (code.startsWith('TLV5.')){ stride=4; bits=true; }   // TLV4 + player terrain heights (data.eh)
+  else if (code.startsWith('TLV4.')){ stride=4; bits=true; }   // 4th value is a bitmask (stackable overlays)
   else if (code.startsWith('TLV3.')) stride=4;            // 4th value is a single enum (legacy)
   else if (code.startsWith('TLV2.')) stride=3;
   else throw new Error('That doesn\'t look like a POLIS save code.');
@@ -10342,7 +10794,7 @@ function loadSave(code){
   if (data.g!==G) setWorldSize(data.g);
   if (!map.length){            // resize empties the grid — rebuild a blank skeleton before restoring
     for (let y=0;y<G;y++){ map[y]=[];
-      for (let x=0;x<G;x++) map[y][x]={ t:'grass', lv:0, dev:0, pw:false, wt:false, ws:false, fire:0, vary:Math.random(), grp:null, part:false, bld:0, bridge:false, rz:null };
+      for (let x=0;x<G;x++) map[y][x]={ t:'grass', lv:0, dev:0, pw:false, wt:false, ws:false, fire:0, vary:Math.random(), grp:null, part:false, bld:0, bridge:false, rz:null, tunnel:false };
     }
   }
   let i=0;
@@ -10351,12 +10803,12 @@ function loadSave(code){
     c.t=TYPE_IDS[data.c[i++]]||'grass';
     c.lv=data.c[i++]|0;
     c.dev=data.c[i++]|0;
-    c.fire=0; c.bld=0; c.grp=null; c.part=false; c.bridge=false; c.bus=false; c.rail=false; c.rz=null;
+    c.fire=0; c.bld=0; c.grp=null; c.part=false; c.bridge=false; c.bus=false; c.rail=false; c.rz=null; c.tunnel=false;
     if (c.t==='rubble'){ c.rz=TYPE_IDS[c.lv]||'grass'; c.lv=0; }
     if (stride===4){
       const mg=data.c[i++]|0;
       if (bits){   // TLV4 bitmask: overlays stack; _mg keeps only the structural root/part for block rebuild
-        c.bridge=!!(mg&4); c.bus=!!(mg&8); c.rail=!!(mg&16);
+        c.bridge=!!(mg&4); c.bus=!!(mg&8); c.rail=!!(mg&16); c.tunnel=!!(mg&32);
         c._mg=(mg&1)?1:((mg&2)?2:0);
       } else {     // TLV3 enum
         c._mg=mg; if (mg===3) c.bridge=true; if (mg===4) c.bus=true; if (mg===5) c.rail=true;
@@ -10437,6 +10889,9 @@ function loadSave(code){
   document.getElementById('taxSlider').value=S.tax;
   document.getElementById('taxLbl').textContent=S.tax+'%';
   traffic.fill(0); cars.length=0; svc.length=0; smoke.length=0; dirtyRoads=true;
+  EHAND=new Float32Array((G+1)*(G+1));   // sculpted terrain, restored from the sparse list (flat otherwise)
+  if (Array.isArray(data.eh)) for (let k=0;k+1<data.eh.length;k+=2){ const i=data.eh[k]|0; if (i>=0&&i<EHAND.length) EHAND[i]=data.eh[k+1]; }
+  elevDirty=true;
   recomputeNets(); recomputeFields(); updateHUD();
 }
 const modal=document.getElementById('saveModal'),
@@ -10730,8 +11185,15 @@ function resize(){
   cv.style.width=window.innerWidth+'px'; cv.style.height=window.innerHeight+'px';
   cx.setTransform(DPR,0,0,DPR,0,0);
 }
+// re-run after layout/PWA chrome settles — on homescreen launch (esp. portrait) innerHeight
+// is briefly stale, which otherwise leaves dead space at the bottom of the canvas
+function scheduleResize(){ resize(); requestAnimationFrame(resize); setTimeout(resize, 250); setTimeout(resize, 600); }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', scheduleResize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+window.addEventListener('load', scheduleResize);
 resize();
+scheduleResize();
 
 /* map picker modal: isometric previews that look like the real game */
 let mapSeeds=[], chosenSeed=null, pickSize=40;
@@ -12412,7 +12874,7 @@ const MOB_LBL={funds:['Treasury ▾','FUNDS ▾'], pchip:['⚡ Power','⚡ PWR']
                net:['Monthly','NET'], pop:['Population','POP'], jobs:['Jobs','JOBS'], happy:['Happiness','MOOD']};
 let _tickerHome=null, _tickerParent=null;
 function applyMob(){
-  const mob = window.innerWidth < 900;
+  const mob = window.innerWidth < 1100;
   document.body.classList.toggle('mob', mob);
   // reparent ticker into the toolbar on mobile (contiguous flex layout, no --bbarh math)
   const tk=document.getElementById('ticker'), bb=document.getElementById('bbar');
