@@ -2890,10 +2890,11 @@ function simTick(){
   const healthDrag = (S.health!=null) ? (S.health-72)*0.22 : 0;   // care + clean air lift mood; smog & sickness sink it
   const wasteDrag = devLots ? Math.min(10, (noWaste/devLots)*14) : 0;   // uncollected rubbish sours the city
   S.wasteShort = noWaste;
-  S.happyParts = { base:30, lv:lvAvg*.5, jobs:jobBal*18, tax:-(S.tax-9)*2.2, power:-unp*1.5, water:-dry*0.8, traffic:-congested*0.7, crime:-crimeDrag, access:-access*12, health:healthDrag, waste:-wasteDrag, policy:pfx.happy };
+  const eduMood = ((S.edu||0) - 0.5) * 12;   // schooled cities lift mood, neglected ones sag (±6); small — land value already banks most of education's payoff
+  S.happyParts = { base:30, lv:lvAvg*.5, jobs:jobBal*18, tax:-(S.tax-9)*2.2, power:-unp*1.5, water:-dry*0.8, traffic:-congested*0.7, crime:-crimeDrag, access:-access*12, health:healthDrag, waste:-wasteDrag, edu:eduMood, policy:pfx.happy };
   // mood eases toward its target rather than snapping — models migration inertia and damps the
   // happiness↔demand feedback loop now that mood feeds growth (A) and emigration (B)
-  const happyTarget = clamp(30 + lvAvg*.5 + jobBal*18 - (S.tax-9)*2.2 - unp*1.5 - dry*0.8 - congested*0.7 - crimeDrag - access*12 + healthDrag - wasteDrag + pfx.happy, 0, 100);
+  const happyTarget = clamp(30 + lvAvg*.5 + jobBal*18 - (S.tax-9)*2.2 - unp*1.5 - dry*0.8 - congested*0.7 - crimeDrag - access*12 + healthDrag - wasteDrag + eduMood + pfx.happy, 0, 100);
   S.happyF = (S.happyF==null) ? happyTarget : S.happyF + (happyTarget - S.happyF)*0.1;
   S.happy = Math.round(S.happyF);
   S.demParts = { pop, jobs:S.jobs, comJ, indJ, taxDrag };
@@ -3815,7 +3816,13 @@ function toGrid(px,py){
    the camera or map changes (see pickKey), so a stationary world makes repeated hovers cost a
    single getImageData. */
 let PICKING=0, PICK_ID='#000000', pickCv=null, pickCx=null, pickKey='';
-function idToCol(i){ return '#'+(0x1000000+(i&0xffffff)).toString(16).slice(1); }   // 24-bit index → #rrggbb
+// A cell index fits in 16 bits (MAX_G 256 → <65536), so it lives in R+G; B carries a NONLINEAR
+// hash of R,G. Antialiasing blends a boundary's two id colours channel-by-channel, and a linear
+// blend can't satisfy a nonlinear hash, so blended edge pixels fail the check and are discarded —
+// only exact, interior pixels of a real structure survive. (A linear 24-bit packing instead
+// decodes blends into a plausible *wrong* index, which is what made picks land on far buildings.)
+function pickHash(r,g){ return ((r*61)^(g*167)^0xa5)&0xff; }
+function idToCol(i){ const r=i&0xff, g=(i>>8)&0xff; return '#'+(0x1000000|(r<<16)|(g<<8)|pickHash(r,g)).toString(16).slice(1); }
 function ensurePickCx(){
   if (!pickCv) pickCv=document.createElement('canvas');
   if (pickCv.width!==cv.width || pickCv.height!==cv.height){ pickCv.width=cv.width; pickCv.height=cv.height; pickKey=''; pickCx=null; }
@@ -3839,9 +3846,11 @@ function ensurePickCx(){
 function buildPickBuffer(){
   ensurePickCx();
   // only geometry-affecting state belongs in the key; overlays/day-night don't move pixels' owners
-  const key=S.ox+'|'+S.oy+'|'+S.zoom+'|'+S.rot+'|'+SEAS.name+'|'+gndVer+'|'+S.day+'|'+(S.flatten?1:0)+'|'+cv.width+'x'+cv.height;
+  const key=S.ox+'|'+S.oy+'|'+S.zoom+'|'+S.rot+'|'+SEAS.name+'|'+gndVer+'|'+S.day+'|'+(S.flatten?1:0)+'|'+(shoreDirty?1:0)+(elevDirty?1:0)+'|'+cv.width+'x'+cv.height;
   if (key===pickKey) return;
   pickKey=key;
+  if (shoreDirty){ recomputeShore(); recomputeBridges(); }   // match render()'s frame-start refresh so the
+  if (elevDirty) recomputeElev();                            // id-buffer geometry equals what's on screen
   const now=performance.now(), W=cv.width/DPR, H=cv.height/DPR, z=S.zoom;
   const real=pickCv.getContext('2d');
   real.setTransform(DPR,0,0,DPR,0,0); real.globalAlpha=1; real.shadowBlur=0; real.clearRect(0,0,W,H);
@@ -3852,7 +3861,7 @@ function buildPickBuffer(){
   const sLo=Math.max(0, Math.floor((-200*z - S.oy)/TH2v));
   const sHi=Math.min(2*(G-1), Math.ceil((H + TH*2*z - S.oy)/TH2v));
   const dLo=(-TW*z - S.ox)/(TW/2*z), dHi=(W + TW*z - S.ox)/(TW/2*z);
-  const setId=(x,y)=>{ const c=map[y][x], r=c.grp||[x,y]; PICK_ID=idToCol(r[1]*G+r[0]+1); };  // +1 so 0 stays "no tile"
+  const setId=(x,y)=>{ const c=map[y][x], r=c.grp||[x,y]; PICK_ID=idToCol(r[1]*G+r[0]); };  // root cell index → id colour
   const band=(gpv)=>{
     GP=gpv;
     for (let s=sLo;s<=sHi;s++){
@@ -3871,19 +3880,31 @@ function buildPickBuffer(){
   band(2);   // tall structures, height-sorted per band so a nearer short building lands on top
   cx=svCx; GP=svGP; STRUCT_Q=svQ; lastBoxShadow=svShadow; BLD_TINT=svTint; PICKING=0;
 }
-/* Returns the [gx,gy] of the cell whose drawn pixels sit under (px,py). Falls back to the flat
-   ground projection when the cursor is over sky/void or an antialiased edge decodes invalid. */
+/* Returns the [gx,gy] of the cell whose drawn pixels sit under (px,py). Reads a small window and
+   takes the dominant valid id: where two structures meet, the canvas antialiases their two id
+   colours into a blend that — since the index is packed linearly into rgb — decodes to a stray
+   in-range index. Those blended pixels are scattered single hits, so the real cell under the
+   cursor wins the tally. Falls back to the flat ground projection over sky/void. */
 function pickTile(px,py){
   const flat=toGrid(px,py);
   try{
     buildPickBuffer();
-    const dx=Math.max(0,Math.min(pickCv.width-1, Math.round(px*DPR)));
-    const dy=Math.max(0,Math.min(pickCv.height-1, Math.round(py*DPR)));
-    const d=pickCv.getContext('2d').getImageData(dx,dy,1,1).data;
-    if (d[3]){
-      const v=(d[0]|(d[1]<<8)|(d[2]<<16))-1;
-      if (v>=0 && v<G*G){ const x=v%G, y=(v/G)|0; if (inB(x,y)) return [x,y]; }
+    const R=2, cw=pickCv.width, ch=pickCv.height;                 // 5×5 window in device pixels
+    const dx=Math.max(0,Math.min(cw-1, Math.round(px*DPR))), dy=Math.max(0,Math.min(ch-1, Math.round(py*DPR)));
+    const x0=Math.max(0,dx-R), y0=Math.max(0,dy-R), x1=Math.min(cw-1,dx+R), y1=Math.min(ch-1,dy+R);
+    const data=pickCv.getContext('2d').getImageData(x0,y0,x1-x0+1,y1-y0+1).data;
+    const counts=new Map(); let bestIdx=-1, bestN=0;
+    for (let i=0;i<data.length;i+=4){
+      if (data[i+3]<255) continue;                                  // skip cleared/edge-faded pixels
+      const r=data[i], g=data[i+1];
+      if (data[i+2]!==pickHash(r,g)) continue;                      // hash mismatch ⇒ an antialiased blend, not a real id
+      const v=r|(g<<8);
+      if (v>=G*G) continue;
+      const x=v%G, y=(v/G)|0; if (!inB(x,y)) continue;
+      const n=(counts.get(v)||0)+1; counts.set(v,n);
+      if (n>bestN){ bestN=n; bestIdx=v; }
     }
+    if (bestIdx>=0) return [bestIdx%G,(bestIdx/G)|0];
   }catch(_){}
   return flat;
 }
@@ -12360,6 +12381,7 @@ bindStatTip(document.getElementById('happy'), ()=>{
     + statRow('Job access', h.access||0, true)
     + statRow('Public health', h.health||0, true)
     + statRow('Sanitation', h.waste||0, true)
+    + statRow('Education', h.edu||0, true)
     + statRow('Ordinances', h.policy||0, true)
     + `<div class="row" style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px"><span><b>Total</b></span><span><b>${S.happy}%</b></span></div>`;
 });

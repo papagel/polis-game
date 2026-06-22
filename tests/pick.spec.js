@@ -12,6 +12,8 @@ test('pickTile reports the building you see, not the lot behind it', async ({ ga
   const res = await game.eval(inPage(`
     setWorldSize(40);
     for (let y=0;y<G;y++){ map[y]=[]; for (let x=0;x<G;x++) map[y][x]=blankCell(); }
+    EBASE=new Float32Array((G+1)*(G+1)); EHAND=new Float32Array((G+1)*(G+1)); applyElev();  // flat ground (no stray hills from boot genMap)
+    elevDirty=true; shoreDirty=true;
     recomputeNets(); recomputeFields();
     S.rot=0; S.zoom=1;
     const bx=20, by=20;
@@ -49,6 +51,8 @@ test('pickTile falls back to the flat tile over open ground', async ({ game }) =
   const res = await game.eval(inPage(`
     setWorldSize(40);
     for (let y=0;y<G;y++){ map[y]=[]; for (let x=0;x<G;x++) map[y][x]=blankCell(); }
+    EBASE=new Float32Array((G+1)*(G+1)); EHAND=new Float32Array((G+1)*(G+1)); applyElev();
+    elevDirty=true; shoreDirty=true;
     recomputeNets(); recomputeFields();
     S.rot=0; S.zoom=1;
     const bx=18, by=22;

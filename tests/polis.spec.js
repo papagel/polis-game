@@ -100,6 +100,24 @@ test('Kobayashi Maru ramp escalates over time', async ({ game }) => {
   }
 });
 
+test('happiness breakdown is an accounting identity (parts sum to the score)', async ({ game }) => {
+  await game.loadExample();
+  // The HUD tooltip claims to break the happiness score into named parts. That's
+  // only honest if those parts actually sum (clamped 0..100) to the total — so a
+  // factor that's tuned but forgotten in either the sum or the tooltip is caught.
+  // happyF eases toward the clamped sum each tick, so run to steady state first.
+  const res = await game.eval(() => {
+    S.diff = 1;
+    for (let i = 0; i < 3650; i++) simTick();
+    const h = S.happyParts;
+    const sum = Object.values(h).reduce((a, v) => a + v, 0);
+    return { clamped: Math.max(0, Math.min(100, sum)), happy: S.happy, edu: h.edu, eduStock: S.edu };
+  });
+  expect(Math.abs(res.clamped - res.happy)).toBeLessThanOrEqual(1.5);   // smoothing residual only
+  // education is wired in with the intended sign: a schooled city lifts mood, a neglected one sags
+  expect(Math.abs(res.edu - (res.eduStock - 0.5) * 12)).toBeLessThan(1e-6);
+});
+
 test('stability: 10 years of ticks produce no NaN/Infinity or thrown errors', async ({ game }) => {
   await game.loadExample();
   const stats = await game.eval(() => {
