@@ -206,13 +206,13 @@
   .stgl{background:#1a2636;border:1px solid var(--line);border-radius:6px;color:var(--dim);font-size:9px;padding:2px 8px;cursor:pointer}
   .stgl.on{background:#1f3a2a;border-color:var(--green);color:var(--green)}
   #advModal .inner{max-width:780px;width:94vw}
-  #catModal .inner{max-width:1100px;width:96vw}
+  #catModal .inner{max-width:1240px;width:96vw}
   #statsModal .inner{max-width:1140px;width:96vw}
   #statsScroll{overflow:auto;max-height:calc(100vh - 140px);border:1px solid var(--line);border-radius:10px;background:#0a131e}
   /* split master–detail layout: scrollable building grid + a docked preview pane */
   #catBody{display:flex;gap:14px;align-items:stretch}
   #catScroll{flex:1;min-width:0;overflow:auto;max-height:68vh;border:1px solid var(--line);border-radius:10px;background:#0a131e}
-  #catDetail{flex:none;width:290px;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;background:#0a131e;padding:12px;max-height:68vh;overflow:auto}
+  #catDetail{flex:none;width:420px;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;background:#0a131e;padding:12px;max-height:68vh;overflow:auto}
   #catDpv{display:block;width:100%!important;height:auto!important;border-radius:8px;background:radial-gradient(125% 95% at 50% 34%, #1b2c41, #0a1422);margin-bottom:10px}
   #catDinfo h4{font-family:'Chakra Petch';color:var(--amber);font-size:12px;margin-bottom:6px;letter-spacing:.06em}
   #catDinfo .row{display:flex;justify-content:space-between;gap:14px;font-size:12px;line-height:1.7}
@@ -221,7 +221,7 @@
   @media (max-width:760px){
     #catBody{flex-direction:column}
     #catDetail{order:-1;width:auto;flex-direction:row;gap:12px;max-height:none;align-items:center}
-    #catDpv{width:auto!important;max-width:130px!important;max-height:150px!important;margin-bottom:0}
+    #catDpv{width:auto!important;max-width:160px!important;max-height:180px!important;margin-bottom:0}
     #catDinfo{flex:1;min-width:0}
     .catHint{padding:8px 6px;text-align:left}
   }
