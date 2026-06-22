@@ -1,0 +1,942 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>POLIS — City Code Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c1118; --panel:#131b26; --panel2:#0f161f; --line:#22303f; --line2:#2e4154;
+  --ink:#e7eef6; --dim:#8aa0b6; --dim2:#5f7488;
+  --acc:#5cc8ff; --acc2:#7ef0c0; --warn:#ffb454; --bad:#ff6f6f;
+  --r:#7ed493; --c:#6fb6ff; --i:#ffd166;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:radial-gradient(1200px 700px at 70% -10%, #16202d 0%, var(--bg) 55%) fixed;
+  color:var(--ink); font-family:'Inter',system-ui,sans-serif; font-size:14px; line-height:1.5;
+}
+h1,h2,h3,.k{font-family:'Chakra Petch',sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 18px 60px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+header .logo{
+  width:38px;height:38px;border-radius:9px;display:grid;place-items:center;
+  background:linear-gradient(150deg,#1d2c3d,#0e1620);border:1px solid var(--line2);
+  font-family:'Chakra Petch';font-weight:700;color:var(--acc);font-size:18px;
+}
+header h1{font-size:21px;letter-spacing:.04em;margin:0}
+header .sub{color:var(--dim);font-size:12.5px;margin-top:1px}
+.layout{display:grid;grid-template-columns:360px 1fr;gap:18px;margin-top:18px}
+@media(max-width:880px){.layout{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 16px 18px}
+.card h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 12px;font-weight:600}
+.fieldrow{margin-bottom:15px}
+.fieldrow:last-child{margin-bottom:0}
+label.lbl{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:var(--dim);margin-bottom:6px}
+label.lbl b{color:var(--ink);font-family:'Chakra Petch';font-weight:600;font-size:13px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{
+  flex:1;min-width:0;padding:8px 6px;border-radius:9px;border:1px solid var(--line2);
+  background:var(--panel2);color:var(--dim);font-family:'Chakra Petch';font-size:12px;cursor:pointer;
+  transition:.12s;white-space:nowrap;
+}
+.seg button:hover{border-color:#3a5066}
+.seg button.on{background:linear-gradient(160deg,#1c3346,#152636);border-color:var(--acc);color:var(--acc)}
+input[type=range]{width:100%;accent-color:var(--acc);height:22px}
+input[type=text],input[type=number]{
+  width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--line2);
+  background:var(--panel2);color:var(--ink);font-family:'Chakra Petch';font-size:14px;
+}
+.hint{font-size:11.5px;color:var(--dim);margin-top:5px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{
+  width:100%;padding:13px;border-radius:11px;border:1px solid var(--acc);cursor:pointer;
+  background:linear-gradient(160deg,#1f4a63,#143042);color:var(--acc);
+  font-family:'Chakra Petch';font-weight:600;font-size:15px;letter-spacing:.03em;transition:.12s;
+}
+.btn:hover{filter:brightness(1.12)}
+.btn.ghost{background:var(--panel2);border-color:var(--line2);color:var(--dim)}
+.btn.ghost:hover{color:var(--ink);border-color:#3a5066}
+.btn-row{display:flex;gap:10px;margin-top:6px}
+.btn-row .btn{flex:1}
+#preview{width:100%;background:var(--panel2);border-radius:12px;border:1px solid var(--line);image-rendering:pixelated;display:block;aspect-ratio:1/1}
+.previewwrap{position:relative}
+.legend{display:flex;flex-wrap:wrap;gap:9px 14px;margin-top:12px;font-size:11.5px;color:var(--dim)}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+.stat{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.stat .v{font-family:'Chakra Petch';font-weight:700;font-size:18px;color:var(--ink)}
+.stat .v.sm{font-size:14px}
+.stat .l{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-top:2px}
+.codewrap{margin-top:16px}
+textarea#code{
+  width:100%;height:96px;resize:vertical;padding:12px;border-radius:10px;border:1px solid var(--line2);
+  background:#0a0f15;color:var(--acc2);font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.45;word-break:break-all;
+}
+.note{font-size:12px;color:var(--dim);margin-top:10px}
+.note b{color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;
+  background:#10202c;border:1px solid var(--acc);color:var(--acc);padding:10px 18px;border-radius:10px;
+  font-family:'Chakra Petch';font-size:13px;transition:.22s;pointer-events:none;z-index:50}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.flex{display:flex;align-items:center;gap:8px}
+.spacer{flex:1}
+a.gamelink{color:var(--acc);text-decoration:none;font-size:12px}
+a.gamelink:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">▟</div>
+    <div>
+      <h1>POLIS City Generator</h1>
+      <div class="sub">Procedurally build a realistic city and export a code you can import into the game.</div>
+    </div>
+    <div class="spacer"></div>
+    <a class="gamelink" href="index.html">← Back to game</a>
+  </header>
+
+  <div class="layout">
+    <!-- ---------- controls ---------- -->
+    <div class="card" id="controls">
+      <h2>City Parameters</h2>
+
+      <div class="fieldrow">
+        <label class="lbl">Map size <b id="mapsizeLbl">VAST · 64²</b></label>
+        <div class="seg" id="mapSize">
+          <button data-v="32">Cozy 32</button>
+          <button data-v="64" class="on">Vast 64</button>
+          <button data-v="128">Boundless 128</button>
+        </div>
+      </div>
+
+      <div class="fieldrow">
+        <label class="lbl">Water layout <b id="waterShapeLbl">River</b></label>
+        <div class="seg" id="waterShape">
+          <button data-v="none">None</button>
+          <button data-v="river" class="on">River</button>
+          <button data-v="lake">Lake</button>
+          <button data-v="coast">Coast</button>
+        </div>
+      </div>
+
+      <div class="fieldrow">
+        <label class="lbl">Water coverage <b><span id="waterPctLbl">14</span>%</b></label>
+        <input type="range" id="waterPct" min="0" max="45" value="14">
+      </div>
+
+      <div class="fieldrow">
+        <label class="lbl">Mountain coverage <b><span id="mtnPctLbl">12</span>%</b></label>
+        <input type="range" id="mtnPct" min="0" max="50" value="12">
+      </div>
+
+      <div class="fieldrow">
+        <label class="lbl">Mountain steepness <b><span id="mtnSteepLbl">55</span></b></label>
+        <input type="range" id="mtnSteep" min="0" max="100" value="55">
+        <div class="hint">Higher = taller, sharper peaks that the city must build around.</div>
+      </div>
+
+      <div class="fieldrow">
+        <label class="lbl">Target population <b id="popLbl">25,000</b></label>
+        <input type="range" id="targetPop" min="200" max="250000" step="200" value="25000">
+        <div class="hint">Big targets need a bigger map — the city will pack with towers.</div>
+      </div>
+
+      <div class="fieldrow">
+        <label class="lbl">City condition <b id="condLbl">Well-run</b></label>
+        <div class="seg" id="cond" style="flex-wrap:wrap">
+          <button data-v="thriving">Thriving</button>
+          <button data-v="wellrun" class="on">Well-run</button>
+          <button data-v="average">Average</button>
+          <button data-v="struggling">Struggling</button>
+          <button data-v="declining">Declining</button>
+        </div>
+      </div>
+
+      <div class="fieldrow">
+        <label class="lbl"><b>City name</b> &amp; seed</label>
+        <div class="row2">
+          <input type="text" id="cityName" placeholder="City name" value="">
+          <input type="number" id="seed" placeholder="seed">
+        </div>
+        <div class="hint">Same seed + settings = same city. Leave name blank for a random one.</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn ghost" id="reroll" title="New random seed">⟳ Reroll</button>
+        <button class="btn" id="generate">Generate City</button>
+      </div>
+    </div>
+
+    <!-- ---------- output ---------- -->
+    <div class="card">
+      <h2>Preview</h2>
+      <div class="previewwrap">
+        <canvas id="preview" width="512" height="512"></canvas>
+      </div>
+      <div class="legend">
+        <span><i style="background:#1d4e6e"></i>Water</span>
+        <span><i style="background:#2c6b3a"></i>Hills/woods</span>
+        <span><i style="background:#5a6573"></i>Road</span>
+        <span><i style="background:#39424d"></i>Avenue</span>
+        <span><i style="background:var(--r)"></i>Residential</span>
+        <span><i style="background:var(--c)"></i>Commercial</span>
+        <span><i style="background:var(--i)"></i>Industrial</span>
+        <span><i style="background:#b06fff"></i>Civic</span>
+        <span><i style="background:#3fae8f"></i>Parks</span>
+      </div>
+
+      <div class="stats" id="stats">
+        <div class="stat"><div class="v" id="stPop">—</div><div class="l">Population</div></div>
+        <div class="stat"><div class="v" id="stJobs">—</div><div class="l">Jobs</div></div>
+        <div class="stat"><div class="v sm" id="stRank">—</div><div class="l">Rank</div></div>
+        <div class="stat"><div class="v sm" id="stMoney">—</div><div class="l">Treasury</div></div>
+      </div>
+      <div class="note" id="capNote" style="display:none;color:var(--warn)"></div>
+
+      <div class="codewrap">
+        <div class="flex" style="margin-bottom:8px">
+          <label class="lbl" style="margin:0"><b>City code</b></label>
+          <div class="spacer"></div>
+          <span class="hint" id="codeLen"></span>
+        </div>
+        <textarea id="code" readonly placeholder="Press “Generate City” to create an importable code…"></textarea>
+        <div class="btn-row">
+          <button class="btn ghost" id="copy">Copy code</button>
+          <button class="btn ghost" id="download">Download .txt</button>
+        </div>
+        <div class="note"><b>To import:</b> open the game → menu → <b>Load / Save</b> → paste the code → <b>Apply</b>. The city loads with its terrain, layout, services and economy intact.</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================================
+   POLIS CITY GENERATOR
+   Produces a TLV5.<base64(JSON)> save code byte-compatible with index.html.
+   The data model (TYPE_IDS, CAP, the per-cell [type,lv,dev,bitmask] tuple and
+   the sparse terrain-height list) mirrors makeSave()/loadSave() exactly.
+============================================================================ */
+
+/* ---- constants copied verbatim from the game (order is load-bearing) ---- */
+const TYPE_IDS=['grass','tree','water','road','avenue','res','com','ind','park','power','pump','tower','police','fire','school','hospital','rubble','garden','pool','stadium','solar','nuclear','highschool','university','clinic','medcenter','playground','plaza','arena','path','cityhall','monument','botanic','museum','titan','airport','rstation','landfill','incinerator','recycling','fusion','spaceport','zoo','church','port'];
+const TID={}; TYPE_IDS.forEach((t,i)=>TID[t]=i);
+const CAP={ res:[0,8,22,48,210,380,700,1200], com:[0,6,16,36,160,310,560,950], ind:[0,9,24,42,185,300,460,460] };
+const NEED=[0,3,6,12,30,55,95,150];     // power/water need per zone level (powerNeed)
+const PLANT_CAP={power:400,solar:120,nuclear:1600};
+const WSRC_CAP={pump:600,tower:240};
+const MILESTONES=[[0,'Settlement'],[100,'Hamlet'],[350,'Village'],[800,'Town'],[1500,'Bustling Town'],[3000,'Small City'],[6000,'City'],[15000,'Metropolis'],[40000,'Conurbation'],[100000,'World City'],[250000,'Megalopolis'],[1000000,'Ecumenopolis']];
+
+const NAMES_POOL=['Aurelia','Veridia','Brackenford','Solhaven','Maridon','Calloway','Thornbury','Nordhaven','Estvaria','Greywater','Caldera','Lindholm','Marisol','Ironvale','Westmere','Halcyon','Oakhurst','Severn','Castellan','Pelagia','Verholt','Drayton','Ambervale','Norwick'];
+
+/* ---- tiny seeded RNG (mulberry32) ---- */
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+/* ---- value-noise fbm over a seeded integer lattice ---- */
+function makeNoise(seed){
+  const rnd=mulberry32(seed^0x9e3779b9);
+  const G=257, grid=new Float32Array(G*G);
+  for(let i=0;i<grid.length;i++) grid[i]=rnd();
+  const at=(ix,iy)=>grid[((iy&255))*G+((ix&255))];
+  const sm=t=>t*t*(3-2*t);
+  function val(x,y){
+    const x0=Math.floor(x),y0=Math.floor(y),fx=sm(x-x0),fy=sm(y-y0);
+    const a=at(x0,y0),b=at(x0+1,y0),c=at(x0,y0+1),d=at(x0+1,y0+1);
+    return (a*(1-fx)+b*fx)*(1-fy)+(c*(1-fx)+d*fx)*fy;
+  }
+  return function fbm(x,y,oct=4){
+    let f=1,amp=1,sum=0,norm=0;
+    for(let o=0;o<oct;o++){ sum+=val(x*f,y*f)*amp; norm+=amp; f*=2; amp*=0.5; }
+    return sum/norm;
+  };
+}
+
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+/* ============================================================================
+   GENERATOR
+============================================================================ */
+function generate(opts){
+  const G=opts.size;
+  const rnd=mulberry32(opts.seed);
+  const noise=makeNoise(opts.seed);
+  const idx=(x,y)=>y*G+x;
+  const inB=(x,y)=>x>=0&&y>=0&&x<G&&y<G;
+
+  // cell store: t / lv / dev / mg(bitmask) + rz for rubble
+  const M=[]; for(let y=0;y<G;y++){ M[y]=[]; for(let x=0;x<G;x++) M[y][x]={t:'grass',lv:0,dev:0,mg:0,rz:null}; }
+  // vertex height field (G+1)^2
+  const NV=G+1; const VH=new Float32Array(NV*NV);
+  const vh=(gx,gy)=>VH[gy*NV+gx];
+
+  /* ---------------- 1. MOUNTAINS (height field) ---------------- */
+  const mtnSteep=opts.mtnSteep/100;                 // 0..1
+  const peak=18+mtnSteep*120;                       // px height of tallest peaks
+  const mPct=opts.mtnPct/100;
+  // bias mountains toward a randomly chosen side/corner so ranges frame the map
+  const mAng=rnd()*Math.PI*2, mox=Math.cos(mAng), moy=Math.sin(mAng);
+  const mfield=new Float32Array(G*G);
+  if(mPct>0.001){
+    let vals=[];
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+      const nx=x/G-0.5, ny=y/G-0.5;
+      // directional ridge: distance along the chosen axis pushes one flank up
+      const dir=(nx*mox+ny*moy)+0.5;                // 0..1 across the map
+      let n=noise(x*0.06+11,y*0.06+7,5);
+      n=n*0.55 + Math.pow(clamp(dir,0,1),1.4)*0.45;
+      mfield[idx(x,y)]=n; vals.push(n);
+    }
+    vals.sort((a,b)=>a-b);
+    const thr=vals[Math.floor((1-mPct)*vals.length)]||1;
+    const span=Math.max(0.001,1-thr);
+    // raise vertices: a cell above threshold lifts its 4 corners
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+      const n=mfield[idx(x,y)];
+      if(n<=thr) continue;
+      const t=(n-thr)/span;                          // 0..1 inside the range
+      const h=peak*Math.pow(t,1.5);
+      for(const [vx,vy] of [[x,y],[x+1,y],[x,y+1],[x+1,y+1]]){
+        const i=vy*NV+vx; if(h>VH[i]) VH[i]=h;
+      }
+    }
+  }
+  // edge rim sits at sea level (matches vertElev clamp) so peaks fall to the border
+  for(let i=0;i<NV;i++){ VH[i]=0; VH[(NV-1)*NV+i]=0; VH[i*NV]=0; VH[i*NV+(NV-1)]=0; }
+  const tileMax=(x,y)=>Math.max(vh(x,y),vh(x+1,y),vh(x,y+1),vh(x+1,y+1));
+  const tileMin=(x,y)=>Math.min(vh(x,y),vh(x+1,y),vh(x,y+1),vh(x+1,y+1));
+
+  /* ---------------- 2. WATER ---------------- */
+  const wPct=opts.waterPct/100;
+  const water=new Uint8Array(G*G);
+  if(opts.waterShape!=='none' && wPct>0.002){
+    if(opts.waterShape==='river'){
+      carveRiver();
+    } else {
+      // field-threshold: shape a field so its LOWEST cells form a coast or a lake
+      const wf=new Float32Array(G*G); const vals=[];
+      let lcx=rnd()*G, lcy=rnd()*G;
+      const edge=rnd()*4|0;                          // which side the sea hugs
+      for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+        let base=noise(x*0.05+30,y*0.05+50,4);
+        let shape;
+        if(opts.waterShape==='coast'){
+          const g = edge===0? x/G : edge===1? 1-x/G : edge===2? y/G : 1-y/G;
+          shape=g*0.78+base*0.22;
+        } else { // lake
+          const d=Math.hypot(x-lcx,y-lcy)/(G*0.5);
+          shape=clamp(d,0,1)*0.7+base*0.3;
+        }
+        shape += mfield[idx(x,y)]*0.6;               // never drown a mountain
+        wf[idx(x,y)]=shape; vals.push(shape);
+      }
+      vals.sort((a,b)=>a-b);
+      const thr=vals[Math.floor(wPct*vals.length)]||0;
+      for(let y=0;y<G;y++)for(let x=0;x<G;x++) if(wf[idx(x,y)]<=thr) water[idx(x,y)]=1;
+    }
+  }
+  function carveRiver(){
+    const vertical=rnd()<0.5;
+    const wide=Math.max(1,Math.round(1+wPct*G*0.9));
+    const amp=G*(0.12+rnd()*0.16), start=G*(0.3+rnd()*0.4);
+    const f1=0.09+rnd()*0.08, f2=0.27+rnd()*0.18, p1=rnd()*6.28, p2=rnd()*6.28, drift=(rnd()-0.5)*0.18;
+    let plo=null,phi=null;
+    for(let i=0;i<G;i++){
+      const center=start+amp*Math.sin(i*f1+p1)+amp*0.45*Math.sin(i*f2+p2)+drift*i;
+      const w=wide+(Math.sin(i*0.4+p2)>0.5?1:0);
+      let lo=Math.round(center)-(w>>1), hi=lo+w-1;
+      lo=clamp(lo,0,G-1); hi=clamp(hi,lo,G-1);
+      if(plo!==null){ if(hi<plo)hi=plo; if(lo>phi)lo=phi; }
+      for(let k=lo;k<=hi;k++){ const X=vertical?k:i, Y=vertical?i:k; if(inB(X,Y)) water[idx(X,Y)]=1; }
+      plo=lo; phi=hi;
+    }
+    // optional tributary
+    if(rnd()<0.6){
+      const amp2=G*0.1, st2=G*(0.4+rnd()*0.3), f=0.12+rnd()*0.1, p=rnd()*6.28;
+      for(let i=0;i<G*0.7;i++){
+        const c=st2+amp2*Math.sin(i*f+p);
+        const X=vertical?Math.round(c):i, Y=vertical?i:Math.round(c);
+        for(let k=0;k<Math.max(1,wide-1);k++){ const xx=vertical?X+k:X, yy=vertical?Y:Y+k; if(inB(xx,yy)) water[idx(xx,yy)]=1; }
+      }
+    }
+  }
+  // commit water + mountains to tiles; force water vertices flat
+  for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+    if(water[idx(x,y)]){ M[y][x].t='water'; for(const[vx,vy]of[[x,y],[x+1,y],[x,y+1],[x+1,y+1]]) VH[vy*NV+vx]=0; }
+  }
+
+  /* ---------------- 3. BUILDABLE MASK ---------------- */
+  // buildable = land, not water, gentle ground (tileMax under the build-flat ceiling)
+  const FLAT=11;
+  const buildable=new Uint8Array(G*G);
+  for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+    const c=M[y][x];
+    if(c.t==='water'){ continue; }
+    if(tileMax(x,y)>FLAT){ M[y][x].t='tree'; continue; }   // mountain/woodland — not buildable
+    buildable[idx(x,y)]=1;
+  }
+  // largest connected buildable component (4-neighbour) — the city lives on one landmass
+  const comp=new Int32Array(G*G).fill(-1);
+  let bestC=-1,bestN=0,nc=0;
+  for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+    if(!buildable[idx(x,y)]||comp[idx(x,y)]>=0) continue;
+    const id=nc++; let n=0; const st=[[x,y]]; comp[idx(x,y)]=id;
+    while(st.length){ const [cx,cy]=st.pop(); n++;
+      for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){ const nx=cx+dx,ny=cy+dy;
+        if(inB(nx,ny)&&buildable[idx(nx,ny)]&&comp[idx(nx,ny)]<0){ comp[idx(nx,ny)]=id; st.push([nx,ny]); } } }
+    if(n>bestN){ bestN=n; bestC=id; }
+  }
+  const onLand=(x,y)=>inB(x,y)&&comp[idx(x,y)]===bestC;
+
+  /* ---------------- 4. CITY CENTRE + EXTENT ---------------- */
+  // sum a small water-proximity field: cities favour waterfronts and the map middle
+  let cx0=G/2,cy0=G/2,bestScore=-1e9;
+  const distWater=new Float32Array(G*G).fill(999);
+  {
+    const q=[];
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++) if(water[idx(x,y)]){ distWater[idx(x,y)]=0; q.push([x,y]); }
+    while(q.length){ const[x,y]=q.shift(); const d=distWater[idx(x,y)];
+      for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
+        if(inB(nx,ny)&&distWater[idx(nx,ny)]>d+1){ distWater[idx(nx,ny)]=d+1; q.push([nx,ny]); } } }
+  }
+  for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+    if(!onLand(x,y)) continue;
+    const dc=Math.hypot(x-G/2,y-G/2)/(G*0.5);
+    const wd=distWater[idx(x,y)];
+    const near=(wd<99)? clamp(1-Math.abs(wd-3)/8,0,1):0;   // ~3 tiles from water is prime
+    const s=(1-dc)*1.0 + near*0.8 + (noise(x*0.1,y*0.1,2)-0.5)*0.3;
+    if(s>bestScore){ bestScore=s; cx0=x; cy0=y; }
+  }
+  // target city footprint radius from target population. DENS = gross people per
+  // footprint tile at a moderate skyline; the level/tower tuning below flexes around it.
+  const target=opts.targetPop;
+  // density rises with size: villages stay low-rise and spread out, metropolises
+  // pack vertically. (gross people per footprint tile before tuning.)
+  const DENS=clamp(2.5+3.0*Math.log10(Math.max(300,target)/300),2.5,24);
+  let R=clamp(Math.sqrt(target/(Math.PI*DENS)),3,G*0.47);
+  // inflate the footprint for water/mountains that eat into it, so a coastal or
+  // alpine city still spreads enough buildable land to host its population
+  const usableFrac=rad=>{ let u=0,t=0,r2=rad*rad;
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++){ const dx=x-cx0,dy=y-cy0; if(dx*dx+dy*dy>r2)continue; t++; if(onLand(x,y))u++; }
+    return t? u/t:1; };
+  R=clamp(R/Math.sqrt(Math.max(0.28,usableFrac(R))),3,G*0.47);
+
+  /* ---------------- 5. ROAD NETWORK (irregular grid + arteries) ---------------- */
+  const isRoadT=t=>t==='road'||t==='avenue';
+  const setRoad=(x,y,ave)=>{ if(!onLand(x,y)) return false; const c=M[y][x];
+    if(c.t==='res'||c.t==='com'||c.t==='ind') return false;
+    if(c.t==='avenue' && !ave) return true;          // a crossing minor street must NOT chop an avenue into stubs
+    c.t=ave?'avenue':'road'; c.lv=0; c.dev=0; c.mg=0; return true; };
+
+  // avenue cadence scales with size: a small town has a couple of high streets,
+  // a dense metropolis needs frequent arterials or it gridlocks
+  const avEvery = target>20000 ? 3 : target>6000 ? 4 : 6;
+  // primary arteries: crossing avenues through the centre, gently wandering. Bigger
+  // cities get several, spread across the core, to spread the load.
+  function artery(vertical, offset){
+    const amp=R*0.22, f=0.05+rnd()*0.05, p=rnd()*6.28;
+    const base=(vertical?cx0:cy0)+offset;
+    for(let i=-Math.ceil(R*1.25);i<=Math.ceil(R*1.25);i++){
+      const along=(vertical?cy0:cx0)+i;
+      const off=Math.round(base+amp*Math.sin(i*f+p));
+      const x=vertical?off:along, y=vertical?along:off;
+      if(Math.hypot(x-cx0,y-cy0)>R*1.18) continue;
+      setRoad(x,y,true);
+    }
+  }
+  const nArt=R<18?0:Math.max(1,Math.round(R/18));      // small towns have no big arterials
+  for(let i=0;i<nArt;i++){
+    const spread=(nArt===1)?0:(i/(nArt-1)-0.5)*R*1.1;
+    artery(true, Math.round(spread)); artery(false, Math.round(spread));
+  }
+
+  // secondary grid: irregular spacing, jittered offsets, jogs, ragged periphery.
+  // spacing widens with distance from centre (downtown is finer-grained).
+  function gridLines(vertical){
+    const lo=-Math.ceil(R*1.2), hi=Math.ceil(R*1.2);
+    let pos=lo, lineNo=0;
+    while(pos<=hi){
+      const distC=Math.abs(pos)/R;                       // 0 centre .. 1 edge
+      const gap=Math.round(lerp(3,6,clamp(distC,0,1)) + (rnd()-0.5)*1.6);
+      pos += Math.max(2,gap);
+      if(pos>hi) break;
+      lineNo++;
+      const ave=(lineNo%avEvery===0);                    // arterial avenues (3x capacity) carry the dense traffic
+      // avenues run as clean, continuous boulevards; minor streets are irregular
+      const jog=ave?0:((rnd()<0.35)? (rnd()<0.5?1:-1):0);
+      const f=0.06+rnd()*0.06, ph=rnd()*6.28, amp=ave?0.4:(rnd()<0.4? 1.5:0.6);
+      const base=(vertical?cx0:cy0)+pos;
+      const span=Math.ceil(R*1.15);
+      // ragged ends on minor streets only (avenues span the whole city)
+      const trimA=ave?0:Math.floor(rnd()*R*0.16), trimB=ave?0:Math.floor(rnd()*R*0.16);
+      for(let i=-span+trimA;i<=span-trimB;i++){
+        const along=(vertical?cy0:cx0)+i;
+        const off=Math.round(base+jog+amp*Math.sin(i*f+ph));
+        const x=vertical?off:along, y=vertical?along:off;
+        const d=Math.hypot(x-cx0,y-cy0)/R;
+        if(d>1.12) continue;
+        if(!ave && d>0.72 && rnd()<0.08) continue;       // rare gaps right at the fringe (minor streets only)
+        setRoad(x,y,ave);
+      }
+    }
+  }
+  gridLines(true); gridLines(false);
+
+  // a few organic local lanes that CONNECT two existing roads (through-streets, not
+  // dangling stubs) to break up the grid without leaving roads that go nowhere
+  const lanes=Math.round(R*0.6);
+  for(let n=0;n<lanes;n++){
+    let x=Math.round(cx0+(rnd()-0.5)*R*1.5), y=Math.round(cy0+(rnd()-0.5)*R*1.5);
+    if(!onLand(x,y)||isRoadT(M[y][x].t)) continue;
+    const dir=rnd()<0.5?[1,0]:[0,1];
+    // walk until we hit another road; only commit if it bridges two roads (≤ a short block)
+    const path=[]; let cx=x, cy=y, hit=false;
+    for(let s=0;s<6;s++){ if(!onLand(cx,cy))break; if(isRoadT(M[cy][cx].t)){hit=path.length>0;break;} path.push([cx,cy]); cx+=dir[0]; cy+=dir[1]; }
+    // also require the start to be adjacent to a road, so both ends connect
+    const startAdj=isRoadT(onLand(x-dir[0],y-dir[1])?M[y-dir[1]][x-dir[0]].t:'');
+    if(hit && startAdj) for(const[px,py]of path) setRoad(px,py,false);
+  }
+
+  // keep only the road component connected to the centre (guarantees one utility network)
+  pruneRoads();
+  function pruneRoads(){
+    // find a seed road near centre
+    let seed=null,bd=1e9;
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++) if(isRoadT(M[y][x].t)){ const d=Math.hypot(x-cx0,y-cy0); if(d<bd){bd=d;seed=[x,y];} }
+    if(!seed) return;
+    const keep=new Uint8Array(G*G); const st=[seed]; keep[idx(seed[0],seed[1])]=1;
+    while(st.length){ const[x,y]=st.pop();
+      for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
+        if(inB(nx,ny)&&isRoadT(M[ny][nx].t)&&!keep[idx(nx,ny)]){ keep[idx(nx,ny)]=1; st.push([nx,ny]); } } }
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++) if(isRoadT(M[y][x].t)&&!keep[idx(x,y)]) M[y][x].t='grass';
+  }
+
+  const isRoad=(x,y)=>inB(x,y)&&isRoadT(M[y][x].t);
+  const roadAdj=(x,y)=>isRoad(x+1,y)||isRoad(x-1,y)||isRoad(x,y+1)||isRoad(x,y-1)||isRoad(x+1,y+1)||isRoad(x-1,y-1)||isRoad(x+1,y-1)||isRoad(x-1,y+1);
+  const hasFrontage=(x,y)=>{ if(roadAdj(x,y))return true; for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++) if(isRoad(x+dx,y+dy))return true; return false; };
+
+  /* ---------------- 6. ZONING ---------------- */
+  // Proportions are enforced by AREA (not by seed position) so terrain can't
+  // starve a use: of all developable lots, ~52% become residential, ~18%
+  // commercial (clustered in the core + along avenues) and ~30% industrial
+  // (a single organic wedge on the most open flank). That mix keeps jobs ≈ pop.
+  const condCfg=CONDITIONS[opts.cond];
+  // the industrial flank points toward the most open buildable land in the outer ring
+  let indAng=rnd()*Math.PI*2, bestOpen=-1;
+  for(let a=0;a<24;a++){
+    const ang=a/24*Math.PI*2; let open=0,tot=0;
+    for(let rr=R*0.4;rr<=R*1.05;rr+=1){ const sx=Math.round(cx0+Math.cos(ang)*rr), sy=Math.round(cy0+Math.sin(ang)*rr); tot++; if(onLand(sx,sy))open++; }
+    if(tot&&open/tot>bestOpen){ bestOpen=open/tot; indAng=ang; }
+  }
+  const avenueNear=(x,y)=>{ for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ const nx=x+dx,ny=y+dy; if(inB(nx,ny)&&M[ny][nx].t==='avenue')return 1; } return 0; };
+  // gather developable candidates (frontage, inside the city, not vacant/park)
+  const cand=[];
+  const pot=new Float32Array(G*G);
+  const zone=[]; for(let y=0;y<G;y++) zone[y]=new Array(G).fill(null);
+  for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+    if(M[y][x].t!=='grass'||!onLand(x,y)) continue;
+    const dx=x-cx0, dy=y-cy0, d=Math.hypot(dx,dy)/R;
+    if(d>1.06) continue;
+    if(!hasFrontage(x,y)) continue;
+    const vac=condCfg.vacancy + clamp(d-0.5,0,0.6)*0.35;        // ragged edges + decline
+    if(rnd()<vac) continue;
+    const nearWater=distWater[idx(x,y)]<3;
+    if(rnd() < condCfg.parks*(nearWater?2.2:1)*(d>0.2?1:0.4)){ zone[y][x]='park'; continue; }
+    const ang=Math.atan2(dy,dx);
+    // industrial affinity: out on the chosen flank, never in the core
+    const indAff = d<0.30 ? -2 : clamp(Math.cos(ang-indAng),0,1)*clamp(d,0,1) + (noise(x*0.12+40,y*0.12+70,3)-0.5)*0.7;
+    // commercial affinity: the core and avenue strips
+    const comAff = (1-d) + avenueNear(x,y)*0.5 + (noise(x*0.2+3,y*0.2+8,2)-0.5)*0.5;
+    cand.push({x,y,d,indAff,comAff});
+    pot[idx(x,y)] = clamp((1-d)*0.8 + (noise(x*0.18+5,y*0.18+9,3)-0.5)*0.55, 0, 1);
+  }
+  const N=cand.length;
+  // denser cities skew toward more commerce/industry: residential towers are so
+  // job-poor-per-tile at the top tiers that jobs can't keep up unless workplaces
+  // get extra land. Villages stay residential-heavy.
+  const dt=clamp((DENS-5)/15,0,1);
+  const nInd=Math.round(N*lerp(0.30,0.33,dt)), nCom=Math.round(N*lerp(0.16,0.26,dt));
+  // industry: the top-affinity lots → one contiguous wedge
+  [...cand].sort((a,b)=>b.indAff-a.indAff).slice(0,nInd).forEach(c=>{ if(c.indAff>-1) zone[c.y][c.x]='ind'; });
+  // commerce: the most central / avenue-fronting of what's left
+  cand.filter(c=>!zone[c.y][c.x]).sort((a,b)=>b.comAff-a.comAff).slice(0,nCom).forEach(c=>zone[c.y][c.x]='com');
+  // everything else residential
+  for(const c of cand) if(!zone[c.y][c.x]) zone[c.y][c.x]='res';
+
+  /* ---------------- 7. LEVELS + TOWERS, tuned to target pop ---------------- */
+  // potential -> level mapping scaled by k; towers (lv4-7) form on 2x2 quads above a cutoff.
+  const lvlBoost=condCfg.lvl;     // condition shifts the residential skyline up/down
+  function assignZone(kind, k, commit, boost){
+    if(boost==null) boost=lvlBoost;
+    let popOrJobs=0; const capArr=CAP[kind];
+    // first pass: individual lots lv1-3
+    const lv=[]; for(let y=0;y<G;y++) lv[y]=new Int8Array(G);
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+      if(zone[y][x]!==kind) continue;
+      const p=clamp(pot[idx(x,y)]*k*boost,0,1.6);
+      let L = p<0.12?1 : p<0.4?2 : 3;
+      lv[y][x]=L;
+    }
+    // tower pass: aligned 2x2 quads (disjoint) where all four are this zone & hot enough
+    const isTower=[]; for(let y=0;y<G;y++) isTower[y]=new Uint8Array(G);
+    const towerCut = kind==='ind'?0.72:0.62;
+    for(let y=0;y+1<G;y+=2)for(let x=0;x+1<G;x+=2){
+      if(zone[y][x]!==kind||zone[y][x+1]!==kind||zone[y+1][x]!==kind||zone[y+1][x+1]!==kind) continue;
+      const pp=(pot[idx(x,y)]+pot[idx(x+1,y)]+pot[idx(x,y+1)]+pot[idx(x+1,y+1)])/4 * k*boost;
+      if(pp<towerCut) continue;
+      let TL;
+      if(kind==='ind') TL = pp<0.95?4:pp<1.2?5:6;
+      else TL = pp<0.9?4:pp<1.12?5:pp<1.34?6:7;
+      isTower[y][x]=1; isTower[y][x+1]=2; isTower[y+1][x]=2; isTower[y+1][x+1]=2;
+      lv[y][x]=TL;                                  // root carries the level
+    }
+    // tally + optionally write
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+      if(zone[y][x]!==kind) continue;
+      const tw=isTower[y][x];
+      if(tw===2){ if(commit){ const c=M[y][x]; c.t=kind; c.lv=0; c.dev=0; c.mg=2; } continue; }
+      const L=lv[y][x];
+      popOrJobs += capArr[L]||0;
+      if(commit){ const c=M[y][x]; c.t=kind; c.lv=L; c.dev=DEV[L]; c.mg= tw===1?1:0; }
+    }
+    return popOrJobs;
+  }
+  // bisect residential k to hit target population
+  let kLo=0.2,kHi=3.4,kRes=1;
+  for(let it=0;it<28;it++){ kRes=(kLo+kHi)/2; const p=assignZone('res',kRes,false); if(p<target)kLo=kRes; else kHi=kRes; }
+  const popFinal=assignZone('res',kRes,true);
+  // balance commerce + industry to their OWN demand targets so neither ends up
+  // oversupplied (a glut decays and drags the whole city down). Jobs are sized at
+  // full strength regardless of condition — hardship shows through coverage/money,
+  // not vanished workplaces — which keeps residential demand from going negative.
+  const comTarget=popFinal*0.40, indTarget=popFinal*0.55;
+  const kC=fitJob('com',comTarget), kI=fitJob('ind',indTarget);
+  const jobsCom=assignZone('com',kC,true,1), jobsInd=assignZone('ind',kI,true,1);
+  function fitJob(kind,tgt){ let lo=0.2,hi=3.8,k=1; for(let it=0;it<24;it++){ k=(lo+hi)/2; const v=assignZone(kind,k,false,1); if(v<tgt)lo=k; else hi=k; } return k; }
+  // capacity check: if the map/terrain can't host enough workplaces for this many
+  // residents (jobs maxed out below demand), the city would just shed people on
+  // load. Re-cap residential to what the jobs can actually sustain → it ships stable.
+  const jobsMax=jobsCom+jobsInd;
+  let capped=false;
+  if(jobsMax < popFinal*0.80){
+    const sustain=jobsMax/0.86;
+    let lo=0.2,hi=kRes,k=kRes;
+    for(let it=0;it<24;it++){ k=(lo+hi)/2; const p=assignZone('res',k,false); if(p<sustain)lo=k; else hi=k; }
+    kRes=k; assignZone('res',k,true); capped=true;
+  }
+  // commit parks
+  for(let y=0;y<G;y++)for(let x=0;x<G;x++) if(zone[y][x]==='park'){ M[y][x].t='park'; M[y][x].lv=0; M[y][x].dev=0; }
+
+  /* ---------------- 8. DECAY for poor conditions (rubble + downgrades) ---------------- */
+  if(condCfg.rubble>0){
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+      const c=M[y][x];
+      if((c.t==='res'||c.t==='com'||c.t==='ind')&&c.mg===0&&rnd()<condCfg.rubble){
+        c.rz=c.t; c.t='rubble'; c.lv=0; c.dev=0;
+      }
+    }
+  }
+
+  /* ---------------- 9. SERVICES (utilities + civic), scaled by condition ---------------- */
+  // candidate plots: empty buildable land with road frontage, inside the city
+  const plots=[];
+  for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+    if(M[y][x].t!=='grass'||!onLand(x,y)) continue;
+    if(Math.hypot(x-cx0,y-cy0)>R*1.3) continue;
+    if(!hasFrontage(x,y)) continue;
+    plots.push([x,y]);
+  }
+  // shuffle (seeded)
+  for(let i=plots.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; const t=plots[i];plots[i]=plots[j];plots[j]=t; }
+  let pi=0;
+  const placed=[];
+  function farEnough(x,y,min){ for(const[px,py,]of placed){ if(Math.hypot(x-px,y-py)<min) return false; } return true; }
+  function place1(type,minSpacing){
+    for(;pi<plots.length;pi++){ const[x,y]=plots[pi];
+      if(M[y][x].t!=='grass') continue;
+      if(minSpacing&&!farEnough(x,y,minSpacing)) continue;
+      M[y][x].t=type; M[y][x].lv=0; M[y][x].dev=0; M[y][x].mg=0; placed.push([x,y,type]); pi++; return [x,y];
+    }
+    // relax spacing if we ran out
+    if(minSpacing){ pi=0; return place1(type,0); }
+    return null;
+  }
+  function placeBig(type,w,h){
+    for(;pi<plots.length;pi++){ const[x,y]=plots[pi];
+      let ok=true; for(let dy=0;dy<h&&ok;dy++)for(let dx=0;dx<w;dx++){ if(!inB(x+dx,y+dy)||M[y+dy][x+dx].t!=='grass'){ok=false;break;} }
+      if(!ok) continue;
+      for(let dy=0;dy<h;dy++)for(let dx=0;dx<w;dx++){ const cc=M[y+dy][x+dx]; cc.t=type; cc.lv=0; cc.dev=0; cc.mg=(dx===0&&dy===0)?1:2; }
+      placed.push([x,y,type]); pi++; return [x,y];
+    }
+    return null;
+  }
+  // nearest empty, road-fronting lot to a point — the basis for even service spacing
+  function nearestFree(x,y,maxR){
+    for(let r=0;r<=maxR;r++){
+      for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+        if(Math.max(Math.abs(dx),Math.abs(dy))!==r) continue;
+        const nx=x+dx,ny=y+dy;
+        if(!inB(nx,ny)||!onLand(nx,ny)) continue;
+        if(M[ny][nx].t!=='grass'||!hasFrontage(nx,ny)) continue;
+        return [nx,ny];
+      }
+    }
+    return null;
+  }
+  // how many developed lots sit within `r` of a point — used to keep services in
+  // built-up areas, never alone in an empty field
+  const isZ=t=>t==='res'||t==='com'||t==='ind';
+  function devNear(x,y,r){ let n=0; for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){ const nx=x+dx,ny=y+dy; if(inB(nx,ny)&&isZ(M[ny][nx].t))n++; } return n; }
+  // place one of `type` on a jittered lattice spaced by its coverage radius, so a
+  // handful of stations blanket the city instead of dozens piling up. Wider spacing
+  // (poorer condition) → fewer, sparser services. Skips empty/fringe lattice points.
+  function coverGrid(type,spacing){
+    let count=0; const step=Math.max(4,spacing);
+    for(let gy=cy0-R;gy<=cy0+R;gy+=step) for(let gx=cx0-R;gx<=cx0+R;gx+=step){
+      const jx=Math.round(gx+(rnd()-0.5)*step*0.5), jy=Math.round(gy+(rnd()-0.5)*step*0.5);
+      if(Math.hypot(jx-cx0,jy-cy0)>R*1.02) continue;
+      if(devNear(jx,jy,Math.ceil(step*0.7))<4) continue;   // nothing to serve here → skip
+      const spot=nearestFree(jx,jy,Math.ceil(step*0.6));
+      if(spot){ const[sx,sy]=spot; const c=M[sy][sx]; c.t=type; c.lv=0; c.dev=0; c.mg=0; placed.push([sx,sy,type]); count++; }
+    }
+    return count;
+  }
+  // utilities belong on the URBAN fringe — outermost plots that are still embedded in
+  // the built-up area (not lone outposts in the wilderness reached by a long road)
+  const outer=[...plots].filter(p=>Math.hypot(p[0]-cx0,p[1]-cy0)<=R*0.92 && devNear(p[0],p[1],4)>=4)
+                        .sort((a,b)=>Math.hypot(b[0]-cx0,b[1]-cy0)-Math.hypot(a[0]-cx0,a[1]-cy0));
+  let oi=0;
+  function placeOuter(type){
+    for(;oi<outer.length;oi++){ const[x,y]=outer[oi];
+      if(M[y][x].t!=='grass'||!hasFrontage(x,y)) continue;
+      const c=M[y][x]; c.t=type; c.lv=0; c.dev=0; c.mg=0; placed.push([x,y,type]); oi++; return [x,y];
+    }
+    return null;
+  }
+  // 2×2 plant (e.g. nuclear) on the urban fringe — written with the root/part bitmask
+  function placeBigOuter(type,w,h){
+    for(;oi<outer.length;oi++){ const[x,y]=outer[oi];
+      let ok=true; for(let dy=0;dy<h&&ok;dy++)for(let dx=0;dx<w;dx++){ if(!inB(x+dx,y+dy)||M[y+dy][x+dx].t!=='grass'){ok=false;break;} }
+      if(!ok) continue;
+      for(let dy=0;dy<h;dy++)for(let dx=0;dx<w;dx++){ const cc=M[y+dy][x+dx]; cc.t=type; cc.lv=0; cc.dev=0; cc.mg=(dx===0&&dy===0)?1:2; }
+      placed.push([x,y,type]); oi++; return [x,y];
+    }
+    return null;
+  }
+
+  // --- civic services: spaced by their ~10-tile coverage radius; rarer when the
+  //     city is poorly run (a struggling town has gaps in police/fire/health). ---
+  const sv=condCfg.svc;
+  const cMul={thriving:0.95, wellrun:1.1, average:1.4, struggling:1.9, declining:2.6}[opts.cond];
+  coverGrid('police', 21*cMul);
+  coverGrid('fire',   23*cMul);
+  coverGrid('school', 19*cMul);
+  if(target>1200) coverGrid('hospital', 24*cMul); else coverGrid('clinic', 18*cMul);
+  if(target>6000)  coverGrid('highschool', 38*cMul);
+  if(target>3000)  coverGrid('clinic', 28*cMul);            // clinics fill the gaps between hospitals
+  if(target>45000 && sv>0.6){ placeBig('university',2,2); }
+  // leisure: parks are denser in well-kept cities, sparse in neglected ones
+  coverGrid('park', clamp(9/Math.max(0.18,condCfg.leis), 9, 46));
+  if(target>4000 && sv>0.55) coverGrid('plaza', 26);
+  if(popFinal>=800) place1('cityhall',0);
+
+  // --- power & water sized to TOTAL demand (zones + the services placed above) ---
+  let need=0;
+  for(let y=0;y<G;y++)for(let x=0;x<G;x++){ const c=M[y][x];
+    if((c.t==='res'||c.t==='com'||c.t==='ind')&&c.mg!==2) need+=NEED[c.lv]||0;
+    else if(c.t!=='grass'&&c.t!=='tree'&&c.t!=='water'&&c.t!=='road'&&c.t!=='avenue'&&c.mg!==2) need+=5; }
+  const need2=need*1.2 + 120;
+  // fewer, larger plants on the edge: nuclear for the bulk, a coal/solar plant to top up
+  let powerLeft=need2;
+  while(powerLeft>1200){ const nuke=placeBigOuter('nuclear',2,2); if(!nuke) break; powerLeft-=PLANT_CAP.nuclear; }
+  while(powerLeft>0){ const t=rnd()<0.4?'solar':'power'; if(!(placeOuter(t)||place1(t,3))) break; powerLeft-=PLANT_CAP[t]; }
+  // water mostly from high-capacity riverbank pumps, a tower or two to reach corners
+  let waterLeft=need2;
+  while(waterLeft>0){ const t=(rnd()<0.82)?'pump':'tower'; if(!(placeOuter(t)||place1(t,4))) break; waterLeft-=WSRC_CAP[t]; }
+  if(!placed.some(p=>p[2]==='pump'||p[2]==='tower')) (place1('tower',0)||place1('pump',0));
+  if(!placed.some(p=>p[2]==='power'||p[2]==='solar'||p[2]==='nuclear')) place1('power',0);
+
+  // --- clean up roads that serve nothing: trim dead-end stubs that don't reach any
+  //     building or lot (cascading), so there are no roads/avenues "to nowhere". ---
+  trimDeadEnds();
+  function trimDeadEnds(){
+    const served=(x,y)=>{ for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){ const nx=x+dx,ny=y+dy; if(!inB(nx,ny))continue; const t=M[ny][nx].t; if(t!=='grass'&&t!=='tree'&&t!=='water'&&t!=='road'&&t!=='avenue')return true; } return false; };
+    let changed=true, guard=0;
+    while(changed && guard++<90){ changed=false;
+      for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+        if(!isRoadT(M[y][x].t)) continue;
+        let deg=0; for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]) if(isRoad(x+dx,y+dy)) deg++;
+        if(deg>1) continue;                 // through-road
+        if(served(x,y)) continue;           // feeds a nearby lot/building
+        M[y][x].t='grass'; changed=true;    // a stub to nowhere
+      }
+    }
+  }
+
+  /* ---------------- 10. ECONOMY / STATE ---------------- */
+  // recount from the committed map so the figures match the game's own tally
+  // (rubble decay above removes some developed lots)
+  let popReal=0, jobsReal=0;
+  for(let y=0;y<G;y++)for(let x=0;x<G;x++){ const c=M[y][x]; if(c.mg===2) continue;
+    if(c.t==='res') popReal+=CAP.res[c.lv]||0;
+    else if(c.t==='com') jobsReal+=CAP.com[c.lv]||0;
+    else if(c.t==='ind') jobsReal+=CAP.ind[c.lv]||0; }
+  const popFinalReal=popReal, jobs=jobsReal;
+  let milestone=0; for(let i=0;i<MILESTONES.length;i++) if(popFinalReal>=MILESTONES[i][0]) milestone=i;
+  const money=Math.round(condCfg.money(popFinalReal));
+  const tax=condCfg.tax;
+  const day=Math.round(360*(3+rnd()*9));             // a city with some history
+  const fund=condCfg.fund;
+  const cityName=opts.cityName || NAMES_POOL[(rnd()*NAMES_POOL.length)|0];
+
+  /* ---------------- 11. ENCODE TLV5 ---------------- */
+  const cells=[];
+  for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+    const c=M[y][x];
+    const ti=TID[c.t]!==undefined?TID[c.t]:0;
+    const second = c.t==='rubble' ? (TID[c.rz]||0) : c.lv;
+    cells.push(ti, second|0, Math.round(c.dev)|0, c.mg|0);
+  }
+  // sparse terrain heights
+  let eh=0; { const a=[]; for(let i=0;i<VH.length;i++){ const q=Math.round(VH[i]); if(q) a.push(i,q); } if(a.length) eh=a; }
+  const data={ v:5, g:G, m:money, tx:tax, d:day, p:popFinalReal, c:cells, fd:fund, df:1, ms:milestone,
+               hs:0, wx:1, cn:cityName, ln:0, sc:0, po:{}, eh };
+  const code='TLV5.'+btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+
+  let cRes=0,cCom=0,cInd=0; for(let y=0;y<G;y++)for(let x=0;x<G;x++){ const t=M[y][x].t; if(t==='res')cRes++; else if(t==='com')cCom++; else if(t==='ind')cInd++; }
+  return { code, M, G, cx0, cy0, R, pop:popFinalReal, jobs, money, milestone, cityName,
+           dbg:{ R:Math.round(R), kRes:+kRes.toFixed(2), kC:+kC.toFixed(2), kI:+kI.toFixed(2), nRes:cRes, nCom:cCom, nInd:cInd, popEst:popFinal, capped },
+           plants: placed.filter(p=>['power','solar','nuclear'].includes(p[2])).length };
+}
+
+/* ---------------- condition presets ---------------- */
+const DEV=[0,40,140,270,440,560,690,780];   // dev per level (sits clear of decay thresholds)
+const CONDITIONS={
+  thriving:{ vacancy:0.04, parks:0.06, rubble:0,    lvl:1.18, svc:1.0, leis:1.0, tax:9,
+             fund:{police:100,fire:100,school:100,health:100}, money:p=>120000+p*9, },
+  wellrun:{  vacancy:0.07, parks:0.045,rubble:0,    lvl:1.0,  svc:0.85,leis:0.7, tax:9,
+             fund:{police:100,fire:100,school:100,health:100}, money:p=>40000+p*5, },
+  average:{  vacancy:0.12, parks:0.03, rubble:0.004,lvl:0.85, svc:0.6, leis:0.45,tax:11,
+             fund:{police:85,fire:85,school:80,health:80}, money:p=>9000+p*1.5, },
+  struggling:{vacancy:0.2, parks:0.018,rubble:0.03, lvl:0.68, svc:0.4, leis:0.25,tax:13,
+             fund:{police:60,fire:60,school:55,health:55}, money:p=>Math.max(800,2500+p*0.3), },
+  declining:{vacancy:0.3,  parks:0.012,rubble:0.07, lvl:0.55, svc:0.25,leis:0.12,tax:15,
+             fund:{police:45,fire:45,school:40,health:40}, money:p=>Math.max(-2000,500), },
+};
+
+/* ============================================================================
+   PREVIEW RENDER (simple top-down colour map)
+============================================================================ */
+function colorFor(c){
+  switch(c.t){
+    case 'water': return '#1d4e6e';
+    case 'tree':  return '#2c6b3a';
+    case 'grass': return '#1a2a22';
+    case 'road':  return '#5a6573';
+    case 'avenue':return '#39424d';
+    case 'park':  return '#3fae8f';
+    case 'res':   return ['#27402f','#3c6b46','#52915c','#67b06f','#9be0a0','#bff0b8','#d9ffce','#eaffe0'][Math.min(7, c.mg===0?c.lv:4)];
+    case 'com':   return ['#1f3a52','#2f5e84','#3f80b0','#56a0d8','#84c4f0','#a8d8ff','#cfeaff','#e8f6ff'][Math.min(7,c.lv)];
+    case 'ind':   return ['#4a3f1c','#6e5e23','#937d2c','#bda03a','#e6c84e','#ffd166','#ffdd88','#ffe9a8'][Math.min(7,c.lv)];
+    case 'rubble':return '#3a2e2a';
+    default: return '#b06fff';   // any civic/service building
+  }
+}
+function renderPreview(res){
+  const cv=document.getElementById('preview'), ctx=cv.getContext('2d');
+  const G=res.G, px=512/G;
+  cv.width=512; cv.height=512;
+  ctx.fillStyle='#0a0f15'; ctx.fillRect(0,0,512,512);
+  for(let y=0;y<G;y++)for(let x=0;x<G;x++){
+    const c=res.M[y][x];
+    if(c.t==='grass') continue;
+    ctx.fillStyle=colorFor(c);
+    ctx.fillRect(Math.floor(x*px),Math.floor(y*px),Math.ceil(px),Math.ceil(px));
+  }
+}
+
+/* ============================================================================
+   UI WIRING
+============================================================================ */
+const $=id=>document.getElementById(id);
+const state={ size:64, waterShape:'river', waterPct:14, mtnPct:12, mtnSteep:55, targetPop:25000, cond:'wellrun' };
+
+function segGroup(elId, key, onChange, labelFn){
+  const el=$(elId);
+  el.addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b)return;
+    [...el.children].forEach(c=>c.classList.remove('on')); b.classList.add('on');
+    let v=b.dataset.v; if(!isNaN(+v)&&v!=='') v=+v; state[key]=v; if(labelFn)labelFn(v); if(onChange)onChange();
+  });
+}
+segGroup('mapSize','size', null, v=>$('mapsizeLbl').textContent=(v===32?'COZY':v===64?'VAST':'BOUNDLESS')+' · '+v+'²');
+segGroup('waterShape','waterShape', null, v=>$('waterShapeLbl').textContent=v[0].toUpperCase()+v.slice(1));
+segGroup('cond','cond', null, v=>$('condLbl').textContent=({thriving:'Thriving',wellrun:'Well-run',average:'Average',struggling:'Struggling',declining:'Declining'})[v]);
+
+function bindRange(id,key,lblId,fmt){ const el=$(id);
+  el.addEventListener('input',()=>{ state[key]=+el.value; $(lblId).textContent=fmt?fmt(+el.value):el.value; }); }
+bindRange('waterPct','waterPct','waterPctLbl');
+bindRange('mtnPct','mtnPct','mtnPctLbl');
+bindRange('mtnSteep','mtnSteep','mtnSteepLbl');
+bindRange('targetPop','targetPop','popLbl', v=>(+v).toLocaleString());
+
+function curSeed(){ const s=$('seed').value.trim(); return s===''? (Math.random()*1e9|0) : (parseInt(s,10)|0); }
+$('reroll').addEventListener('click',()=>{ $('seed').value=Math.random()*1e9|0; run(); });
+
+let lastCode='';
+function run(){
+  const seed=curSeed(); $('seed').value=seed;
+  const opts={ size:state.size, waterShape:state.waterShape, waterPct:state.waterPct,
+    mtnPct:state.mtnPct, mtnSteep:state.mtnSteep, targetPop:state.targetPop,
+    cond:state.cond, seed, cityName:$('cityName').value.trim() };
+  let res;
+  try{ res=generate(opts); }
+  catch(err){ console.error(err); toast('Generation failed — see console'); return; }
+  lastCode=res.code;
+  $('code').value=res.code;
+  $('codeLen').textContent=res.code.length.toLocaleString()+' chars';
+  $('stPop').textContent=res.pop.toLocaleString();
+  $('stJobs').textContent=res.jobs.toLocaleString();
+  $('stRank').textContent=MILESTONES[res.milestone][1];
+  $('stMoney').textContent='§'+Math.round(res.money).toLocaleString();
+  if(!$('cityName').value.trim()) $('cityName').placeholder=res.cityName;
+  const note=$('capNote');
+  if(res.dbg.capped || res.pop < state.targetPop*0.8){
+    note.style.display='';
+    note.innerHTML=`This map can't sustainably hold ${(+state.targetPop).toLocaleString()} people (terrain + jobs limit it). Generated the largest stable city it fits: <b>${res.pop.toLocaleString()}</b>. For more, raise the map size or lower water/mountain coverage.`;
+  } else note.style.display='none';
+  renderPreview(res);
+}
+
+$('generate').addEventListener('click',run);
+
+$('copy').addEventListener('click',async()=>{
+  if(!lastCode){ toast('Generate a city first'); return; }
+  try{ await navigator.clipboard.writeText(lastCode); toast('Code copied'); }
+  catch(_){ $('code').select(); document.execCommand('copy'); toast('Code copied'); }
+});
+$('download').addEventListener('click',()=>{
+  if(!lastCode){ toast('Generate a city first'); return; }
+  const name=($('cityName').value.trim()||$('cityName').placeholder||'polis-city').replace(/\s+/g,'_');
+  const blob=new Blob([lastCode],{type:'text/plain'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name+'.polis.txt'; a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+let toastT;
+function toast(msg){ const el=$('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),1600); }
+
+// first render
+$('seed').value=Math.random()*1e9|0;
+run();
+</script>
+</body>
+</html>

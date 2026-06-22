@@ -9,7 +9,7 @@ All line numbers refer to `index.html` and are approximate.
 
 ## Core data
 
-- **Grid**: `G` = grid size (selectable 30/40/52/64/96 via `WORLD_SIZES`).
+- **Grid**: `G` = grid size (selectable 32/64/128 via `WORLD_SIZES`).
   `map[y][x]` is a **cell**: `{ t:type, lv:level 0–7, dev:growth progress,
   pw:powered, wt:watered, fire, vary:render noise, grp:[rootX,rootY],
   part:bool, bld:construction%, bridge, bus, rail, rz:rubble-origin type }`.
