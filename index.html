@@ -3803,64 +3803,89 @@ function toGrid(px,py){
   const vx=Math.floor((a/(TW/2)+b/(TH/2))/2), vy=Math.floor((b/(TH/2)-a/(TW/2))/2);
   return v2g(vx,vy);
 }
-/* Approx drawn pixel-height (at zoom 1) of a structure rooted at cell `c`, used only for
-   height-aware hover picking. Zone bodies reuse the renderer's own towerHeight; landmarks/
-   services carry eyeballed heights matching their drawn silhouettes. Flat tiles return 0. */
-const PICK_H = { power:50, nuclear:64, fusion:60, solar:14, incinerator:46, landfill:14, recycling:24,
-  police:20, fire:20, clinic:18, school:20, highschool:26, hospital:30, university:42, medcenter:48,
-  cityhall:40, monument:88, museum:44, botanic:18, titan:150, spaceport:78, arena:40, stadium:42,
-  zoo:22, church:54, airport:22, rstation:18, port:26, pump:12 };
-function pickHeight(c){
-  if ((c.t==='res'||c.t==='com'||c.t==='ind') && c.lv>0) return towerHeight(c.t,c.lv);
-  return PICK_H[c.t]||0;
+/* ---------- pixel-exact hover picking ----------
+   The hover/inspect tooltip must name the structure the player actually SEES under the cursor,
+   not the flat lot the cursor's ground ray lands on — a tall building drawn from a tile *in
+   front* visually covers the lots behind it. No height/silhouette approximation can get this
+   right for stepped massing, spires, helipads or setbacks, so instead we paint an off-screen
+   "id buffer": the same flat-ground + tall-structure passes the real renderer runs, but every
+   fill/stroke is forced to a solid colour that encodes the owning cell's root index, in
+   painter order. Reading the pixel under the cursor then returns exactly the cell whose drawn
+   pixels you're pointing at — building, road, water, anything. The buffer is rebuilt only when
+   the camera or map changes (see pickKey), so a stationary world makes repeated hovers cost a
+   single getImageData. */
+let PICKING=0, PICK_ID='#000000', pickCv=null, pickCx=null, pickKey='';
+function idToCol(i){ return '#'+(0x1000000+(i&0xffffff)).toString(16).slice(1); }   // 24-bit index → #rrggbb
+function ensurePickCx(){
+  if (!pickCv) pickCv=document.createElement('canvas');
+  if (pickCv.width!==cv.width || pickCv.height!==cv.height){ pickCv.width=cv.width; pickCv.height=cv.height; pickKey=''; pickCx=null; }
+  if (pickCx) return;
+  // a Proxy over a real 2D context: every paint operation lands in the current cell's id colour,
+  // gradients/shadows/blends are flattened away, and hairline strokes are thickened so thin
+  // road markings still register a pixel.
+  const real=pickCv.getContext('2d',{willReadFrequently:true});
+  pickCx=new Proxy(real,{
+    get(t,p){ const v=Reflect.get(t,p); return typeof v==='function'?v.bind(t):v; },
+    set(t,p,val){
+      if (p==='fillStyle'||p==='strokeStyle'){ t.fillStyle=t.strokeStyle=PICK_ID; return true; }
+      if (p==='globalAlpha'){ t.globalAlpha=1; return true; }
+      if (p==='shadowBlur'){ t.shadowBlur=0; return true; }
+      if (p==='shadowColor'||p==='filter'||p==='globalCompositeOperation') return true;
+      if (p==='lineWidth'){ t.lineWidth=Math.max(+val||0,1.25); return true; }
+      Reflect.set(t,p,val); return true;
+    }
+  });
 }
-function pointInPoly(px,py,pts){
-  let inside=false;
-  for (let i=0,j=pts.length-1;i<pts.length;j=i++){
-    const xi=pts[i][0],yi=pts[i][1],xj=pts[j][0],yj=pts[j][1];
-    if (((yi>py)!==(yj>py)) && px < (xj-xi)*(py-yi)/(yj-yi)+xi) inside=!inside;
-  }
-  return inside;
+function buildPickBuffer(){
+  ensurePickCx();
+  // only geometry-affecting state belongs in the key; overlays/day-night don't move pixels' owners
+  const key=S.ox+'|'+S.oy+'|'+S.zoom+'|'+S.rot+'|'+SEAS.name+'|'+gndVer+'|'+S.day+'|'+(S.flatten?1:0)+'|'+cv.width+'x'+cv.height;
+  if (key===pickKey) return;
+  pickKey=key;
+  const now=performance.now(), W=cv.width/DPR, H=cv.height/DPR, z=S.zoom;
+  const real=pickCv.getContext('2d');
+  real.setTransform(DPR,0,0,DPR,0,0); real.globalAlpha=1; real.shadowBlur=0; real.clearRect(0,0,W,H);
+  const svCx=cx, svGP=GP, svQ=STRUCT_Q, svShadow={x:lastBoxShadow.x,y:lastBoxShadow.y,w:lastBoxShadow.w}, svTint=BLD_TINT;
+  cx=pickCx; PICKING=1;
+  // identical analytic culling to render(): walk only the diagonals/tiles that touch the screen
+  const TH2v=TH/2*z;
+  const sLo=Math.max(0, Math.floor((-200*z - S.oy)/TH2v));
+  const sHi=Math.min(2*(G-1), Math.ceil((H + TH*2*z - S.oy)/TH2v));
+  const dLo=(-TW*z - S.ox)/(TW/2*z), dHi=(W + TW*z - S.ox)/(TW/2*z);
+  const setId=(x,y)=>{ const c=map[y][x], r=c.grp||[x,y]; PICK_ID=idToCol(r[1]*G+r[0]+1); };  // +1 so 0 stays "no tile"
+  const band=(gpv)=>{
+    GP=gpv;
+    for (let s=sLo;s<=sHi;s++){
+      const vxA=Math.max(0,s-G+1,Math.ceil((s+dLo)/2)-1), vxB=Math.min(G-1,s,Math.floor((s+dHi)/2)+1);
+      for (let vx=vxA;vx<=vxB;vx++){
+        const vy=s-vx; const [x,y]=v2g(vx,vy); const [px,py]=toScreen(vx,vy);
+        if (px<-TW*z||px>W+TW*z||py<-200*z||py>H+TH*2*z) continue;
+        setId(x,y); drawCell(x,y,now);
+      }
+      // flush this band's deferred superstructures tallest-first, exactly like render()
+      if (gpv===2 && STRUCT_Q.length){ STRUCT_Q.sort((a,b)=>b.k-a.k); for (const e of STRUCT_Q){ if (e.pid) PICK_ID=e.pid; e.fn(); } STRUCT_Q.length=0; }
+    }
+  };
+  STRUCT_Q=[];
+  band(1);   // flat ground: roads, grass, water, lot bases
+  band(2);   // tall structures, height-sorted per band so a nearer short building lands on top
+  cx=svCx; GP=svGP; STRUCT_Q=svQ; lastBoxShadow=svShadow; BLD_TINT=svTint; PICKING=0;
 }
-/* Height-aware hover pick: tall buildings rise from their base tile, so the pixel under the
-   cursor frequently overlaps a structure rooted on a tile *in front of* the flat ground
-   projection (e.g. the cursor sits on a skyscraper's facade, but toGrid returns the lot
-   behind it). Walk nearby roots and return the front-most one whose drawn silhouette — its
-   base diamond extruded straight up by the building's pixel height — contains the cursor.
-   Falls back to the flat projection when no building covers the pixel. */
+/* Returns the [gx,gy] of the cell whose drawn pixels sit under (px,py). Falls back to the flat
+   ground projection when the cursor is over sky/void or an antialiased edge decodes invalid. */
 function pickTile(px,py){
-  const flat=toGrid(px,py), z=S.zoom;
-  const a=(px-S.ox)/z, b=(py-S.oy)/z;
-  const vfx=Math.floor((a/(TW/2)+b/(TH/2))/2), vfy=Math.floor((b/(TH/2)-a/(TW/2))/2);
-  const flatV=vfx+vfy;                            // view-depth of the tile directly under the cursor
-  const MAXD=8;                                   // tallest body (~162px) reaches ~5 tiles + footprint
-  const BW=0.66;                                  // body column is narrower than the full lot, so a tower never
-                                                  // claims the road/ground drawn beside it
-  let bestCell=null, bestKey=-1; const seen=new Set();
-  for (let dv=-1; dv<=MAXD; dv++) for (let du=-1; du<=MAXD; du++){
-    const [gx,gy]=v2g(vfx+du, vfy+dv);
-    if (!inB(gx,gy)) continue;
-    const cc=map[gy][gx];
-    const root = cc.grp ? grpRoot(cc) : cc;
-    const [rx,ry] = cc.grp ? cc.grp : [gx,gy];
-    const key = rx+','+ry; if (seen.has(key)) continue; seen.add(key);
-    const h = pickHeight(root); if (h<=2) continue;
-    const fw = root.grp ? (root.fw||2) : (FOOT[root.t]?FOOT[root.t][0]:1);
-    const fh = root.grp ? (root.fh||2) : (FOOT[root.t]?FOOT[root.t][1]:1);
-    // ground centre of the footprint (rotation-aware), matching the renderer's block anchor
-    const [vcx,vcy]=rotC(rx+fw/2, ry+fh/2);
-    const dk=vcx+vcy;                              // view-depth of the structure's base
-    // only a structure standing IN FRONT of the hovered tile can rise up and occlude it; one
-    // behind (or on it) is either hidden or already the flat pick, so never steal the tile
-    if (dk <= flatV+1) continue;
-    const cx0=S.ox + (vcx-vcy)*(TW/2)*z, cy0=S.oy + (vcx+vcy)*(TH/2)*z;
-    const Wp=(fw+fh)/2*(TW/2)*z*BW, Hh=(fw+fh)/2*(TH/2)*z, Hp=h*z;
-    // silhouette of the raised body: its narrow column extruded up from the base diamond
-    const poly=[[cx0-Wp,cy0+Hh*BW],[cx0+Wp,cy0+Hh*BW],[cx0+Wp,cy0-Hp],[cx0,cy0-Hh-Hp],[cx0-Wp,cy0-Hp]];
-    if (!pointInPoly(px,py,poly)) continue;
-    if (dk>bestKey){ bestKey=dk; bestCell=[rx,ry]; }   // front-most (largest view depth) wins, per painter order
-  }
-  return bestCell || flat;
+  const flat=toGrid(px,py);
+  try{
+    buildPickBuffer();
+    const dx=Math.max(0,Math.min(pickCv.width-1, Math.round(px*DPR)));
+    const dy=Math.max(0,Math.min(pickCv.height-1, Math.round(py*DPR)));
+    const d=pickCv.getContext('2d').getImageData(dx,dy,1,1).data;
+    if (d[3]){
+      const v=(d[0]|(d[1]<<8)|(d[2]<<16))-1;
+      if (v>=0 && v<G*G){ const x=v%G, y=(v/G)|0; if (inB(x,y)) return [x,y]; }
+    }
+  }catch(_){}
+  return flat;
 }
 function shade(hex, f){
   const n=parseInt(hex.slice(1),16);
@@ -4399,8 +4424,11 @@ function drawCell(x,y,now){
       // congestion heat — dynamic (traffic decays/grows every tick), so it stays live, never cached
       if (GP!==1 && !c.bridge){
         const cg = congestion(x,y);
-        if (cg > 0.55){
-          const r=clamp((cg-0.55)/0.9, 0, 1);
+        // only glow once a road is genuinely loaded: amber as it nears capacity (~0.85),
+        // ramping to full red past capacity (1.6, matching the data overlay). Below that a
+        // road is free-flowing and stays unpainted — a half-full commuter corridor isn't a jam.
+        if (cg > 0.85){
+          const r=clamp((cg-0.85)/0.75, 0, 1);
           diamond(sx,sy,.9);
           cx.fillStyle=`rgba(${200+r*55|0},${140-r*100|0},40,${0.12+r*0.26})`;
           cx.fill();
@@ -5468,7 +5496,7 @@ function drawTowerTile(c,x,y,sx,sy,night,now){
     queueStruct(true, h, ()=>{
       const [vcx,vcy]=rotC(bx+1,by+1);
       const [msx,msy]=toScreen(vcx-.5,vcy-.5);
-      if (PERF.spr && STRUCT_Q!==null && root.bld===0) blitTower(root.t, root.lv, root.vary, msx, msy, night);
+      if (PERF.spr && !PICKING && STRUCT_Q!==null && root.bld===0) blitTower(root.t, root.lv, root.vary, msx, msy, night);
       else { drawBigBuilding(root.t, msx, msy, hf, night, root.lv, root.vary); if (root.bld>0) drawCrane(msx, msy, h, now); }
     });
   }
@@ -5677,7 +5705,7 @@ let BLD_TINT=null;
    draw overrunning it. Null outside the band loop (ghost preview etc.) → draw immediately. */
 let STRUCT_Q=null;
 function queueStruct(tower, h, fn){
-  if (STRUCT_Q) STRUCT_Q.push({k:(tower?1e7:0)+h, fn});
+  if (STRUCT_Q) STRUCT_Q.push({k:(tower?1e7:0)+h, fn, pid:PICKING?PICK_ID:null});   // pid: replay under the right id colour during a pick pass
   else fn();
 }
 /* ---------- building sprite cache (residential singles + 2×2 towers) ----------
@@ -7579,7 +7607,7 @@ function drawZone(c,x,y,sx,sy,night,now){
   const pk=(n)=>Math.min(n-1,(c.vary*n)|0);
   const cyp=sy+TH/2*z;
   queueStruct(false, towerHeight(c.t,c.lv)*hf, ()=>{
-    if (PERF.spr && STRUCT_Q!==null && c.t==='res' && c.bld===0) blitRes(c,x,y,sx,sy,night);
+    if (PERF.spr && !PICKING && STRUCT_Q!==null && c.t==='res' && c.bld===0) blitRes(c,x,y,sx,sy,night);
     else if (c.t==='res') drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk);
     else if (c.t==='com') drawCom(c,x,y,sx,sy,cyp,hf,night,z,pk,now);
     else drawInd(c,sx,sy,cyp,hf,night,z,pk,now);
