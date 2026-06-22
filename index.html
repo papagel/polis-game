@@ -944,7 +944,7 @@
    POLIS — an isometric city builder
    ============================================================ */
 let G = 40;                         // grid size — selectable per city
-const WORLD_SIZES=[ {n:'COZY',g:30}, {n:'CLASSIC',g:40}, {n:'GRAND',g:52}, {n:'VAST',g:64}, {n:'COLOSSAL',g:96} ];
+const WORLD_SIZES=[ {n:'COZY',g:30}, {n:'CLASSIC',g:40}, {n:'GRAND',g:52}, {n:'VAST',g:64}, {n:'COLOSSAL',g:96}, {n:'BOUNDLESS',g:128} ];
 const TW = 64, TH = 32;             // iso tile size at zoom 1
 const cv = document.getElementById('c');
 let cx = cv.getContext('2d');
@@ -967,7 +967,8 @@ const S = {
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 /* power saver: caps the frame rate (30fps running / ~12fps paused) and renders at a slightly
    lower pixel density — the simulation itself always runs at full fidelity */
-const PERF={ saver:true, spr:true, gnd:true };   // spr: cache static building sprites; gnd: cache the flat ground layer
+const PERF={ saver:true, spr:true, gnd:true, lod:true };   // spr: cache static building sprites; gnd: cache the flat ground layer; lod: cheap massing blocks (only the giant world, zoomed right out)
+const LOD_Z=0.20;   // ONLY on BOUNDLESS (G>110) zoomed nearly all the way out: buildings are a few px, so a block is imperceptible — and it's the only way a ~1M city surveys smoothly. Normal worlds never reach this (their min-zoom floor is higher), so they always keep full detail.
 let GP=0;   // ground pass: 0=full (default/catalog), 1=flat ground only, 2=structures+agents only
 let gndCache=null, gndKey='', gndVer=0;   // screen-space cache of the flat ground; gndVer bumps on any map change
 try{ if (localStorage.getItem('tlv_saver')==='0') PERF.saver=false; }catch(_){}
@@ -1779,7 +1780,9 @@ function splat(arr, x, y, r, amt){
    a fully-schooled city emits half the industrial smog. This is the mayor's
    real lever on what *kind* of industry grows — build schools, get cleaner factories. */
 function indCleanMul(){ return 1 - 0.5*(S.edu||0); }
+let RF_DEFER=false, RF_PENDING=false;   // simTick coalesces its many per-level-up field refreshes into ONE pass/tick
 function recomputeFields(){
+  if (RF_DEFER){ RF_PENDING=true; return; }   // deferred during the growth loop; simTick flushes a single pass afterward
   gndVer++;   // any map/field change invalidates the cached ground layer (bumps once; rebake is per-frame)
   pollution.fill(0);
   leisure.fill(0);
@@ -2653,6 +2656,7 @@ function simTick(){
   // traffic decays each day
   for (let i=0;i<traffic.length;i++) traffic[i]*=0.80;
   recomputeCommute();   // job-access field for spatial unemployment (see below)
+  RF_DEFER=true;        // coalesce every per-level-up field refresh in the loop below into a single pass (flushed after)
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     const c = map[y][x];
     if (c.fire>0){
@@ -2781,6 +2785,7 @@ function simTick(){
       msgAt(`<b>Fire breaks out at a ${what}!</b> ${covd?'A station is nearby — trucks are rolling.':'No fire station covers it — it could spread.'}`, x, y);
     }
   }
+  RF_DEFER=false; if (RF_PENDING){ RF_PENDING=false; recomputeFields(); }   // ONE field pass for the whole tick's growth (was one per level-up)
   // educated workforce: how well schools cover the homes
   let eduN=0, eduD=0, crSum=0, crN=0, hSum=0, hD=0;
   for (let y2=0;y2<G;y2++) for (let x2=0;x2<G;x2++){
@@ -5390,6 +5395,16 @@ function drawTowerTile(c,x,y,sx,sy,night,now){
       });
       return;
     }
+    if (PERF.lod && z<LOD_Z && G>110){
+      // giant world, zoomed right out: a single tall block for the 2×2 tower (skips sprite bake + full geometry)
+      queueStruct(true, h, ()=>{
+        const [vcx2,vcy2]=rotC(bx+1,by+1);
+        const [fsx,fsy]=toScreen(vcx2-.5,vcy2-.5);
+        const col = root.t==='res'?'#aab59a' : root.t==='com'?'#9fb0c4' : '#bcae8a';
+        lodMass(fsx, fsy, .8, .8, h, col, .9+root.vary*.18);
+      });
+      return;
+    }
     queueStruct(true, h, ()=>{
       const [vcx,vcy]=rotC(bx+1,by+1);
       const [msx,msy]=toScreen(vcx-.5,vcy-.5);
@@ -7493,6 +7508,13 @@ function drawZone(c,x,y,sx,sy,night,now){
     }
     return;
   }
+  if (PERF.lod && z<LOD_Z && G>110 && !S.flatten){
+    // giant world, zoomed right out: a single massing block instead of full (and, for com/ind, animated) geometry
+    const col = c.t==='res'?'#b6bf9f' : c.t==='com'?'#a6b3c5' : '#c2b58f';
+    const h = (8 + c.lv*8) * (c.bld>0 ? 0.45 : 1);
+    queueStruct(false, h, ()=> lodMass(sx, sy, .52, .48, h, col, .9+c.vary*.2));
+    return;
+  }
   const hf = c.bld>0 ? 0.22+0.78*(1-c.bld) : 1;   // construction: the building rises as it's built
   const pk=(n)=>Math.min(n-1,(c.vary*n)|0);
   const cyp=sy+TH/2*z;
@@ -7774,6 +7796,23 @@ function vol(sx,sy,ox,oy,ax,ay2,hp,col,opts={}){
   cx.beginPath(); cx.moveTo(L[0],L[1]); cx.lineTo(B[0],B[1]); cx.lineTo(R[0],R[1]); cx.stroke();
   if (opts.line){ cx.strokeStyle='rgba(20,30,45,.35)'; cx.lineWidth=1; cx.stroke(); }
   return {T,R,B,L,H,cx:cxp,cy:cyp};
+}
+/* far-zoom level-of-detail massing: one cheap extruded block standing in for a building's full
+   geometry (and, for com/ind, its per-frame animation) when it's only a few pixels on screen at
+   whole-map zoom. Two side faces + a roof — ~3 fills vs the dozens a real building costs, and no
+   shadow/windows/sprite-bake. Geometry mirrors vol() so it reads like the flatten stand-in. */
+function lodMass(sx,sy,ax,ay2,hp,col,vmul){   // col = HEX; vmul = per-building brightness jitter (≈0.9..1.1)
+  const z=S.zoom, v=vmul||1;
+  const cxp=sx, cyp=sy+TH/2*z, H=hp*z;
+  const xw=ax*TW/2*z, xh=ax*TH/2*z, yw=ay2*TW/2*z, yh=ay2*TH/2*z;
+  const T=[cxp+(yw-xw), cyp-(xh+yh)-H], R=[cxp+(xw+yw), cyp+(xh-yh)-H],
+        B=[cxp+(xw-yw), cyp+(xh+yh)-H], L=[cxp-(xw+yw), cyp+(yh-xh)-H];
+  cx.fillStyle=shade(col,.66*v);
+  cx.beginPath(); cx.moveTo(L[0],L[1]); cx.lineTo(B[0],B[1]); cx.lineTo(B[0],B[1]+H); cx.lineTo(L[0],L[1]+H); cx.closePath(); cx.fill();
+  cx.fillStyle=shade(col,.84*v);
+  cx.beginPath(); cx.moveTo(B[0],B[1]); cx.lineTo(R[0],R[1]); cx.lineTo(R[0],R[1]+H); cx.lineTo(B[0],B[1]+H); cx.closePath(); cx.fill();
+  cx.fillStyle=shade(col,1.06*v);
+  cx.beginPath(); cx.moveTo(T[0],T[1]); cx.lineTo(R[0],R[1]); cx.lineTo(B[0],B[1]); cx.lineTo(L[0],L[1]); cx.closePath(); cx.fill();
 }
 /* vertical cylinder (silos, tanks, kiosks) */
 function cyl(sx,sy,ox,oy,r,hp,col){
@@ -9337,7 +9376,8 @@ cv.addEventListener('dblclick', e=>{
   zoomAt(px,py, 1.6); dirty=true; syncHover(px,py);
 });
 function zoomAt(px,py,f){
-  const nz=clamp(S.zoom*f, .22, 4.8);
+  const minZ=Math.min(.22, 21/G);   // larger worlds (BOUNDLESS+) may zoom out further so the whole map still fits
+  const nz=clamp(S.zoom*f, minZ, 4.8);
   S.ox = px - (px-S.ox)*(nz/S.zoom);
   S.oy = py - (py-S.oy)*(nz/S.zoom);
   S.zoom=nz;
