@@ -1,0 +1,47 @@
+---
+description: POLIS isometric perspective — get projection, grounding & foreshortening right when drawing buildings/props
+alwaysApply: true
+---
+
+# POLIS — Drawing in Isometric Perspective
+
+The renderer is a fixed 2:1 isometric projection (`TW=64, TH=32`, ~line 929):
+`isoX=(x−y)·TW/2`, `isoY=(x+y)·TH/2`. Every `draw*` fn gets the tile's screen
+anchor `sx,sy`; the **ground plane** of a point at grid offset `(ox,oy)` is:
+
+```js
+const P=(ox,oy)=>[sx+(ox-oy)*TW/2*z, sy+TH/2*z+(ox+oy)*TH/2*z];   // z = S.zoom
+```
+
+When adding or moving any geometry, check these — most building bugs are one of them:
+
+- **Verticals stay vertical.** World height projects straight up the screen, so
+  draw height by subtracting pixels (`-H`); poles, edges and walls are vertical
+  screen lines. Never slant a vertical to "fake" 3-D.
+- **Anchor to the ground, not to `sy`.** A prop's base must be the real ground
+  point `P(ox,oy).y`, using the *same* offset math as the building. Don't reuse a
+  roof/face y for something that sits on the ground.
+- **Respect the footprint.** A building `vol(...,ax,ay,...)` covers `|ox|<ax`,
+  `|oy|<ay`. Ground props (flags, signs, lamps, trees, vehicles) placed *inside*
+  that box appear to erupt from the wall/roof. Plant them **outside** it — in
+  front means larger `oy` (and draw them *after* the building so depth order is
+  right; nearer = larger `ox+oy`).
+- **Foreshorten the ground.** Horizontal spans squash in y: a circle on the
+  ground is an ellipse with `ry ≈ rx·TH/TW = rx·0.5`. Use `ellipse`, not `arc`.
+- **Seat verticals with a contact shadow.** A small dark ground ellipse at the
+  foot of any pole/post sells "planted" over "floating".
+- **Prefer the primitives.** `vol`/`box`/`cyl`/`facePt`/`quadF`/`archRoof`
+  already place the 4 corners, faces and shading correctly — build from them
+  instead of hand-rolling polygons that can drift off the iso axes.
+
+### Example — forecourt flags (convention center, ~line 8239)
+
+```js
+// ❌ inside the footprint (oy=.22,.02 < building front face ~.32) → poles stab through the wall
+for(let i=0;i<3;i++){ const [px,py]=P(.34, .42-i*.20); ... }
+
+// ✅ on the forecourt in front of the facade, with a socket shadow
+for(let i=0;i<3;i++){ const [px,py]=P(-.28+i*.28, .44);
+  cx.fillStyle='rgba(12,18,26,.30)'; cx.beginPath(); cx.ellipse(px,py,1.7*z,0.85*z,0,0,7); cx.fill();
+  cx.fillStyle='#cfd6dc'; cx.fillRect(px-.4*z, py-15*z, .8*z, 15*z); /* + pennant */ }
+```

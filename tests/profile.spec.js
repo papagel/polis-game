@@ -77,17 +77,17 @@ test('render cost breakdown', async ({ game }) => {
         for (let i=0;i<N;i++) render(performance.now());
         return (performance.now() - t0) / N;
       };
-      // A/B the residential sprite cache: baseline (off) vs cached (on)
-      PERF.spr = false; S.overlay = 'none';
+      // A/B the ground cache (sprite cache stays on throughout — they ship together)
+      PERF.spr = true; PERF.gnd = false; S.overlay = 'none';
       const fullBaseline = timeAt('none');
-      PERF.spr = true;
+      PERF.gnd = true;
       const full = timeAt('none');               // warmup renders inside timeAt prime the cache
       const ovPower = timeAt('power');
       const ovDensity = timeAt('density');
-      // parity: mean per-pixel difference between cached and uncached frames
+      // parity: mean per-pixel difference between ground-cached and live frames
       const grab = () => { render(performance.now()); return cx.getImageData(0,0,cv.width,cv.height).data; };
-      PERF.spr = false; const a = grab();
-      PERF.spr = true;  const b = grab();
+      PERF.gnd = false; const a = grab();
+      PERF.gnd = true;  const b = grab();
       let sum=0, notable=0; const px=a.length/4;
       for (let i=0;i<a.length;i+=4){
         const d=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]);
@@ -129,8 +129,8 @@ test('render cost breakdown', async ({ game }) => {
     const pct = (v) => `${(100*v/denom).toFixed(0)}%`;
     lines.push('');
     lines.push(`${r.label}   [pop=${r.pop}, devLots=${r.dev}, trees=${r.tree}, roads=${r.road}, cars=${r.cars}, peds=${r.peds}]`);
-    lines.push(`  full (no cache)  : ${r.fullBaseline.toFixed(2)} ms`);
-    lines.push(`  full (cache on)  : ${r.full.toFixed(2)} ms   (${(100*(r.fullBaseline-r.full)/r.fullBaseline).toFixed(0)}% faster; ${r.resSprites} res + ${r.towerSprites} tower sprites)`);
+    lines.push(`  spr only         : ${r.fullBaseline.toFixed(2)} ms`);
+    lines.push(`  spr + gnd cache  : ${r.full.toFixed(2)} ms   (${(100*(r.fullBaseline-r.full)/r.fullBaseline).toFixed(0)}% faster; ${r.resSprites} res + ${r.towerSprites} tower sprites)`);
     lines.push(`  - buildings      : ${r.building.toFixed(2)} ms  (${pct(r.building)})`);
     lines.push(`  - agents         : ${r.agents.toFixed(2)} ms  (${pct(r.agents)})`);
     lines.push(`  - ground/terrain : ${r.ground.toFixed(2)} ms  (${pct(r.ground)})`);

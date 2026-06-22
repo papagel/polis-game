@@ -4,6 +4,9 @@
 export const HELPERS = `
   function resetGrid(){
     S.scen = 0; S.started = false; S.diff = 1; S.day = 0; S.edu = 0; S.loan = null;
+    // clear the transient sim accumulators that aren't tied to the map so two builds in one
+    // page start identically (S.happyF is the smoothed-happiness state that feeds growth/decay).
+    S.happyF = null; S.happy = 60; S.pop = 0; S.jobs = 0; S.demand = { r:0, c:0, i:0 };
     for (let y=0;y<G;y++) for (let x=0;x<G;x++) map[y][x] = blankCell();
   }
   function set(x,y,t){ map[y][x].t = t; return map[y][x]; }
