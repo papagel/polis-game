@@ -70,11 +70,32 @@ test('render cost breakdown', async ({ game }) => {
       seedAgents();
 
       const N = 30;
-      // clean wall-clock headline (no wrapper overhead)
-      render(performance.now()); render(performance.now());
-      let t0 = performance.now();
-      for (let i=0;i<N;i++) render(performance.now());
-      const full = (performance.now() - t0) / N;
+      const timeAt = (overlay) => {
+        S.overlay = overlay;
+        render(performance.now()); render(performance.now());
+        const t0 = performance.now();
+        for (let i=0;i<N;i++) render(performance.now());
+        return (performance.now() - t0) / N;
+      };
+      // A/B the residential sprite cache: baseline (off) vs cached (on)
+      PERF.spr = false; S.overlay = 'none';
+      const fullBaseline = timeAt('none');
+      PERF.spr = true;
+      const full = timeAt('none');               // warmup renders inside timeAt prime the cache
+      const ovPower = timeAt('power');
+      const ovDensity = timeAt('density');
+      // parity: mean per-pixel difference between cached and uncached frames
+      const grab = () => { render(performance.now()); return cx.getImageData(0,0,cv.width,cv.height).data; };
+      PERF.spr = false; const a = grab();
+      PERF.spr = true;  const b = grab();
+      let sum=0, notable=0; const px=a.length/4;
+      for (let i=0;i<a.length;i+=4){
+        const d=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]);
+        sum+=d; if (d>=48) notable++;            // a clearly-visible pixel change
+      }
+      const pxDiff = sum/(px*3);                 // mean per-channel diff
+      const pxNotable = 100*notable/px;          // % of pixels a human would notice
+      S.overlay = 'none';
 
       // wrapped pass for the breakdown
       wrapAll();
@@ -91,7 +112,8 @@ test('render cost breakdown', async ({ game }) => {
 
       const cnt = countDeveloped();
       return { label, pop:S.pop, cars:cars.length, peds:peds.length, zoom,
-        full, building, agents, ground, ...cnt };
+        full, fullBaseline, building, agents, ground, ovPower, ovDensity, pxDiff,
+        pxNotable, resSprites: resSprites.size, towerSprites: towerSprites.size, ...cnt };
     }
 
     return [
@@ -107,10 +129,13 @@ test('render cost breakdown', async ({ game }) => {
     const pct = (v) => `${(100*v/denom).toFixed(0)}%`;
     lines.push('');
     lines.push(`${r.label}   [pop=${r.pop}, devLots=${r.dev}, trees=${r.tree}, roads=${r.road}, cars=${r.cars}, peds=${r.peds}]`);
-    lines.push(`  full render      : ${r.full.toFixed(2)} ms`);
+    lines.push(`  full (no cache)  : ${r.fullBaseline.toFixed(2)} ms`);
+    lines.push(`  full (cache on)  : ${r.full.toFixed(2)} ms   (${(100*(r.fullBaseline-r.full)/r.fullBaseline).toFixed(0)}% faster; ${r.resSprites} res + ${r.towerSprites} tower sprites)`);
     lines.push(`  - buildings      : ${r.building.toFixed(2)} ms  (${pct(r.building)})`);
     lines.push(`  - agents         : ${r.agents.toFixed(2)} ms  (${pct(r.agents)})`);
-    lines.push(`  - ground/terrain : ${r.ground.toFixed(2)} ms  (${pct(r.ground)})  <- cacheable layer`);
+    lines.push(`  - ground/terrain : ${r.ground.toFixed(2)} ms  (${pct(r.ground)})`);
+    lines.push(`  overlay power    : +${(r.ovPower-r.full).toFixed(2)} ms · density +${(r.ovDensity-r.full).toFixed(2)} ms`);
+    lines.push(`  parity           : mean ${r.pxDiff.toFixed(3)}/ch · ${r.pxNotable.toFixed(3)}% pixels visibly changed`);
   }
   lines.push('================================================================');
   console.log(lines.join('\n'));

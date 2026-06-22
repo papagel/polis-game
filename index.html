@@ -948,7 +948,7 @@ const S = {
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 /* power saver: caps the frame rate (30fps running / ~12fps paused) and renders at a slightly
    lower pixel density — the simulation itself always runs at full fidelity */
-const PERF={ saver:true };
+const PERF={ saver:true, spr:true };   // spr: cache static building sprites (residential first)
 try{ if (localStorage.getItem('tlv_saver')==='0') PERF.saver=false; }catch(_){}
 const YEAR_DAYS=1080, MONTH_DAYS=YEAR_DAYS/12;   // the displayed calendar runs 3× slower than the old one,
                                                  // so each season lasts ~2.5 minutes at normal speed
@@ -5243,8 +5243,8 @@ function drawTowerTile(c,x,y,sx,sy,night,now){
     queueStruct(true, h, ()=>{
       const [vcx,vcy]=rotC(bx+1,by+1);
       const [msx,msy]=toScreen(vcx-.5,vcy-.5);
-      drawBigBuilding(root.t, msx, msy, hf, night, root.lv, root.vary);
-      if (root.bld>0) drawCrane(msx, msy, h, now);
+      if (PERF.spr && STRUCT_Q!==null && root.bld===0) blitTower(root.t, root.lv, root.vary, msx, msy, night);
+      else { drawBigBuilding(root.t, msx, msy, hf, night, root.lv, root.vary); if (root.bld>0) drawCrane(msx, msy, h, now); }
     });
   }
 }
@@ -5454,6 +5454,79 @@ let STRUCT_Q=null;
 function queueStruct(tower, h, fn){
   if (STRUCT_Q) STRUCT_Q.push({k:(tower?1e7:0)+h, fn});
   else fn();
+}
+/* ---------- building sprite cache (residential singles + 2×2 towers) ----------
+   Residential bodies are fully static: no per-frame animation (drawRes takes no `now`),
+   position-independent except the lv3 land-value mansion gate, and rotation-invariant
+   (box() works in screen space, ignoring S.rot). So a body is fully determined by
+   [lv, variant, night, lvHi] — we rasterize it once and blit it. Variants come from
+   pk(N); N differs per level. Baked at the current zoom; the whole set is dropped when
+   zoom changes (only happens on pinch). No baking mid-gesture, and a per-frame cap keeps
+   a zoom-settle from stuttering. The continuous dusk tint stays a global overlay on top,
+   and lit windows are baked into the `night` variant exactly as isNight() drives them. */
+const VARN_RES=[0,5,5,4];               // variant count by level (lv 1..3)
+const resSprites=new Map();
+let SPRZ=-1, SPRSEAS='', SPR_BAKES=0, SPR_INTERACT=false;
+const SPR_BUDGET=24;                    // max bakes per frame
+function bakeRes(lv, variant, night, lvHi){
+  const z=S.zoom;
+  const W=Math.max(8,Math.ceil(150*z)), H=Math.max(8,Math.ceil(118*z));
+  const AX=Math.round(W*0.5), AY=H-Math.ceil(46*z);          // tile anchor inside the sprite
+  const off=document.createElement('canvas');
+  off.width=Math.max(1,Math.round(W*DPR)); off.height=Math.max(1,Math.round(H*DPR));
+  const oc=off.getContext('2d'); oc.setTransform(DPR,0,0,DPR,0,0);
+  const N=VARN_RES[lv]||5, vary=(variant+0.5)/N;             // bucket centre → pk() lands on `variant`
+  const c={t:'res',lv,vary,bld:0,grp:null,part:false};
+  const savedCx=cx, savedLV=landVal[0], savedShadow={x:lastBoxShadow.x,y:lastBoxShadow.y,w:lastBoxShadow.w};
+  cx=oc; landVal[0]=lvHi?85:55; lastBoxShadow={x:NaN,y:NaN,w:0};
+  const pk=(n)=>Math.min(n-1,(vary*n)|0);
+  try{ drawRes(c,0,0,AX,AY,AY+TH/2*z,1,night,z,pk); }catch(_){}
+  cx=savedCx; landVal[0]=savedLV; lastBoxShadow=savedShadow;
+  return { canvas:off, W, H, AX, AY };
+}
+function blitRes(c,x,y,sx,sy,night){
+  const lv=c.lv, N=VARN_RES[lv]||5, variant=Math.min(N-1,(c.vary*N)|0);
+  const lvHi=(lv===3 && landVal[idx(x,y)]>76)?1:0;
+  const key=lv+'|'+variant+'|'+(night?1:0)+'|'+lvHi;
+  let sp=resSprites.get(key);
+  if (!sp){
+    if (SPR_INTERACT || SPR_BAKES>=SPR_BUDGET){               // draw direct rather than bake mid-pinch / over budget
+      drawRes(c,x,y,sx,sy,sy+TH/2*S.zoom,1,night,S.zoom,(n)=>Math.min(n-1,(c.vary*n)|0));
+      return;
+    }
+    sp=bakeRes(lv,variant,night,lvHi); resSprites.set(key,sp); SPR_BAKES++;
+    if (resSprites.size>48){ resSprites.delete(resSprites.keys().next().value); }
+  }
+  cx.drawImage(sp.canvas, 0,0,sp.canvas.width,sp.canvas.height, sx-sp.AX, sy-sp.AY, sp.W, sp.H);
+}
+/* merged 2×2 towers (lv4–7, res/com/ind) — drawBigBuilding is static and fully determined by
+   (type, lv, variant, night); the tint is towerRnd(vary,…), the variant is the silhouette pick.
+   Only the spire beacon blinks (a 1px dot) — frozen here, imperceptible. */
+const towerSprites=new Map();
+function bakeTower(t, lv, variant, night){
+  const z=S.zoom, Hpx=towerHeight(t,lv);
+  const W=Math.max(8,Math.ceil(TW*2.7*z)), H=Math.max(8,Math.ceil((Hpx+97)*z));
+  const MX=Math.round(W*0.5), MY=Math.round((Hpx+25)*z);     // block-centre anchor
+  const off=document.createElement('canvas');
+  off.width=Math.max(1,Math.round(W*DPR)); off.height=Math.max(1,Math.round(H*DPR));
+  const oc=off.getContext('2d'); oc.setTransform(DPR,0,0,DPR,0,0);
+  const N=towerVarCount(t,lv), vary=(variant+0.5)/N;
+  const savedCx=cx, savedTint=BLD_TINT, savedShadow={x:lastBoxShadow.x,y:lastBoxShadow.y,w:lastBoxShadow.w};
+  cx=oc;
+  try{ drawBigBuilding(t, MX, MY, 1, night, lv, vary); }catch(_){}
+  cx=savedCx; BLD_TINT=savedTint; lastBoxShadow=savedShadow;
+  return { canvas:off, W, H, MX, MY };
+}
+function blitTower(t, lv, vary, msx, msy, night){
+  const N=towerVarCount(t,lv), variant=Math.min(N-1,((vary||0)*N)|0);
+  const key=t+'|'+lv+'|'+variant+'|'+(night?1:0);
+  let sp=towerSprites.get(key);
+  if (!sp){
+    if (SPR_INTERACT || SPR_BAKES>=SPR_BUDGET){ drawBigBuilding(t,msx,msy,1,night,lv,vary); BLD_TINT=null; return; }
+    sp=bakeTower(t,lv,variant,night); towerSprites.set(key,sp); SPR_BAKES++;
+    if (towerSprites.size>96){ towerSprites.delete(towerSprites.keys().next().value); }
+  }
+  cx.drawImage(sp.canvas, 0,0,sp.canvas.width,sp.canvas.height, msx-sp.MX, msy-sp.MY, sp.W, sp.H);
 }
 function tintHex(hex){
   if(!BLD_TINT || typeof hex!=='string' || hex[0]!=='#') return hex;
@@ -7263,7 +7336,8 @@ function drawZone(c,x,y,sx,sy,night,now){
   const pk=(n)=>Math.min(n-1,(c.vary*n)|0);
   const cyp=sy+TH/2*z;
   queueStruct(false, towerHeight(c.t,c.lv)*hf, ()=>{
-    if (c.t==='res') drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk);
+    if (PERF.spr && STRUCT_Q!==null && c.t==='res' && c.bld===0) blitRes(c,x,y,sx,sy,night);
+    else if (c.t==='res') drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk);
     else if (c.t==='com') drawCom(c,x,y,sx,sy,cyp,hf,night,z,pk,now);
     else drawInd(c,sx,sy,cyp,hf,night,z,pk,now);
     // scaffolding crane on bigger builds in progress
@@ -8328,6 +8402,7 @@ function render(now){
   const sLo=Math.max(0, Math.floor((-200*S.zoom - S.oy)/TH2v));
   const sHi=Math.min(2*(G-1), Math.ceil((H + TH*2*S.zoom - S.oy)/TH2v));
   const dLo=(-TW*S.zoom - S.ox)/TW2v, dHi=(W + TW*S.zoom - S.ox)/TW2v;
+  if (PERF.spr){ if (S.zoom!==SPRZ || SEAS.name!==SPRSEAS){ resSprites.clear(); towerSprites.clear(); SPRZ=S.zoom; SPRSEAS=SEAS.name; } SPR_BAKES=0; }   // sprites baked per zoom+season
   STRUCT_Q=[];   // collect each band's building superstructures, flushed (height-sorted) after its ground
   for (let s=sLo; s<=sHi; s++){
     const vxA=Math.max(0, s-G+1, Math.ceil((s+dLo)/2)-1);
@@ -11364,6 +11439,7 @@ function loop(now){
   // frame governor: the sim above always runs at full speed; drawing is what eats the battery.
   // running: ~20fps in saver mode (60 otherwise) · paused: ~12fps, or 0 when fully idle
   const interacting = dragging || painting || pend || pinch;
+  SPR_INTERACT = interacting;   // don't bake building sprites mid-gesture (zoom may be changing)
   // 40 skips to every 3rd 16.7ms vsync → ~20fps in saver (still smooth for gentle city motion);
   // 0 = uncapped 60. paused renders at ~12fps, but instantly during interaction.
   const minGap = S.speed>0 ? (PERF.saver?40:0) : (interacting?0:78);
