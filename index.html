@@ -292,13 +292,13 @@
   body.mob #safetySub{left:calc(8px + env(safe-area-inset-left));bottom:calc(var(--bbarh,58px) + 62px)}
 
   /* save/load modal */
-  #saveModal,#catModal,#advModal,#statsModal,#mapModal,#helpModal{position:fixed;inset:0;z-index:30;background:rgba(5,10,18,.7);display:none;align-items:center;justify-content:center;padding:18px}
-  #mapModal .inner{max-width:1120px;width:94vw;text-align:center;max-height:94vh;overflow-y:auto;padding:16px 20px 14px}
+  #saveModal,#catModal,#advModal,#statsModal,#mapModal,#helpModal{position:fixed;inset:0;z-index:30;background:rgba(5,10,18,.7);display:none;align-items:center;justify-content:center;padding:calc(18px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left))}
+  #mapModal .inner{max-width:1120px;width:94vw;text-align:center;max-height:calc(100dvh - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow-y:auto;padding:16px 20px 14px}
   #mapBody{display:flex;gap:18px;align-items:stretch;margin-top:10px;text-align:left}
   #mapBody #mapGrid{flex:1;min-width:0;margin-top:0;align-content:start}
   #mapBody #mapOpts{flex:none;width:300px;margin-top:0;grid-template-columns:1fr;align-content:start}
   @media (max-width:760px){ #mapBody{flex-direction:column} #mapBody #mapOpts{width:auto} }
-  #helpModal .inner{max-width:720px;width:94vw;max-height:90vh;overflow-y:auto}
+  #helpModal .inner{max-width:720px;width:94vw;max-height:calc(100dvh - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow-y:auto}
   #helpCols{display:grid;grid-template-columns:1fr 1fr;gap:22px;text-align:left;margin-top:8px}
   #helpCols h4{font-family:'Chakra Petch';font-size:11px;color:var(--dim);letter-spacing:.12em;margin:0 0 10px}
   #helpCols .hrow{display:flex;align-items:center;gap:6px;margin-bottom:9px;font-size:12.5px;color:var(--ink)}
@@ -4242,21 +4242,58 @@ function drawCell(x,y,now){
       cx.fillStyle='#928db0'; quad(d0.T,d0.R,d0.B,d0.L);
       cx.strokeStyle='rgba(255,250,240,.22)'; cx.lineWidth=Math.max(.7,.9*z);
       cx.beginPath(); cx.moveTo(d0.L[0],d0.L[1]); cx.lineTo(d0.T[0],d0.T[1]); cx.lineTo(d0.R[0],d0.R[1]); cx.stroke();
-      // tracks run onto the platform from each connected rail neighbour
-      const W=3.4*z;
+      // tracks run onto the platform from each connected rail neighbour. We reuse
+      // the viaduct's deck/edge/rail styling and curve maths (drawRail) so the join
+      // at the shared tile edge is seamless: a through station gets ONE continuous
+      // track across the deck, a corner curves like a rail turn, and ends/junctions
+      // get straight stubs to the platform centre — all framed identically to the
+      // viaduct so the line never visually "breaks" at the platform.
+      const W=3.4*z, rr=W*0.42, Crail=[cxp, cyp-dh];
+      const cons=[];
       for (const [dx2,dy2] of [[1,0],[-1,0],[0,1],[0,-1]]){
-        const nx=x+dx2, ny=y+dy2; if(!inB(nx,ny)||!map[ny][nx].rail) continue;
-        const [nsx,nsy]=tileScreen(nx,ny);
-        const M=[(cxp+nsx)/2,(cyp-dh+nsy+hh0-dh)/2];
-        let vx=M[0]-cxp, vy=M[1]-(cyp-dh); const m=Math.hypot(vx,vy)||1; vx/=m; vy/=m;
-        const px=-vy, py=vx, S0=[cxp+vx*5*z,(cyp-dh)+vy*5*z];
-        cx.fillStyle='#6e6886';
-        quad([S0[0]+px*W,S0[1]+py*W],[M[0]+px*W,M[1]+py*W],[M[0]-px*W,M[1]-py*W],[S0[0]-px*W,S0[1]-py*W]);
-        cx.strokeStyle='#d8d4e8'; cx.lineWidth=Math.max(.6,.8*z);
+        const nx=x+dx2, ny=y+dy2; if(!inB(nx,ny)) continue;
+        const n=map[ny][nx];
+        if (n.rail || n.t==='rstation'){
+          const [nsx,nsy]=tileScreen(nx,ny);
+          cons.push([(cxp+nsx)/2,(cyp-dh+nsy+hh0-dh)/2]);
+        }
+      }
+      const trackStrip=(P,Q)=>{
+        let vx=Q[0]-P[0], vy=Q[1]-P[1]; const m=Math.hypot(vx,vy)||1; vx/=m; vy/=m;
+        const px=-vy, py=vx;
+        cx.fillStyle=RAIL_DECK;
         cx.beginPath();
-        cx.moveTo(S0[0]+px*W*.42,S0[1]+py*W*.42); cx.lineTo(M[0]+px*W*.42,M[1]+py*W*.42);
-        cx.moveTo(S0[0]-px*W*.42,S0[1]-py*W*.42); cx.lineTo(M[0]-px*W*.42,M[1]-py*W*.42);
-        cx.stroke();
+        cx.moveTo(P[0]+px*W,P[1]+py*W); cx.lineTo(Q[0]+px*W,Q[1]+py*W);
+        cx.lineTo(Q[0]-px*W,Q[1]-py*W); cx.lineTo(P[0]-px*W,P[1]-py*W); cx.closePath(); cx.fill();
+        cx.strokeStyle=RAIL_EDGE; cx.lineWidth=Math.max(.7,.9*z);
+        cx.beginPath();
+        cx.moveTo(P[0]+px*W,P[1]+py*W); cx.lineTo(Q[0]+px*W,Q[1]+py*W);
+        cx.moveTo(P[0]-px*W,P[1]-py*W); cx.lineTo(Q[0]-px*W,Q[1]-py*W); cx.stroke();
+        cx.strokeStyle=RAIL_RAILC; cx.lineWidth=Math.max(.6,.8*z);
+        cx.beginPath();
+        cx.moveTo(P[0]+px*rr,P[1]+py*rr); cx.lineTo(Q[0]+px*rr,Q[1]+py*rr);
+        cx.moveTo(P[0]-px*rr,P[1]-py*rr); cx.lineTo(Q[0]-px*rr,Q[1]-py*rr); cx.stroke();
+      };
+      if (cons.length===2){
+        // straight-through or a turn: one continuous deck A->centre->B across the platform
+        const A=cons[0], B=cons[1];
+        const dO=railLane(A,Crail,B,W,1), dI=railLane(A,Crail,B,W,-1);
+        cx.fillStyle=RAIL_DECK;
+        cx.beginPath();
+        cx.moveTo(dO.PA[0],dO.PA[1]); cx.quadraticCurveTo(dO.C[0],dO.C[1],dO.PB[0],dO.PB[1]);
+        cx.lineTo(dI.PB[0],dI.PB[1]); cx.quadraticCurveTo(dI.C[0],dI.C[1],dI.PA[0],dI.PA[1]);
+        cx.closePath(); cx.fill();
+        cx.strokeStyle=RAIL_EDGE; cx.lineWidth=Math.max(.7,.9*z);
+        cx.beginPath();
+        cx.moveTo(dO.PA[0],dO.PA[1]); cx.quadraticCurveTo(dO.C[0],dO.C[1],dO.PB[0],dO.PB[1]);
+        cx.moveTo(dI.PA[0],dI.PA[1]); cx.quadraticCurveTo(dI.C[0],dI.C[1],dI.PB[0],dI.PB[1]); cx.stroke();
+        cx.strokeStyle=RAIL_RAILC; cx.lineWidth=Math.max(.6,.8*z);
+        for (const s of [1,-1]){
+          const r=railLane(A,Crail,B,rr,s);
+          cx.beginPath(); cx.moveTo(r.PA[0],r.PA[1]); cx.quadraticCurveTo(r.C[0],r.C[1],r.PB[0],r.PB[1]); cx.stroke();
+        }
+      } else {
+        for (const M of cons) trackStrip(Crail,M);
       }
       if (night && live){
         cx.fillStyle='rgba(255,226,138,.13)';
@@ -4291,6 +4328,17 @@ function drawCell(x,y,now){
       if (live){ cx.fillStyle=hexA(night?'#ffe28a':'#3ddc84',.5); cx.beginPath(); cx.arc(peak[0],peak[1]-4.6*z,3*z,0,7); cx.fill(); }
       cx.fillStyle = live ? (night?'#ffe28a':'#3ddc84') : '#a85b4b';
       cx.beginPath(); cx.arc(peak[0],peak[1]-4.6*z,1.6*z,0,7); cx.fill();
+      // Re-assert the OUTER stretch of each connecting track ON TOP of the house/roof.
+      // The on-deck track above is drawn UNDER the waiting hall (so the hall sits on it),
+      // but that hides any track running to a BACK edge behind the hall — and the elevated
+      // viaduct approaching from behind is itself occluded by the platform — so a back-facing
+      // line reads as severed. Repainting just the outer ring (from beyond the roof eave out to
+      // the shared tile edge) makes the track visibly emerge from under the canopy toward every
+      // viaduct, on all four sides, without overpainting the hall walls.
+      for (const M of cons){
+        const P=[Crail[0]+(M[0]-Crail[0])*0.62, Crail[1]+(M[1]-Crail[1])*0.62];
+        trackStrip(P,M);
+      }
       break;
     }
     case 'grass': {
@@ -7146,7 +7194,7 @@ function trainBandEntries(){
   }
   return m;
 }
-const RAIL_H=13;
+const RAIL_H=13, RAIL_DECK='#6e6886', RAIL_EDGE='#4c4660', RAIL_RAILC='#d8d4e8';
 /* offset endpoints for a rail lane A->C->B at perpendicular distance side*off.
    The control point sits on the bend's bisector so the two parallel lanes of a
    turn curve cleanly through the centre instead of crossing each other. */
@@ -7206,7 +7254,7 @@ function drawRail(x,y){
   cx.stroke();
   cx.fillStyle='rgba(10,16,28,.20)';
   cx.beginPath(); cx.ellipse(mx, cyp+2.5*z, 7*z, 2.6*z, 0, 0, 7); cx.fill();
-  const deckFill='#6e6886', deckEdge='#4c4660', railCol='#d8d4e8';
+  const deckFill=RAIL_DECK, deckEdge=RAIL_EDGE, railCol=RAIL_RAILC;
   // a straight deck strip from P to Q (half-width W), with side edges + two rails
   const strip=(P,Q)=>{
     let vx=Q[0]-P[0], vy=Q[1]-P[1]; const m=Math.hypot(vx,vy)||1; vx/=m; vy/=m;

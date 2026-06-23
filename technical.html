@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0c1422">
+<title>POLIS — Technical Analysis & Architecture</title>
+<meta name="description" content="An engineering teardown of POLIS: how a full isometric city-builder — renderer, simulation, economy, audio, save system — is built as one dependency-free HTML file.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a121c;
+    --panel:#101a26;
+    --panel2:#16222f;
+    --line:#2b3c4e;
+    --ink:#e9eef5;
+    --dim:#93a4b8;
+    --faint:#6d8096;
+    --amber:#ffb454;
+    --amber2:#e8b04a;
+    --green:#5fd68b;
+    --red:#ff6b6b;
+    --blue:#5ab2ff;
+    --violet:#8a6fd1;
+    --ind:#f5c542;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:rgba(255,180,84,.28)}
+
+  /* ----- chrome ----- */
+  #bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--amber),var(--blue));width:0;z-index:40;box-shadow:0 0 12px rgba(255,180,84,.5);transition:width .12s}
+  #brand{position:fixed;top:16px;left:clamp(16px,5vw,72px);z-index:30;display:flex;align-items:center;gap:10px;font-family:'Chakra Petch';letter-spacing:.18em;font-weight:700;font-size:15px;color:var(--ink)}
+  #brand .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber)}
+  #brand small{font-family:'Inter';font-weight:500;letter-spacing:.04em;color:var(--faint);font-size:11px;text-transform:uppercase}
+  #brand a{color:var(--blue);text-decoration:none;font-family:'Inter';font-weight:500;letter-spacing:0;font-size:12px;margin-left:8px;border-bottom:1px dashed rgba(90,178,255,.4)}
+
+  /* ----- layout ----- */
+  main{max-width:1080px;margin:0 auto;padding:120px clamp(16px,5vw,72px) 120px}
+  section{padding:54px 0;border-bottom:1px solid rgba(43,60,78,.4);scroll-margin-top:70px}
+  section:last-child{border-bottom:none}
+  .eyebrow{font-family:'Chakra Petch';letter-spacing:.22em;text-transform:uppercase;font-size:12px;color:var(--amber);margin-bottom:16px;display:flex;align-items:center;gap:12px}
+  .eyebrow::before{content:"";width:26px;height:2px;background:var(--amber);border-radius:2px}
+  h1{font-family:'Chakra Petch';font-weight:700;font-size:clamp(38px,7vw,72px);line-height:1;letter-spacing:.02em;margin-bottom:18px}
+  h2{font-family:'Chakra Petch';font-weight:700;font-size:clamp(26px,4vw,40px);line-height:1.08;letter-spacing:.01em;margin-bottom:14px}
+  h2 .ac{color:var(--amber)}
+  h3{font-family:'Chakra Petch';font-size:17px;letter-spacing:.02em;margin:22px 0 10px}
+  .lead{font-size:clamp(15px,1.7vw,19px);color:var(--dim);max-width:70ch}
+  p{color:var(--dim);margin:10px 0;max-width:72ch}
+  .mono{font-family:'Chakra Petch',monospace}
+  code{font-family:'Chakra Petch',ui-monospace,monospace;background:rgba(90,178,255,.10);border:1px solid rgba(90,178,255,.22);color:#9fd1ff;padding:1px 6px;border-radius:5px;font-size:.86em;white-space:nowrap}
+  strong{color:var(--ink);font-weight:600}
+  .ink{color:var(--ink)}
+
+  /* code block */
+  pre{background:#0b131e;border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow-x:auto;margin:16px 0;font-size:13px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#cfe3f5;white-space:pre;font-size:13px}
+  pre .c{color:var(--faint)}
+  pre .k{color:#ffb454}
+  pre .f{color:#9fd1ff}
+
+  /* helpers */
+  .grid{display:grid;gap:16px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  @media(max-width:780px){.g2,.g3{grid-template-columns:1fr}}
+  .card{background:linear-gradient(160deg,rgba(22,34,47,.9),rgba(16,26,38,.9));border:1px solid var(--line);border-radius:13px;padding:18px}
+  .card h3{margin-top:0;font-size:15px;display:flex;align-items:center;gap:9px}
+  .card p{font-size:13.5px;line-height:1.55;margin:6px 0 0}
+
+  .tbl{width:100%;border-collapse:collapse;font-size:13.5px;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:16px 0}
+  .tbl th{text-align:left;font-family:'Chakra Petch';font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);padding:11px 14px;background:var(--panel2);border-bottom:1px solid var(--line)}
+  .tbl td{padding:10px 14px;border-bottom:1px solid rgba(43,60,78,.5);color:var(--dim);vertical-align:top}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl td b{color:var(--ink)}
+  .tbl code{white-space:nowrap}
+
+  ul.clean{list-style:none;display:grid;gap:9px;margin:14px 0}
+  ul.clean li{padding-left:24px;position:relative;font-size:14.5px;color:var(--dim)}
+  ul.clean li::before{content:"▸";position:absolute;left:0;color:var(--amber);font-size:13px;top:2px}
+  ul.clean li b{color:var(--ink)}
+
+  ol.steps{list-style:none;counter-reset:s;display:grid;gap:10px;margin:14px 0}
+  ol.steps li{counter-increment:s;padding-left:40px;position:relative;font-size:14.5px;color:var(--dim);min-height:28px;padding-top:3px}
+  ol.steps li::before{content:counter(s);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:8px;background:rgba(255,180,84,.14);color:var(--amber);font-family:'Chakra Petch';font-weight:700;display:grid;place-items:center;font-size:14px}
+  ol.steps li b{color:var(--ink)}
+
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:16px 0}
+  .flow .node{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 13px;font-family:'Chakra Petch';font-size:12.5px;color:var(--ink)}
+  .flow .node small{display:block;font-family:'Inter';font-size:10px;color:var(--faint);letter-spacing:0;text-transform:none}
+  .flow .arr{color:var(--amber);font-size:17px}
+
+  .note{border-left:3px solid var(--amber);background:rgba(255,180,84,.06);border-radius:0 10px 10px 0;padding:12px 16px;font-size:14px;color:var(--dim);margin:16px 0}
+  .note b{color:var(--amber)}
+  .warn{border-left-color:var(--red);background:rgba(255,107,107,.07)}
+  .warn b{color:var(--red)}
+
+  .pillrow{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+  .pill{display:inline-flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:12.5px;color:var(--dim);font-family:'Chakra Petch';letter-spacing:.02em}
+  .pill b{color:var(--ink)}
+
+  /* TOC */
+  nav.toc{position:fixed;right:18px;top:50%;transform:translateY(-50%);z-index:30;display:flex;flex-direction:column;gap:8px;max-height:84vh;overflow:auto}
+  nav.toc a{font-size:11.5px;color:var(--faint);text-decoration:none;font-family:'Chakra Petch';letter-spacing:.03em;padding:2px 0;border-right:2px solid transparent;padding-right:10px;text-align:right;transition:color .2s,border-color .2s}
+  nav.toc a:hover,nav.toc a.on{color:var(--ink);border-color:var(--amber)}
+  @media(max-width:1320px){nav.toc{display:none}}
+
+  a.link{color:var(--blue);text-decoration:none;border-bottom:1px dashed rgba(90,178,255,.4)}
+  a.link:hover{border-bottom-style:solid}
+  .foot{font-size:12px;color:var(--faint);margin-top:18px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<div id="brand"><span class="dot"></span>POLIS <small>technical analysis</small><a href="presentation.html">↗ showcase</a></div>
+
+<nav class="toc" id="toc"></nav>
+
+<main>
+
+  <!-- COVER -->
+  <section id="top">
+    <div class="eyebrow">Engineering teardown</div>
+    <h1>How POLIS is built</h1>
+    <p class="lead">POLIS is a complete isometric city-builder — renderer, simulation, economy, generative audio, save system, PWA — implemented as a <strong>single, dependency-free <code>index.html</code></strong> of vanilla JavaScript and Canvas 2D. This document is an analysis of that machine: its data model, its simulation loop, how it draws and persists a city, and the conventions that keep ~13k lines of global code maintainable.</p>
+    <div class="meta">
+      <span class="pill">⚙ Vanilla JS + <b>Canvas 2D</b></span>
+      <span class="pill">📄 One file · <b>~13k lines</b></span>
+      <span class="pill">🚀 Zero dependencies · no build</span>
+      <span class="pill">🧪 Playwright invariant suite</span>
+      <span class="pill">🌐 <b>polis-game.com</b></span>
+    </div>
+  </section>
+
+  <!-- 1 · PHILOSOPHY -->
+  <section id="philosophy">
+    <div class="eyebrow">1 · Design constraints</div>
+    <h2>One file, <span class="ac">on purpose</span></h2>
+    <p>The defining constraint is self-imposed: the entire game must run by opening one HTML file. No bundler, no npm, no framework, no JSX, no transpile step. The only external resource is a Google Fonts <code>&lt;link&gt;</code>, and it degrades gracefully to system fonts.</p>
+    <p>That constraint shapes everything downstream. There are no modules, so every symbol is global and the code is navigated by <strong>symbol name</strong>, not import graph. There is no virtual DOM, so the UI is hand-wired DOM plus a single <code>&lt;canvas&gt;</code>. There is no asset pipeline, so all art is <strong>procedural geometry</strong> and all audio is <strong>synthesized at runtime</strong>. The payoff: instant load, trivial hosting (a static file), and a codebase you can read top-to-bottom.</p>
+    <div class="grid g3" style="margin-top:18px">
+      <div class="card"><h3>🧩 Self-contained</h3><p>HTML + CSS + one <code>&lt;script&gt;</code>. Ships by copying a file.</p></div>
+      <div class="card"><h3>🎨 No assets</h3><p>Buildings are drawn from primitives; music/SFX are WebAudio.</p></div>
+      <div class="card"><h3>🌍 Global by design</h3><p>State <code>S</code>, grid <code>map</code>, and lookup tables are top-level.</p></div>
+    </div>
+  </section>
+
+  <!-- 2 · FILE ANATOMY -->
+  <section id="anatomy">
+    <div class="eyebrow">2 · File anatomy</div>
+    <h2>Inside <span class="ac">index.html</span></h2>
+    <p>The file is three contiguous regions. Line numbers drift as the file grows, so they are approximate — the engine is navigated by the named entry points below.</p>
+    <table class="tbl">
+      <tr><th>Region</th><th>Contents</th></tr>
+      <tr><td><code>&lt;head&gt; + CSS</code></td><td>Design tokens as CSS custom properties at <code>:root</code>; all styling for HUD, panels, modals.</td></tr>
+      <tr><td><code>&lt;body&gt;</code></td><td>The DOM skeleton: the canvas <code>#c</code>, the HUD, tool palette, overlays bar, and every modal.</td></tr>
+      <tr><td><code>&lt;script&gt;</code></td><td>The entire engine — state, tables, simulation, renderer, audio, save/load, input, PWA.</td></tr>
+    </table>
+    <h3>The three entry points</h3>
+    <ul class="clean">
+      <li><code>loop()</code> — the <b>requestAnimationFrame</b> frame loop; drives both sim stepping and rendering.</li>
+      <li><code>simTick()</code> — advances the simulation by exactly <b>one game day</b>.</li>
+      <li><code>render()</code> — draws <b>one frame</b> via painter's algorithm.</li>
+    </ul>
+  </section>
+
+  <!-- 3 · DATA MODEL -->
+  <section id="data">
+    <div class="eyebrow">3 · Data model</div>
+    <h2>The shape of a <span class="ac">city</span></h2>
+    <p>Three structures hold the whole world: the cell grid, a set of scalar fields, and the global state object.</p>
+
+    <h3>The grid — <code>map[y][x]</code></h3>
+    <p>A 2-D array of <strong>cells</strong>. Grid size <code>G</code> is selectable (32 / 64 / 128) and can be grown afterward up to <code>MAX_G = 256</code>. Helpers <code>idx(x,y)=y*G+x</code> flatten coordinates and <code>inB(x,y)</code> bounds-checks. Each cell carries its type, level, growth, network status, and render hints:</p>
+    <pre><code>{ <span class="f">t</span>:type, <span class="f">lv</span>:0–7, <span class="f">dev</span>:growth progress, <span class="f">pw</span>:powered, <span class="f">wt</span>:watered,
+  <span class="f">ws</span>:waste-collected, <span class="f">fire</span>, <span class="f">vary</span>:render noise, <span class="f">grp</span>:[rootX,rootY],
+  <span class="f">part</span>:bool, <span class="f">bld</span>:construction%, <span class="f">bridge</span>, <span class="f">bus</span>, <span class="f">rz</span>:rubble-origin, <span class="f">tunnel</span> }</code></pre>
+
+    <h3>Scalar fields — <code>Float32Array(G*G)</code></h3>
+    <p>Derived spatial data, recomputed in <code>recomputeFields()</code> and read by both the sim and the overlays. A <code>splat()</code> helper paints a radial falloff to accumulate coverage.</p>
+    <div class="pillrow">
+      <span class="pill">pollution</span><span class="pill">leisure</span><span class="pill">crime</span><span class="pill">landVal</span>
+      <span class="pill">cover.police</span><span class="pill">cover.fire</span><span class="pill">cover.school</span><span class="pill">cover.health</span><span class="pill">cover.transit</span>
+    </div>
+    <p>Land value is the keystone field: it blends pollution, traffic, service coverage, leisure, nearby water/trees, and crime into the single number that gates high-tier growth.</p>
+
+    <h3>Global state — <code>S</code></h3>
+    <p>One object holds the run: <code>money, tax, day, speed, diff, pop, jobs, happy</code>, the RCI <code>demand{r,c,i}</code>, the camera <code>{zoom, ox, oy, rot}</code>, the active <code>tool</code> / <code>overlay</code>, <code>milestone</code>, service <code>fund{…}</code>, and power/water caps.</p>
+
+    <div class="note"><b>Data-driven by table.</b> Tile <em>behaviour</em> lives in lookup tables (<code>ZONE</code>, <code>SVC</code>, <code>CONDUCT</code>, <code>CAP</code>, <code>PLANT</code>, <code>WSRC</code>, <code>LEIS</code>, <code>UPKEEP</code>, <code>ROADTYPE</code>…), keyed by type. A system acts on a tile <em>only if</em> its type is a key in that system's table — presence is the wiring.</p>
+  </section>
+
+  <!-- 4 · TICK LOOP -->
+  <section id="tick">
+    <div class="eyebrow">4 · The simulation loop</div>
+    <h2>A day in <span class="ac">one tick</span></h2>
+    <p><code>loop()</code> runs on <code>requestAnimationFrame</code>. A <strong>fixed-step accumulator</strong> calls <code>simTick()</code> once per game day; the step length comes from the speed setting: <code>TICK_MS = [∞, 560, 280, 130]</code> (pause / slow / medium / fast). Critically, <strong>rendering is decoupled from simulation</strong> — a frame governor (<code>PERF.saver</code>) may throttle redraws to save battery, but the sim always runs at full fidelity regardless of frame rate.</p>
+    <div class="flow">
+      <div class="node">Fire + rubble<small>spread &amp; cleanup</small></div><span class="arr">→</span>
+      <div class="node">Per-cell growth<small>level up / decay</small></div><span class="arr">→</span>
+      <div class="node">Aggregate<small>pop · jobs · edu · crime</small></div><span class="arr">→</span>
+      <div class="node">Demand + mood<small>recompute RCI</small></div><span class="arr">→</span>
+      <div class="node">Every 30 days<small>budget + autosave</small></div>
+    </div>
+    <p>The per-cell pass is the hot loop: <code>O(G²)</code> every day. To avoid redundant work it coalesces field refreshes (an <code>RF_DEFER</code> flag batches every per-level-up <code>recomputeFields()</code> into a single pass flushed at the end), decays the traffic field in place, and skips tower <code>part</code> cells (handled via their <code>grp</code> root).</p>
+  </section>
+
+  <!-- 5 · GROWTH -->
+  <section id="growth">
+    <div class="eyebrow">5 · Growth model</div>
+    <h2>How a lot <span class="ac">grows</span></h2>
+    <p>This is the heart of the game. A zoned lot (<code>res</code>/<code>com</code>/<code>ind</code>) accumulates a hidden <code>dev</code> score and levels up <strong>only when every gate is satisfied</strong>; miss one and it stalls, miss it for long and <code>dev</code> bleeds back down, dropping a level.</p>
+    <ol class="steps">
+      <li><b>Adjacent road</b> — frontage onto a road (roads carry cars, power and water).</li>
+      <li><b>Power &amp; water</b> — both must flood-fill to the tile through the network.</li>
+      <li><b>Demand</b> — positive RCI demand for that zone type.</li>
+      <li><b>Land value</b> — over rising thresholds (industry is exempt — its own pollution suppresses value).</li>
+      <li><b>Education &amp; leisure</b> — high tiers also require an educated workforce (<code>S.edu</code>) and nearby amenities.</li>
+    </ol>
+    <h3>Towers: merge &amp; unmerge</h3>
+    <p>Levels 1–3 are single tiles. A mature level-3 lot calls <code>tryMerge()</code> on three neighbors to form a <strong>2×2 tower</strong> (<code>grp</code> = root coordinate; the other three become <code>part</code> cells contributing zero — the root holds the whole block's capacity). The block can then rise to skyscraper, highrise, and megatower. Lose power or fall into gridlock and <code>unmerge()</code> breaks it back down — or to <code>rubble</code> after a fire.</p>
+    <h3>Capacity — <code>CAP</code></h3>
+    <p>Population/jobs per type per level. For levels 4–7 the value is per 2×2 block, so peak residential density is 1200 ÷ 4 = <strong>300 residents/tile</strong>.</p>
+    <pre><code><span class="k">const</span> CAP = {
+  res:[0, 8, 22, 48, 210, 380, 700, 1200],
+  com:[0, 6, 16, 36, 160, 310, 560, 950],
+  ind:[0, 9, 24, 42, 185, 300, 460, 460],  <span class="c">// ind tops out at lv6 (megaplant)</span>
+};</code></pre>
+  </section>
+
+  <!-- 6 · NETWORKS -->
+  <section id="networks">
+    <div class="eyebrow">6 · Networks</div>
+    <h2>Power, water &amp; <span class="ac">traffic</span></h2>
+    <p>Roads are the nervous system: they carry cars, power and water simultaneously. Two flood-fills and one decaying field decide whether a city thrives or chokes.</p>
+    <div class="grid g3">
+      <div class="card"><h3>⚡ Power</h3><p><code>recomputePower()</code> flood-fills conductivity (<code>CONDUCT</code>) from plants (<code>PLANT</code>) across roads and buildings. Each plant type has a reach and a smog cost.</p></div>
+      <div class="card"><h3>💧 Water</h3><p><code>recomputeWater()</code> floods from sources (<code>WSRC</code>): pumps need a riverbank, towers work anywhere. Same network shape, different source set.</p></div>
+      <div class="card"><h3>🚗 Traffic</h3><p>A <code>Float32Array</code> decayed each day. <code>congestion = traffic / ROAD_CAP</code> (<code>road:40, avenue:120</code>); gridlock throttles growth and land value.</p></div>
+    </div>
+    <p>Both flood-fills are invoked together via <code>recomputeNets()</code>. They only need to run when connectivity changes (a tile added/removed from a network), so callers gate them rather than running every frame.</p>
+  </section>
+
+  <!-- 7 · ECONOMY -->
+  <section id="economy">
+    <div class="eyebrow">7 · Economy</div>
+    <h2>The budget <span class="ac">identity</span></h2>
+    <p><code>computeBudget()</code> runs every 30 days inside <code>simTick</code>. The accounting is a clean identity — income minus the three cost lines — which is exactly what the test suite asserts.</p>
+    <table class="tbl">
+      <tr><th>Line</th><th>Formula</th></tr>
+      <tr><td><b>Residential tax</b></td><td><code>pop × tax × 0.26</code></td></tr>
+      <tr><td><b>Job tax</b></td><td><code>jobs × tax × 0.36</code></td></tr>
+      <tr><td><b>+ Tourism</b></td><td>from working airports, scales with population</td></tr>
+      <tr><td><b>− Roads</b></td><td>road / avenue / path / bus / rail upkeep</td></tr>
+      <tr><td><b>− Services</b></td><td><code>UPKEEP × fund × 2.6 × diff</code> per service</td></tr>
+      <tr><td><b>− Loans</b></td><td>amortized monthly</td></tr>
+      <tr><td><b>= Net</b></td><td><code>S.net = income − roadCost − svcCost − loanPay</code></td></tr>
+    </table>
+    <p>Everything scales by the difficulty multipliers in <code>DIFF</code> (income, upkeep, growth, crime, disaster rate, grant size, loan rate) and a time ramp (<code>kmRamp()</code>). Loans come from <code>LOAN_OFFERS</code> with <code>takeLoan</code>/<code>repayLoan</code>.</p>
+  </section>
+
+  <!-- 8 · RENDERER -->
+  <section id="render">
+    <div class="eyebrow">8 · Renderer</div>
+    <h2>Drawing in <span class="ac">isometric</span></h2>
+    <p>A fixed 2:1 isometric projection with tile size <code>TW=64, TH=32</code>:</p>
+    <pre><code>isoX = (x − y) · TW/2
+isoY = (x + y) · TH/2</code></pre>
+    <p>Each <code>draw*</code> function receives a tile's screen anchor <code>sx,sy</code>; the ground plane of a point at grid offset <code>(ox,oy)</code> is reconstructed with the same math (scaled by <code>S.zoom</code>). World height projects straight up the screen — verticals stay vertical, drawn by subtracting pixels. <code>render()</code> walks the grid in painter's order (far to near) across four rotations.</p>
+    <h3>Procedural geometry</h3>
+    <p>There are no sprites. Buildings are assembled from primitives — <code>box</code>, <code>vol</code>, <code>cyl</code>, <code>windows</code>, <code>gable</code>, <code>archRoof</code>, <code>quadF</code> — which place corners, faces and shading on the iso axes correctly. Per-type draw functions (<code>drawRes/drawCom/drawInd</code>, <code>drawTowerTile</code>, <code>drawBigBuilding</code>, <code>drawVenue</code>, <code>civic</code>, <code>drawAirport</code>) compose those primitives.</p>
+    <h3>Atmosphere</h3>
+    <p>The same scene is modulated by day/night (<code>duskAmt</code>), weather (<code>WX</code>, <code>drawPrecip</code>), and seasons (<code>SEAS</code>, <code>updateSeason</code>) — recoloring light, adding glow to windows, and dressing the ground.</p>
+    <div class="note"><b>Picking.</b> Mouse/touch hit-testing renders an off-screen colour-id pass: a cell index (&lt;65536) is packed into R+G, with a nonlinear hash in B so antialiased edge pixels fail the check and are discarded — exact tile selection without raycasting.</div>
+  </section>
+
+  <!-- 9 · AGENTS -->
+  <section id="agents">
+    <div class="eyebrow">9 · Agents</div>
+    <h2>Things that <span class="ac">move</span></h2>
+    <p>On top of the static city, lightweight agent arrays animate life: <code>cars[]</code> (<code>stepCars</code>), <code>peds[]</code>, <code>planes[]</code>, <code>trains[]</code>, plus service fleets and rooftop helicopter flights. Cars route on a per-tile cost field (base cost × a congestion penalty) and keep civilized following distances via per-type half-lengths. Developed lots emit commuters onto nearby streets each day, feeding the very traffic field that then gates their growth.</p>
+  </section>
+
+  <!-- 10 · MAP GEN -->
+  <section id="mapgen">
+    <div class="eyebrow">10 · Map generation</div>
+    <h2>Seeded <span class="ac">terrain</span></h2>
+    <p>The same pure, seeded generator produces both the playable map and the map-picker thumbnails — so what you preview is what you get. Each land rolls a <strong>water archetype</strong> from the full spread, then fills forests to a target coverage:</p>
+    <table class="tbl">
+      <tr><th>Arch</th><th>Land</th></tr>
+      <tr><td><code>0 / 1</code></td><td>meandering north–south or east–west river</td></tr>
+      <tr><td><code>2</code></td><td>great lake + a thin brook</td></tr>
+      <tr><td><code>3</code></td><td>twin streams</td></tr>
+      <tr><td><code>4</code></td><td>open sea hugging one coast (wavy shoreline + bays)</td></tr>
+      <tr><td><code>5</code></td><td>pure lake(s), no river</td></tr>
+    </table>
+    <p>Rivers are carved along layered sine curves with a connectivity constraint (each row's channel must overlap the previous row's, so flow never breaks into corner-touches). Terrain abundance is tunable before committing via three dials — <code>terrainWater</code>, <code>terrainMtn</code>, <code>terrainTrees</code> — and everything bakes into cells/elevation so a saved city keeps its land. <code>expandWorld(pad)</code> grows the grid outward (the menu adds 4 tiles per side per click), continuing the coastline straight out from the nearest edge, up to <code>MAX_G = 256</code>.</p>
+  </section>
+
+  <!-- 11 · SAVE FORMAT -->
+  <section id="save">
+    <div class="eyebrow">11 · Persistence</div>
+    <h2>The <span class="ac">save format</span></h2>
+    <p><code>makeSave()</code> / <code>loadSave()</code> encode a city as <code>TLV5.&lt;base64(JSON)&gt;</code>. The JSON carries per-cell tuples plus the relevant <code>S</code> fields (and, in <code>TLV5</code>, player-sculpted terrain heights <code>eh</code>):</p>
+    <pre><code>per cell: [ typeIndex, lv, dev, overlayBitmask ]</code></pre>
+    <p>Tile types are serialized <strong>by array index</strong> into <code>TYPE_IDS</code>, which makes ordering load-bearing.</p>
+    <div class="note warn"><b>Never reorder or remove <code>TYPE_IDS</code> entries</b> — only append. The index <em>is</em> the on-disk identity; reordering silently corrupts every saved city.</div>
+    <p>The loader is version-aware and backward compatible: it branches by prefix on stride and bitmask (<code>TLV2</code> stride 3, <code>TLV3</code> adds an enum 4th value, <code>TLV4</code>/<code>TLV5</code> use the overlay bitmask). If you change the cell payload shape, bump the prefix (<code>TLV5</code>→<code>TLV6</code>) and keep reading the old ones. Persistence goes through a <code>store</code> abstraction (artifact API → <code>localStorage</code> fallback); autosave fires monthly.</p>
+  </section>
+
+  <!-- 12 · AUDIO -->
+  <section id="audio">
+    <div class="eyebrow">12 · Audio</div>
+    <h2>Generative <span class="ac">sound</span></h2>
+    <p>Nothing is pre-recorded. <code>audioInit()</code> spins up WebAudio; <code>musicLoop()</code> composes the soundtrack live across <strong>13 styles</strong> (Ambient, Dynamic, Classical, Lo-fi, Chiptune, Synthwave, Aegean, Jazz, Techno, Cinematic, Vangelis, Funk, Bossa) with a shuffle mode, alongside synthesized placement SFX and an ambient soundscape that shifts with the city, day, and weather. Volumes and style persist via <code>store</code>.</p>
+  </section>
+
+  <!-- 13 · TESTING -->
+  <section id="testing">
+    <div class="eyebrow">13 · Testing &amp; CI</div>
+    <h2>Asserting <span class="ac">invariants</span></h2>
+    <p>A headless <strong>Playwright</strong> suite in <code>tests/</code> loads the real <code>index.html</code> over <code>file://</code> — so every global (<code>S</code>, <code>map</code>, <code>simTick</code>, <code>makeSave</code>, <code>EXAMPLE_CITY</code>, …) exists exactly as in play. The fixture boots the page, sets <code>S.speed = 0</code> (so <code>TICK_MS[0] = ∞</code> freezes the accumulator), and hands tests a page-context eval API.</p>
+    <p>Crucially, the specs assert <strong>invariants, not golden numbers</strong>: save round-trips, the budget accounting identity, growth gating, network flood-fill reachability, loan amortization. That lets honest balance tuning stay green while still catching real regressions. Determinism uses a test-only RNG seam (<code>__seedRng</code>/<code>__unseedRng</code>); normal play uses <code>Math.random</code>.</p>
+    <pre><code>cd tests
+npm ci
+npx playwright install --with-deps chromium
+npm test     <span class="c"># CI runs this on every push / PR</span></code></pre>
+    <div class="note"><b>Verify the consequence, not the artifact.</b> The dangerous bug class here is an entity registered in several decoupled tables where one registration silently fails (valid JS, boots fine, draws fine, does nothing). So tests drive the sim and assert the <em>effect</em> — e.g. a lot within reach of a water source actually becomes <code>wt</code> — not just that the tool exists.</p>
+  </section>
+
+  <!-- 14 · PERFORMANCE -->
+  <section id="perf">
+    <div class="eyebrow">14 · Performance</div>
+    <h2>Keeping <span class="ac">256² fluid</span></h2>
+    <p>The cell grid drives an <code>O(G²)</code> daily pass, which is why <code>MAX_G</code> caps at 256 (≈ 65k cells). Several seams keep it smooth:</p>
+    <ul class="clean">
+      <li><b>Sim/render decoupling</b> — the frame governor can drop redraws to ~20fps in power-saver without touching sim cadence.</li>
+      <li><b>Cached ground layer</b> — coastline/terrain geometry is rebuilt only when <code>gndVer</code> bumps, not per frame.</li>
+      <li><b>Deferred field refresh</b> — <code>RF_DEFER</code> collapses many in-loop <code>recomputeFields()</code> calls into one.</li>
+      <li><b>Dirty flag</b> — the renderer skips work entirely when nothing changed; mutations set <code>dirty = true</code>.</li>
+      <li><b>DPR-aware canvas</b> — device pixel ratio is clamped (and lowered further in power-saver) to bound fill cost.</li>
+    </ul>
+  </section>
+
+  <!-- 15 · EXTENDING -->
+  <section id="extending">
+    <div class="eyebrow">15 · Extending the engine</div>
+    <h2>Adding a <span class="ac">tile type</span></h2>
+    <p>Because the engine is data-driven, a new tile type only fully exists once it is registered at <strong>every</strong> site below. The absence of a key is invisible: a building missing from <code>WSRC</code> (or <code>PLANT</code>/<code>SVC</code>/<code>LEIS</code>/…) is silently skipped by that system — it draws perfectly and does nothing.</p>
+    <ul class="clean">
+      <li>Append the id to <code>TYPE_IDS</code> (never reorder) — save compatibility.</li>
+      <li>Add a display name in <code>NAMES</code>.</li>
+      <li>Register trait tables: <code>ZONE</code>/<code>SVC</code>/<code>ROADTYPE</code>/<code>WALKTYPE</code>/<code>CONDUCT</code>, plus <code>UPKEEP</code>, and <code>CAP</code>/<code>PLANT</code>/<code>WSRC</code>/<code>LEIS</code>/<code>FOOT</code> as applicable.</li>
+      <li>Add it to the <code>TOOLS</code> catalog (cost, icon, group).</li>
+      <li>Give it a draw path in <code>render()</code> / a <code>draw*</code> function.</li>
+      <li>Handle special placement rules in <code>place()</code> if needed.</li>
+      <li>Confirm save/load round-trips it.</li>
+    </ul>
+    <div class="note"><b>After mutating the map</b>, refresh derived state: <code>recomputeNets()</code> (if connectivity changed) → <code>recomputeFields()</code> → <code>dirty = true</code>. Forgetting <code>dirty</code> is the usual cause of "my change doesn't show up."</div>
+  </section>
+
+  <!-- 16 · DEPLOY -->
+  <section id="deploy">
+    <div class="eyebrow">16 · Deploy</div>
+    <h2>Commit &amp; <span class="ac">push</span></h2>
+    <p>Hosting is as simple as the build: a static site on <strong>GitHub Pages</strong> at <a class="link" href="https://polis-game.com">polis-game.com</a>, served from the repo root. <code>index.html</code> is the Pages document root and a <code>CNAME</code> file pins the custom domain. Deployment is <code>git commit</code> + <code>git push</code>; the live site updates within ~1 minute. CI gates the push by running the Playwright suite first, so a broken <code>index.html</code> never reaches production.</p>
+    <p class="foot">POLIS — an isometric city builder in one file. This page is the engineering companion to the <a class="link" href="presentation.html">player showcase</a>.</p>
+  </section>
+
+</main>
+
+<script>
+  // build TOC from sections
+  const secs = [...document.querySelectorAll('main section')];
+  const toc = document.getElementById('toc');
+  const labels = {
+    top:'Overview', philosophy:'1 · Constraints', anatomy:'2 · Anatomy', data:'3 · Data model',
+    tick:'4 · Tick loop', growth:'5 · Growth', networks:'6 · Networks', economy:'7 · Economy',
+    render:'8 · Renderer', agents:'9 · Agents', mapgen:'10 · Map gen', save:'11 · Save format',
+    audio:'12 · Audio', testing:'13 · Testing', perf:'14 · Performance', extending:'15 · Extending', deploy:'16 · Deploy'
+  };
+  secs.forEach(s => {
+    const a = document.createElement('a');
+    a.href = '#' + s.id; a.textContent = labels[s.id] || s.id;
+    a.dataset.id = s.id;
+    toc.appendChild(a);
+  });
+  const links = [...toc.children];
+
+  // progress bar
+  const bar = document.getElementById('bar');
+  addEventListener('scroll', () => {
+    const max = document.documentElement.scrollHeight - innerHeight;
+    bar.style.width = (max ? (scrollY / max) * 100 : 0) + '%';
+  }, {passive:true});
+
+  // active section in TOC
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.toggle('on', l.dataset.id === e.target.id));
+      }
+    });
+  }, {rootMargin:'-45% 0px -50% 0px'});
+  secs.forEach(s => io.observe(s));
+</script>
+</body>
+</html>

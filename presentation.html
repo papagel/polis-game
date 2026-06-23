@@ -143,6 +143,20 @@
   .hl h4{font-family:'Chakra Petch';font-size:16px;letter-spacing:.02em;margin-bottom:6px}
   .hl p{font-size:13px}
 
+  /* screenshots */
+  .shot{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.45);background:var(--panel)}
+  figure{margin:0}
+  figure.fig{transition:transform .25s}
+  figure.fig:hover{transform:translateY(-3px)}
+  figcaption{margin-top:11px;font-size:13px;color:var(--faint);text-align:center}
+  figcaption b{color:var(--ink);font-weight:600}
+  .feat{position:relative}
+  .feat .shot{border-radius:18px}
+  .feat .cap{position:absolute;left:0;right:0;bottom:0;padding:46px 24px 18px;border-radius:0 0 18px 18px;background:linear-gradient(0deg,rgba(8,14,22,.82),transparent);font-family:'Chakra Petch';letter-spacing:.03em;font-size:14px;color:var(--ink)}
+  .feat .cap b{color:var(--amber)}
+  .gal2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+  @media(max-width:760px){.gal2{grid-template-columns:1fr}}
+
   /* split / depth */
   .split{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center}
   @media(max-width:880px){.split{grid-template-columns:1fr;gap:28px}}
@@ -204,8 +218,9 @@
 <header class="bar">
   <div class="brand"><span class="dot"></span>POLIS <small>city builder</small></div>
   <nav class="navlinks">
+    <a href="#screens">Screens</a>
     <a href="#depth">Depth</a>
-    <a href="#play">Play anywhere</a>
+    <a href="#maps">Maps</a>
     <a href="#replay">Replay</a>
     <a href="#alive">Living world</a>
     <a class="btn btn-primary sm" href="https://polis-game.com">Play free →</a>
@@ -305,6 +320,31 @@
   </div>
 </section>
 
+<!-- ===================== SCREENS ===================== -->
+<section id="screens">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="eyebrow">Straight from the game</div>
+      <h2>Real cities, <span class="ac">really running.</span></h2>
+      <p class="lead">No mock-ups — these are actual screenshots. Every skyline below grew itself from a few roads and zones.</p>
+    </div>
+    <figure class="feat reveal" style="margin-top:32px">
+      <img class="shot" src="media/city-large.jpg" alt="A dense POLIS megalopolis of 200,000 residents, skyscrapers stretching to the horizon" loading="lazy" width="1800" height="1125">
+      <figcaption class="cap"><b>Megalopolis · 200,400 residents</b> — a forest of megatowers, all grown one tick at a time.</figcaption>
+    </figure>
+    <div class="gal2 reveal">
+      <figure class="fig">
+        <img class="shot" src="media/city-small.jpg" alt="An early POLIS town on a river, with a bridge and first neighborhoods" loading="lazy">
+        <figcaption>Your first hours — a riverside town finding its feet.</figcaption>
+      </figure>
+      <figure class="fig">
+        <img class="shot" src="media/city-mid.jpg" alt="A growing POLIS city of mid-rise and high-rise towers" loading="lazy">
+        <figcaption>The middle game — towers rising as land value climbs.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
 <!-- ===================== NO FRICTION ===================== -->
 <section id="play" class="band">
   <div class="wrap center reveal">
@@ -332,7 +372,7 @@
         <h2>One simple loop. <span class="ac">Endless mastery.</span></h2>
         <p class="lead">It's easy to learn — a friendly advisor tells new mayors exactly what's missing. But mastering land value, traffic flow, education and the budget? That's hundreds of hours.</p>
         <ul class="clean">
-          <li><b>3 map sizes</b> — from a Cozy 32² town to a Boundless 128² megacity</li>
+          <li><b>Expandable maps</b> — start Cozy and grow the land outward in steps, up to a colossal <b>256²</b></li>
           <li><b>Levels 1→7</b> per lot, then towers, skyscrapers &amp; megatowers</li>
           <li><b>Land value</b> woven from pollution, traffic, parks, water &amp; crime</li>
           <li><b>Education &amp; leisure</b> gate the densest, tallest tiers</li>
@@ -348,6 +388,31 @@
           <div class="lp"><div class="k"><em>4</em>Grow</div><h4>Zone &amp; thrive</h4><p>Paint R, C, I, read the demand bars, and the city builds itself.</p></div>
         </div>
         <div class="note" style="margin-top:18px"><b>The whole loop —</b> Power. Water. Road. Grow. Lay the bones, zone along them, and a living city assembles itself.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CHOOSE YOUR LAND ===================== -->
+<section id="maps">
+  <div class="wrap">
+    <div class="split">
+      <div class="reveal">
+        <figure class="fig">
+          <img class="shot" src="media/map-picker.jpg" alt="The POLIS map picker showing four different lands to choose from, with terrain sliders" loading="lazy">
+          <figcaption>Pick a land, tweak the terrain, and begin.</figcaption>
+        </figure>
+      </div>
+      <div class="reveal">
+        <div class="eyebrow">A different world every game</div>
+        <h2>Choose <span class="ac">your land.</span></h2>
+        <p class="lead">Every new city starts with a fresh batch of procedurally generated maps — each with its own rivers, lakes, coastlines and forests. Don't like them? Roll a new set in one tap.</p>
+        <ul class="clean">
+          <li><b>Winding rivers, great lakes, twin streams &amp; open coasts</b> — no two lands alike</li>
+          <li><b>Dial the terrain</b> — sliders for water, mountains and trees before you build</li>
+          <li><b>Pick your size &amp; difficulty</b>, name your city, and you're off</li>
+          <li><b>Seasonal weather</b> — opt into autumn, winter, rain and snow</li>
+        </ul>
       </div>
     </div>
   </div>
@@ -433,15 +498,22 @@
       <div class="reveal">
         <div class="card" style="margin-bottom:18px">
           <div class="ic">🎵</div>
-          <h3>A soundtrack composed live</h3>
-          <p style="margin-bottom:14px">Nothing is pre-recorded — the music is generated in real time, and you pick the mood:</p>
+          <h3>13 soundtracks, composed live</h3>
+          <p style="margin-bottom:14px">Nothing is pre-recorded — every track is generated in real time. Pick a mood, or let <b>⇄ Shuffle</b> drift between them:</p>
           <div class="chips">
             <span class="chip">🎻 Classical</span>
             <span class="chip">🌌 Ambient</span>
+            <span class="chip">🎚️ Dynamic</span>
             <span class="chip">📻 Lo-fi</span>
             <span class="chip">👾 Chiptune</span>
             <span class="chip">🌆 Synthwave</span>
+            <span class="chip">🏛️ Aegean</span>
             <span class="chip">🎷 Jazz</span>
+            <span class="chip">🔊 Techno</span>
+            <span class="chip">🎬 Cinematic</span>
+            <span class="chip">🎹 Vangelis</span>
+            <span class="chip">🕺 Funk</span>
+            <span class="chip">🌴 Bossa</span>
           </div>
         </div>
         <div class="note"><b>Plus a living ambience —</b> tactile sound effects and a soundscape that shifts with your city, day, and weather.</div>
@@ -466,7 +538,7 @@
 
 <footer>
   <div class="brand"><span class="dot"></span>POLIS</div>
-  <div>An isometric city-builder, in your browser. · <a href="https://polis-game.com">polis-game.com</a></div>
+  <div>An isometric city-builder, in your browser. · <a href="https://polis-game.com">polis-game.com</a> · <a href="technical.html">How it's built →</a></div>
 </footer>
 
 <script>
