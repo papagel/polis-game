@@ -4,14 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0c1422">
-<title>POLIS — System Guide & Engineering Overview</title>
-<meta name="description" content="A field guide to POLIS: how the city builder is engineered, how the simulation works, and the tricks to growing a great city.">
+<title>POLIS — Build a Living City. Free. In Your Browser.</title>
+<meta name="description" content="A deep, hand-tuned isometric city-builder that runs entirely in your browser. Free, no install, no sign-up, no server, and built mobile-first. Lay roads, zone, and watch a living city assemble itself.">
+<meta property="og:title" content="POLIS — Build a Living City">
+<meta property="og:description" content="A deep isometric city-builder in a single browser tab. Free, instant, on-device, mobile-first. Power. Water. Road. Grow.">
+<meta property="og:image" content="og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#0a121c;
+    --bg2:#0c1626;
     --panel:#101a26;
     --panel2:#16222f;
     --line:#2b3c4e;
@@ -32,573 +38,443 @@
     background:var(--bg);
     color:var(--ink);
     font-family:'Inter',system-ui,sans-serif;
-    line-height:1.55;
+    line-height:1.6;
     -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
   }
   ::selection{background:rgba(255,180,84,.28)}
+  a{color:inherit}
 
-  /* ----- deck mechanics ----- */
-  .deck{
-    height:100vh;
-    overflow-y:scroll;
-    scroll-snap-type:y mandatory;
-    scroll-padding-top:0;
+  /* ---------- chrome ---------- */
+  header.bar{
+    position:fixed;top:0;left:0;right:0;z-index:50;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px clamp(16px,5vw,56px);
+    background:linear-gradient(180deg,rgba(10,18,28,.92),rgba(10,18,28,.55) 70%,transparent);
+    backdrop-filter:blur(8px);
   }
-  .deck::-webkit-scrollbar{width:0}
-  .slide{
-    min-height:100vh;
-    scroll-snap-align:start;
-    display:flex;
-    flex-direction:column;
-    justify-content:center;
-    padding:84px clamp(20px,7vw,120px) 96px;
-    position:relative;
-    border-bottom:1px solid rgba(43,60,78,.4);
+  .brand{display:flex;align-items:center;gap:10px;font-family:'Chakra Petch';letter-spacing:.18em;font-weight:700;font-size:16px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 12px var(--amber)}
+  .brand small{font-family:'Inter';font-weight:500;letter-spacing:.04em;color:var(--faint);font-size:11px;text-transform:uppercase}
+  .navlinks{display:flex;gap:24px;align-items:center;font-size:13.5px;color:var(--dim)}
+  .navlinks a{text-decoration:none;transition:color .2s}
+  .navlinks a:hover{color:var(--ink)}
+  @media(max-width:720px){.navlinks{display:none}}
+
+  /* ---------- buttons ---------- */
+  .btn{
+    display:inline-flex;align-items:center;gap:9px;
+    font-family:'Chakra Petch';font-weight:700;letter-spacing:.04em;font-size:15px;
+    padding:13px 24px;border-radius:11px;text-decoration:none;cursor:pointer;border:0;
+    transition:transform .2s,box-shadow .2s,background .2s;
   }
-  .slide-inner{width:100%;max-width:1120px;margin:0 auto;animation:rise .7s cubic-bezier(.2,.8,.2,1) both}
-  @keyframes rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+  .btn-primary{background:linear-gradient(135deg,var(--amber),#ff9a3c);color:#1a1205;box-shadow:0 8px 30px rgba(255,180,84,.32)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(255,180,84,.45)}
+  .btn-ghost{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--ink)}
+  .btn-ghost:hover{border-color:rgba(255,180,84,.5);transform:translateY(-2px)}
+  .btn.sm{font-size:13px;padding:10px 18px}
 
-  /* atmospheric backgrounds */
-  .slide::before{
-    content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
-    background:
-      radial-gradient(900px 520px at 80% 12%, rgba(232,176,74,.10), transparent 60%),
-      radial-gradient(700px 500px at 8% 92%, rgba(90,178,255,.08), transparent 60%);
-  }
-
-  /* ----- top progress / chrome ----- */
-  #bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--amber),var(--blue));width:0;z-index:40;box-shadow:0 0 12px rgba(255,180,84,.5);transition:width .15s}
-  #brand{position:fixed;top:18px;left:clamp(20px,7vw,120px);z-index:30;display:flex;align-items:center;gap:10px;font-family:'Chakra Petch';letter-spacing:.18em;font-weight:700;font-size:15px;color:var(--ink);pointer-events:none}
-  #brand .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber)}
-  #brand small{font-family:'Inter';font-weight:500;letter-spacing:.04em;color:var(--faint);font-size:11px;text-transform:uppercase}
-
-  /* dot nav */
-  #nav{position:fixed;right:18px;top:50%;transform:translateY(-50%);z-index:30;display:flex;flex-direction:column;gap:11px}
-  #nav a{width:9px;height:9px;border-radius:50%;background:#2b3c4e;border:1px solid transparent;transition:all .25s;position:relative}
-  #nav a.on{background:var(--amber);transform:scale(1.35);box-shadow:0 0 10px rgba(255,180,84,.6)}
-  #nav a::after{content:attr(data-l);position:absolute;right:18px;top:50%;transform:translateY(-50%);white-space:nowrap;font-size:11px;color:var(--dim);background:rgba(16,26,38,.95);border:1px solid var(--line);padding:3px 8px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .2s;font-family:'Chakra Petch';letter-spacing:.04em}
-  #nav a:hover::after{opacity:1}
-  @media(max-width:680px){#nav{display:none}}
-
-  /* hint */
-  #hint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:30;color:var(--faint);font-size:11px;letter-spacing:.12em;text-transform:uppercase;display:flex;gap:8px;align-items:center;animation:pulse 2.6s ease-in-out infinite;pointer-events:none}
-  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.9}}
-  .kbd{border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:'Chakra Petch';font-size:11px;color:var(--dim)}
-
-  /* ----- typography ----- */
+  /* ---------- sections ---------- */
+  section{padding:clamp(72px,11vw,140px) clamp(16px,5vw,56px);position:relative}
+  .wrap{max-width:1140px;margin:0 auto;width:100%}
   .eyebrow{font-family:'Chakra Petch';letter-spacing:.22em;text-transform:uppercase;font-size:12px;color:var(--amber);margin-bottom:18px;display:flex;align-items:center;gap:12px}
+  .eyebrow.c{justify-content:center}
   .eyebrow::before{content:"";width:26px;height:2px;background:var(--amber);border-radius:2px}
-  h1{font-family:'Chakra Petch';font-weight:700;font-size:clamp(40px,7vw,84px);line-height:1;letter-spacing:.02em;margin-bottom:18px}
-  h2{font-family:'Chakra Petch';font-weight:700;font-size:clamp(28px,4.4vw,46px);line-height:1.06;letter-spacing:.01em;margin-bottom:14px}
+  .eyebrow.c::before{display:none}
+  h1{font-family:'Chakra Petch';font-weight:700;font-size:clamp(44px,8.5vw,104px);line-height:.96;letter-spacing:.01em}
+  h2{font-family:'Chakra Petch';font-weight:700;font-size:clamp(30px,5vw,52px);line-height:1.04;letter-spacing:.01em;margin-bottom:16px}
   h2 .ac{color:var(--amber)}
-  .lead{font-size:clamp(15px,1.7vw,19px);color:var(--dim);max-width:64ch}
+  .lead{font-size:clamp(16px,1.9vw,21px);color:var(--dim);max-width:62ch}
+  .center{text-align:center}
+  .center .lead{margin-left:auto;margin-right:auto}
   p{color:var(--dim)}
-  .mono{font-family:'Chakra Petch','Chakra Petch',monospace}
-  code{font-family:'Chakra Petch',ui-monospace,monospace;background:rgba(90,178,255,.10);border:1px solid rgba(90,178,255,.22);color:#9fd1ff;padding:1px 6px;border-radius:5px;font-size:.88em}
-  .ink{color:var(--ink)}
+  code{font-family:'Chakra Petch',ui-monospace,monospace;background:rgba(90,178,255,.10);border:1px solid rgba(90,178,255,.22);color:#9fd1ff;padding:1px 6px;border-radius:5px;font-size:.86em}
   strong{color:var(--ink);font-weight:600}
 
-  /* ----- layout helpers ----- */
-  .grid{display:grid;gap:16px}
+  /* ---------- hero ---------- */
+  .hero{
+    min-height:100vh;display:flex;flex-direction:column;justify-content:center;
+    padding-top:120px;
+    background:
+      radial-gradient(1000px 600px at 78% 14%, rgba(255,180,84,.13), transparent 60%),
+      radial-gradient(800px 560px at 6% 96%, rgba(90,178,255,.10), transparent 60%);
+  }
+  .hero-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
+  @media(max-width:880px){.hero-grid{grid-template-columns:1fr;gap:8px}.hero svg.tower{max-width:320px;margin:0 auto}}
+  .hero h1 .l2{display:block;color:var(--amber)}
+  .badges{display:flex;flex-wrap:wrap;gap:9px;margin:22px 0 30px}
+  .badge{display:inline-flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:12.5px;color:var(--dim);font-family:'Chakra Petch';letter-spacing:.02em}
+  .badge b{color:var(--ink)}
+  .badge .g{color:var(--green)}
+  .cta-row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .cta-note{font-size:12.5px;color:var(--faint);margin-top:14px}
+
+  /* floaty tower */
+  .tower{width:100%;animation:float 7s ease-in-out infinite}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+
+  /* ---------- marquee strip ---------- */
+  .strip{padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg2);overflow:hidden;white-space:nowrap}
+  .strip .run{display:inline-block;animation:scroll 30s linear infinite}
+  .strip span{font-family:'Chakra Petch';letter-spacing:.12em;font-size:13px;color:var(--faint);text-transform:uppercase;margin:0 26px}
+  .strip span b{color:var(--amber)}
+  @keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+  /* ---------- feature cards ---------- */
+  .grid{display:grid;gap:18px}
   .g2{grid-template-columns:repeat(2,1fr)}
   .g3{grid-template-columns:repeat(3,1fr)}
   .g4{grid-template-columns:repeat(4,1fr)}
-  @media(max-width:820px){.g3,.g4{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:880px){.g3,.g4{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:560px){.g2,.g3,.g4{grid-template-columns:1fr}}
 
-  .card{background:linear-gradient(160deg,rgba(22,34,47,.92),rgba(16,26,38,.92));border:1px solid var(--line);border-radius:14px;padding:20px;transition:transform .25s,border-color .25s}
-  .card:hover{transform:translateY(-3px);border-color:rgba(255,180,84,.5)}
-  .card h3{font-family:'Chakra Petch';font-size:16px;letter-spacing:.03em;margin-bottom:8px;display:flex;align-items:center;gap:10px}
-  .card p{font-size:13.5px;line-height:1.5}
-  .card .ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:18px;background:rgba(255,180,84,.12);flex:none}
+  .card{background:linear-gradient(160deg,rgba(22,34,47,.92),rgba(16,26,38,.92));border:1px solid var(--line);border-radius:16px;padding:24px;transition:transform .25s,border-color .25s,box-shadow .25s}
+  .card:hover{transform:translateY(-4px);border-color:rgba(255,180,84,.5);box-shadow:0 16px 40px rgba(0,0,0,.3)}
+  .card .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:23px;background:rgba(255,180,84,.12);margin-bottom:14px}
+  .card h3{font-family:'Chakra Petch';font-size:18px;letter-spacing:.02em;margin-bottom:8px}
+  .card p{font-size:14px;line-height:1.55}
 
-  .pill{display:inline-flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:5px 13px;font-size:12.5px;color:var(--dim);font-family:'Chakra Petch';letter-spacing:.02em}
-  .pill b{color:var(--ink)}
-  .pillrow{display:flex;flex-wrap:wrap;gap:9px;margin-top:18px}
+  /* highlight (no-friction) row */
+  .hl{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:8px}
+  @media(max-width:880px){.hl{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:460px){.hl{grid-template-columns:1fr}}
+  .hl .item{text-align:center;padding:26px 16px;border:1px solid var(--line);border-radius:16px;background:rgba(16,26,38,.55)}
+  .hl .big{font-size:34px;margin-bottom:10px}
+  .hl h4{font-family:'Chakra Petch';font-size:16px;letter-spacing:.02em;margin-bottom:6px}
+  .hl p{font-size:13px}
 
-  /* numbered step */
-  .steps{display:grid;gap:14px;counter-reset:s}
-  .step{display:flex;gap:16px;align-items:flex-start;background:rgba(16,26,38,.6);border:1px solid var(--line);border-radius:12px;padding:15px 18px}
-  .step .num{counter-increment:s;flex:none;width:34px;height:34px;border-radius:9px;background:rgba(255,180,84,.14);color:var(--amber);font-family:'Chakra Petch';font-weight:700;display:grid;place-items:center;font-size:16px}
-  .step .num::before{content:counter(s)}
-  .step h4{font-family:'Chakra Petch';font-size:15px;margin-bottom:3px;letter-spacing:.02em}
-  .step p{font-size:13.5px}
-
-  /* tables */
-  .tbl{width:100%;border-collapse:collapse;font-size:13.5px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
-  .tbl th{text-align:left;font-family:'Chakra Petch';font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);padding:11px 14px;background:var(--panel2);border-bottom:1px solid var(--line)}
-  .tbl td{padding:10px 14px;border-bottom:1px solid rgba(43,60,78,.5);color:var(--dim)}
-  .tbl tr:last-child td{border-bottom:none}
-  .tbl td b{color:var(--ink)}
-  .tbl tr:hover td{background:rgba(90,178,255,.05)}
-  .tbl code{white-space:nowrap}
-
-  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:8px}
-  .flow .node{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-family:'Chakra Petch';font-size:13px;color:var(--ink);letter-spacing:.02em}
-  .flow .node small{display:block;font-family:'Inter';font-size:10.5px;color:var(--faint);letter-spacing:0;text-transform:none}
-  .flow .arr{color:var(--amber);font-size:18px}
-
-  .note{border-left:3px solid var(--amber);background:rgba(255,180,84,.06);border-radius:0 10px 10px 0;padding:12px 16px;font-size:13.5px;color:var(--dim)}
-  .note b{color:var(--amber)}
-
-  .tag{display:inline-block;font-family:'Chakra Petch';font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:5px;border:1px solid currentColor;margin-left:8px;vertical-align:middle}
-  .t-r{color:var(--green)} .t-c{color:var(--blue)} .t-i{color:var(--ind)}
-
-  .two{display:grid;grid-template-columns:1.1fr .9fr;gap:34px;align-items:center}
-  @media(max-width:860px){.two{grid-template-columns:1fr;gap:24px}}
-
-  ul.clean{list-style:none;display:grid;gap:10px}
-  ul.clean li{padding-left:24px;position:relative;font-size:14px;color:var(--dim)}
-  ul.clean li::before{content:"▸";position:absolute;left:0;color:var(--amber);font-size:13px;top:1px}
+  /* split / depth */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center}
+  @media(max-width:880px){.split{grid-template-columns:1fr;gap:28px}}
+  ul.clean{list-style:none;display:grid;gap:13px;margin-top:8px}
+  ul.clean li{padding-left:28px;position:relative;font-size:15px;color:var(--dim)}
+  ul.clean li::before{content:"▸";position:absolute;left:0;color:var(--amber);font-size:14px;top:2px}
   ul.clean li b{color:var(--ink)}
 
-  .stat-big{font-family:'Chakra Petch';font-weight:700;font-size:clamp(30px,4vw,44px);color:var(--amber);line-height:1}
-  .stat-lab{font-size:12px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-top:6px}
+  /* stat band */
+  .band{background:linear-gradient(135deg,rgba(255,180,84,.06),rgba(90,178,255,.05));border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;text-align:center}
+  @media(max-width:720px){.stats{grid-template-columns:repeat(2,1fr);gap:32px}}
+  .stat .n{font-family:'Chakra Petch';font-weight:700;font-size:clamp(34px,5vw,52px);color:var(--amber);line-height:1}
+  .stat .l{font-size:12.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-top:8px}
 
-  /* hero tower */
-  .hero{display:grid;grid-template-columns:1.25fr .75fr;gap:30px;align-items:center}
-  @media(max-width:860px){.hero{grid-template-columns:1fr}.hero svg{display:none}}
+  /* loop steps */
+  .loop{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  @media(max-width:880px){.loop{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:460px){.loop{grid-template-columns:1fr}}
+  .lp{background:rgba(16,26,38,.6);border:1px solid var(--line);border-radius:14px;padding:22px}
+  .lp .k{font-family:'Chakra Petch';font-weight:700;font-size:13px;color:var(--amber);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .lp .k em{font-style:normal;width:26px;height:26px;border-radius:8px;background:rgba(255,180,84,.14);display:grid;place-items:center;font-size:14px}
+  .lp h4{font-family:'Chakra Petch';font-size:17px;margin-bottom:6px}
+  .lp p{font-size:13.5px}
 
-  /* RCI demo bars */
-  .rci{display:flex;gap:22px;margin-top:6px}
-  .rci .b{display:flex;flex-direction:column;align-items:center;gap:8px}
-  .rci .track{width:34px;height:90px;background:#0b141f;border:1px solid var(--line);border-radius:7px;position:relative;overflow:hidden}
-  .rci .fill{position:absolute;bottom:0;left:0;right:0;border-radius:6px}
-  .rci .lab{font-family:'Chakra Petch';font-size:12px;letter-spacing:.04em}
+  .note{border-left:3px solid var(--amber);background:rgba(255,180,84,.06);border-radius:0 12px 12px 0;padding:14px 18px;font-size:14.5px;color:var(--dim)}
+  .note b{color:var(--amber)}
 
-  .foot{font-size:12px;color:var(--faint);margin-top:20px}
-  a.link{color:var(--blue);text-decoration:none;border-bottom:1px dashed rgba(90,178,255,.4)}
-  a.link:hover{border-bottom-style:solid}
+  /* tag chips */
+  .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:18px}
+  .chip{display:inline-flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:13px;color:var(--dim)}
+  .chip b{color:var(--ink)}
+
+  /* quote */
+  .quote{max-width:820px;margin:0 auto;text-align:center}
+  .quote p{font-family:'Chakra Petch';font-size:clamp(20px,3vw,30px);color:var(--ink);line-height:1.35;font-weight:600}
+  .quote p .ac{color:var(--amber)}
+
+  /* final cta */
+  .final{
+    text-align:center;
+    background:
+      radial-gradient(800px 480px at 50% 0%, rgba(255,180,84,.14), transparent 62%);
+  }
+  .final h2{font-size:clamp(34px,6.5vw,76px)}
+
+  footer{padding:40px clamp(16px,5vw,56px);border-top:1px solid var(--line);color:var(--faint);font-size:13px;display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:center}
+  footer a{color:var(--blue);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+
+  /* reveal on scroll */
+  .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s cubic-bezier(.2,.8,.2,1),transform .7s cubic-bezier(.2,.8,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}.tower{animation:none}.strip .run{animation:none}}
 </style>
 </head>
 <body>
-<div id="bar"></div>
-<div id="brand"><span class="dot"></span>POLIS <small>field guide</small></div>
-<nav id="nav"></nav>
-<div id="hint"><span class="kbd">↓</span> scroll · <span class="kbd">→</span> next</div>
 
-<div class="deck" id="deck">
+<header class="bar">
+  <div class="brand"><span class="dot"></span>POLIS <small>city builder</small></div>
+  <nav class="navlinks">
+    <a href="#depth">Depth</a>
+    <a href="#play">Play anywhere</a>
+    <a href="#replay">Replay</a>
+    <a href="#alive">Living world</a>
+    <a class="btn btn-primary sm" href="https://polis-game.com">Play free →</a>
+  </nav>
+</header>
 
-  <!-- 1 · TITLE -->
-  <section class="slide" data-label="Cover">
-    <div class="slide-inner">
-      <div class="hero">
-        <div>
-          <div class="eyebrow">System guide &amp; engineering overview</div>
-          <h1>POLIS</h1>
-          <p class="lead">An isometric city-builder that lives in a <strong>single HTML file</strong> — no build, no dependencies, no framework. This deck is two things at once: a <strong>how-to-play</strong> for new mayors and an <strong>engineering tour</strong> of the machine underneath.</p>
-          <div class="pillrow">
-            <span class="pill">⚙ Vanilla JS + <b>Canvas 2D</b></span>
-            <span class="pill">📄 One file · <b>~12,950 lines</b></span>
-            <span class="pill">🚀 Zero dependencies</span>
-            <span class="pill">🌐 <b>polis-game.com</b></span>
-          </div>
+<!-- ===================== HERO ===================== -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">A free isometric city-builder</div>
+        <h1>Build a city<span class="l2">that's alive.</span></h1>
+        <p class="lead" style="margin-top:20px">POLIS is a deep, hand-tuned city-builder that runs in a single browser tab. Lay roads, zone neighborhoods, and watch homes, towers, traffic, and a whole economy assemble themselves — one tick at a time. No download. No account. No catch.</p>
+        <div class="badges">
+          <span class="badge">💸 <b class="g">Free</b>, forever</span>
+          <span class="badge">⚡ <b>Instant</b> — no install</span>
+          <span class="badge">✈ <b>No server</b> — runs on-device</span>
+          <span class="badge">📱 <b>Mobile-first</b></span>
+          <span class="badge">🙅 <b>No sign-up</b></span>
         </div>
-        <!-- isometric tower, echoing og.svg -->
-        <svg viewBox="0 0 360 420" width="100%" aria-hidden="true">
-          <defs>
-            <radialGradient id="g" cx="0.6" cy="0.4" r="0.7">
-              <stop offset="0" stop-color="#e8b04a" stop-opacity=".25"/>
-              <stop offset="1" stop-color="#e8b04a" stop-opacity="0"/>
-            </radialGradient>
-          </defs>
-          <rect width="360" height="420" fill="url(#g)"/>
-          <polygon points="180,250 320,310 180,370 40,310" fill="#3f8f55"/>
-          <polygon points="180,310 320,310 180,370 40,310" fill="#000" fill-opacity=".22"/>
-          <polygon points="180,330 270,290 270,150 180,190" fill="#43568f"/>
-          <polygon points="180,330 90,290 90,150 180,190" fill="#5a6fae"/>
-          <polygon points="180,190 270,150 180,110 90,150" fill="#8b9fd6"/>
-          <polygon points="180,210 240,182 240,90 180,118" fill="#4a5f9d"/>
-          <polygon points="180,210 120,182 120,90 180,118" fill="#6278ba"/>
-          <polygon points="180,118 240,90 180,62 120,90" fill="#8b9fd6"/>
-          <rect x="120" y="56" width="120" height="13" fill="#e8b04a"/>
-          <line x1="180" y1="62" x2="180" y2="16" stroke="#e8b04a" stroke-width="5" stroke-linecap="round"/>
-          <circle cx="180" cy="16" r="7" fill="#ffd23f"/>
-          <g fill="#ffe096" fill-opacity=".85">
-            <rect x="150" y="160" width="9" height="12"/><rect x="200" y="160" width="9" height="12"/>
-            <rect x="172" y="142" width="9" height="12"/>
-            <rect x="108" y="210" width="11" height="14"/><rect x="138" y="217" width="11" height="14"/>
-            <rect x="108" y="240" width="11" height="14"/><rect x="210" y="210" width="11" height="14"/>
-            <rect x="240" y="217" width="11" height="14"/><rect x="210" y="240" width="11" height="14"/>
-          </g>
-        </svg>
-      </div>
-    </div>
-  </section>
-
-  <!-- 2 · WHAT IT IS -->
-  <section class="slide" data-label="What it is">
-    <div class="slide-inner">
-      <div class="eyebrow">The premise</div>
-      <h2>One file. <span class="ac">A whole city.</span></h2>
-      <p class="lead">Everything — the renderer, the economy, the music, the save system — is global code inside one <code>index.html</code>. That constraint is a feature: the game runs by simply opening the file, and it ships in seconds.</p>
-      <div class="grid g4" style="margin-top:30px">
-        <div class="card"><div class="ic">🧩</div><h3>Self-contained</h3><p>No bundler, no npm, no JSX. Only external resource is a Google Fonts <code>&lt;link&gt;</code>.</p></div>
-        <div class="card"><div class="ic">🎨</div><h3>Procedural art</h3><p>Every building is drawn from geometry on a Canvas — boxes, volumes, windows, gables. No sprites.</p></div>
-        <div class="card"><div class="ic">📱</div><h3>Mobile-first</h3><p>Pointer events, pinch-zoom, DPR-aware canvas, installable as a PWA with a drawn icon.</p></div>
-        <div class="card"><div class="ic">🔊</div><h3>Generative audio</h3><p>WebAudio composes the soundtrack and SFX live — nothing is pre-recorded.</p></div>
-      </div>
-      <div class="note" style="margin-top:24px"><b>Design rule —</b> the single-file, zero-dependency nature is core. No build step is ever introduced; changes are live on reload.</div>
-    </div>
-  </section>
-
-  <!-- 3 · ANATOMY -->
-  <section class="slide" data-label="Anatomy">
-    <div class="slide-inner">
-      <div class="eyebrow">Engineering · file anatomy</div>
-      <h2>Inside <span class="ac">index.html</span></h2>
-      <div class="two">
-        <table class="tbl">
-          <tr><th>Lines</th><th>Section</th></tr>
-          <tr><td><code>1–480</code></td><td><b>&lt;head&gt; + CSS</b> — design tokens at <code>:root</code></td></tr>
-          <tr><td><code>480–899</code></td><td><b>&lt;body&gt;</b> — the DOM: canvas, HUD, panels, modals</td></tr>
-          <tr><td><code>899–12948</code></td><td><b>&lt;script&gt;</b> — the entire game engine</td></tr>
-        </table>
-        <div>
-          <p class="lead" style="font-size:16px">Because everything is global, you navigate by <strong>symbol name</strong>, not modules. Three entry points hold it together:</p>
-          <ul class="clean" style="margin-top:16px">
-            <li><code>loop()</code> — the <b>requestAnimationFrame</b> frame loop</li>
-            <li><code>simTick()</code> — advances <b>one game day</b></li>
-            <li><code>render()</code> — draws <b>one frame</b> (painter's algorithm)</li>
-          </ul>
-          <div class="note" style="margin-top:18px"><b>Decoupled —</b> rendering is throttled by a frame governor, but the simulation always runs at full fidelity regardless of FPS.</div>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://polis-game.com">▶ Play now at polis-game.com</a>
+          <a class="btn btn-ghost" href="#depth">See how deep it goes</a>
         </div>
+        <p class="cta-note">Opens straight into the game. Works on your phone, tablet, or laptop.</p>
       </div>
+      <svg class="tower" viewBox="0 0 360 420" width="100%" aria-hidden="true">
+        <defs>
+          <radialGradient id="g" cx="0.6" cy="0.4" r="0.7">
+            <stop offset="0" stop-color="#e8b04a" stop-opacity=".25"/>
+            <stop offset="1" stop-color="#e8b04a" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect width="360" height="420" fill="url(#g)"/>
+        <polygon points="180,250 320,310 180,370 40,310" fill="#3f8f55"/>
+        <polygon points="180,310 320,310 180,370 40,310" fill="#000" fill-opacity=".22"/>
+        <polygon points="180,330 270,290 270,150 180,190" fill="#43568f"/>
+        <polygon points="180,330 90,290 90,150 180,190" fill="#5a6fae"/>
+        <polygon points="180,190 270,150 180,110 90,150" fill="#8b9fd6"/>
+        <polygon points="180,210 240,182 240,90 180,118" fill="#4a5f9d"/>
+        <polygon points="180,210 120,182 120,90 180,118" fill="#6278ba"/>
+        <polygon points="180,118 240,90 180,62 120,90" fill="#8b9fd6"/>
+        <rect x="120" y="56" width="120" height="13" fill="#e8b04a"/>
+        <line x1="180" y1="62" x2="180" y2="16" stroke="#e8b04a" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="180" cy="16" r="7" fill="#ffd23f"/>
+        <g fill="#ffe096" fill-opacity=".85">
+          <rect x="150" y="160" width="9" height="12"/><rect x="200" y="160" width="9" height="12"/>
+          <rect x="172" y="142" width="9" height="12"/>
+          <rect x="108" y="210" width="11" height="14"/><rect x="138" y="217" width="11" height="14"/>
+          <rect x="108" y="240" width="11" height="14"/><rect x="210" y="210" width="11" height="14"/>
+          <rect x="240" y="217" width="11" height="14"/><rect x="210" y="240" width="11" height="14"/>
+        </g>
+      </svg>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- 4 · THE TICK -->
-  <section class="slide" data-label="The tick">
-    <div class="slide-inner">
-      <div class="eyebrow">Engineering · the heartbeat</div>
-      <h2>A day in <span class="ac">one tick</span></h2>
-      <p class="lead">A fixed-step accumulator calls <code>simTick()</code> once per game day. Speed selects the step from <code>TICK_MS = [∞, 560, 280, 130]</code> — pause, slow, medium, fast.</p>
-      <div class="flow" style="margin-top:26px">
-        <div class="node">Fire + rubble<small>spread &amp; cleanup</small></div><span class="arr">→</span>
-        <div class="node">Zone growth<small>level up / decay</small></div><span class="arr">→</span>
-        <div class="node">Aggregate<small>education &amp; crime</small></div><span class="arr">→</span>
-        <div class="node">Demand + mood<small>recompute RCI</small></div><span class="arr">→</span>
-        <div class="node">Every 30 days<small>budget + autosave</small></div>
-      </div>
-      <div class="grid g3" style="margin-top:30px">
-        <div class="card"><div class="stat-big">1080</div><div class="stat-lab">days / calendar year</div></div>
-        <div class="card"><div class="stat-big">32 / 64<br>128</div><div class="stat-lab">grid sizes (Cozy → Boundless)</div></div>
-        <div class="card"><div class="stat-big">G × G</div><div class="stat-lab">Float32 scalar fields per map</div></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 5 · GROWTH MODEL -->
-  <section class="slide" data-label="Growth">
-    <div class="slide-inner">
-      <div class="eyebrow">Engineering · the heart of the game</div>
-      <h2>How a lot <span class="ac">grows</span></h2>
-      <p class="lead">A zoned lot levels up only when every gate is satisfied. Miss one and it stalls — miss it for long and it decays back down.</p>
-      <div class="two" style="margin-top:24px">
-        <div class="steps">
-          <div class="step"><div class="num"></div><div><h4>Adjacent road</h4><p>It needs a road touching it — roads carry cars, power &amp; water.</p></div></div>
-          <div class="step"><div class="num"></div><div><h4>Power &amp; water</h4><p>Both must flood-fill to the tile through the network.</p></div></div>
-          <div class="step"><div class="num"></div><div><h4>Demand + land value</h4><p>Positive RCI demand, and land value over rising thresholds.</p></div></div>
-          <div class="step"><div class="num"></div><div><h4>Education + leisure</h4><p>High tiers also require an educated workforce and nearby amenities.</p></div></div>
-        </div>
-        <div>
-          <div class="note"><b>Towers —</b> a mature level-3 lot calls <code>tryMerge()</code> on its four neighbors to form a 2×2 tower, which can climb to skyscraper, highrise, and megatower. Lose power and <code>unmerge()</code> breaks it back down — or to rubble after a fire.</div>
-          <div class="pillrow">
-            <span class="pill">Levels <b>1 → 7</b></span>
-            <span class="pill">2×2 <b>towers</b></span>
-            <span class="pill"><code>CAP</code> = pop/jobs per tier</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 6 · NETWORKS -->
-  <section class="slide" data-label="Networks">
-    <div class="slide-inner">
-      <div class="eyebrow">Engineering · power, water, traffic</div>
-      <h2>The <span class="ac">networks</span> under the streets</h2>
-      <p class="lead">Roads are the nervous system — they carry cars, power, and water all at once. Two flood-fills and a decaying traffic field decide whether your city thrives or chokes.</p>
-      <div class="grid g3" style="margin-top:28px">
-        <div class="card"><h3><span class="ic">⚡</span> Power</h3><p><code>recomputePower()</code> flood-fills conductivity from plants across roads &amp; buildings. Coal → Solar → Nuclear → Fusion, each with a reach and a smog cost.</p></div>
-        <div class="card"><h3><span class="ic">💧</span> Water</h3><p><code>recomputeWater()</code> floods from pumps (need a riverbank) and towers (anywhere). Same network shape, different source.</p></div>
-        <div class="card"><h3><span class="ic">🚗</span> Traffic</h3><p>A Float32 field decays each day. <code>congestion = traffic / ROAD_CAP</code>; gridlock throttles growth and land value.</p></div>
-      </div>
-      <div class="note" style="margin-top:24px"><b>Golden rule of editing —</b> after mutating the map, call <code>recomputeNets()</code> + <code>recomputeFields()</code> and set <code>dirty = true</code>, or the change won't show.</div>
-    </div>
-  </section>
-
-  <!-- 7 · ECONOMY -->
-  <section class="slide" data-label="Economy">
-    <div class="slide-inner">
-      <div class="eyebrow">Engineering · the budget identity</div>
-      <h2>Where the <span class="ac">money</span> goes</h2>
-      <div class="two">
-        <table class="tbl">
-          <tr><th>Line</th><th>Formula</th></tr>
-          <tr><td><b>Residential tax</b></td><td><code>pop × tax × 0.26</code></td></tr>
-          <tr><td><b>Job tax</b></td><td><code>jobs × tax × 0.36</code></td></tr>
-          <tr><td><b>+ Tourism</b></td><td>from working airports</td></tr>
-          <tr><td><b>− Roads</b></td><td>road/avenue/rail upkeep</td></tr>
-          <tr><td><b>− Services</b></td><td><code>UPKEEP × fund × 2.6 × diff</code></td></tr>
-          <tr><td><b>− Loans</b></td><td>amortized monthly</td></tr>
-          <tr><td><b>= Net</b></td><td><code>income − roads − svc − loan</code></td></tr>
-        </table>
-        <div>
-          <p class="lead" style="font-size:16px"><code>computeBudget()</code> is applied every 30 days. Everything scales by the difficulty multipliers and the time-ramp.</p>
-          <ul class="clean" style="margin-top:14px">
-            <li><b>Funding sliders</b> let you dial each service up or down</li>
-            <li><b>Loans</b> of §8k / §20k / §50k carry difficulty-based interest</li>
-            <li><b>Tourism</b> scales with population — airports pay off late</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 8 · HOW TO PLAY: FIRST STEPS -->
-  <section class="slide" data-label="First steps">
-    <div class="slide-inner">
-      <div class="eyebrow">How to play · the opening</div>
-      <h2>Your first <span class="ac">five minutes</span></h2>
-      <p class="lead">Order matters. A lot can't grow without power and water reaching it down a road — so lay the bones before you zone.</p>
-      <div class="steps" style="margin-top:24px">
-        <div class="step"><div class="num"></div><div><h4>Drop a power plant</h4><p>Start with a Coal plant or a clean Solar farm. Place it at the map edge — smog drifts.</p></div></div>
-        <div class="step"><div class="num"></div><div><h4>Add water</h4><p>A Water tower works anywhere; a Pump needs a riverbank but holds far more.</p></div></div>
-        <div class="step"><div class="num"></div><div><h4>Lay a road spine</h4><p>Roads carry the power and water you just made out to the lots.</p></div></div>
-        <div class="step"><div class="num"></div><div><h4>Zone R, C, I along it</h4><p>Residential first for people, then Commercial &amp; Industrial for jobs. Watch the RCI bars.</p></div></div>
-      </div>
-      <div class="note" style="margin-top:20px"><b>The Advisor (💡)</b> watches over new cities and points out exactly what's missing — power, water, jobs, or a road.</div>
-    </div>
-  </section>
-
-  <!-- 9 · TOOLBOX -->
-  <section class="slide" data-label="Toolbox">
-    <div class="slide-inner">
-      <div class="eyebrow">How to play · the toolbox</div>
-      <h2>Everything you can <span class="ac">build</span></h2>
-      <div class="grid g3" style="margin-top:20px">
-        <div class="card"><h3>🛣 Transport</h3><p>Road · Avenue (3× capacity) · Footpath · Bus stop · Elevated rail · Rail station. Rail crosses water &amp; roads on pylons.</p></div>
-        <div class="card"><h3>🏘 Zones</h3><p>Residential <span class="tag t-r">R</span> Commercial <span class="tag t-c">C</span> Industrial <span class="tag t-i">I</span> — paint them and let demand do the rest.</p></div>
-        <div class="card"><h3>⚡ Utilities</h3><p>Coal · Solar · Nuclear · Fusion plants; Water pump &amp; tower; Landfill, Recycling, Incinerator for garbage.</p></div>
-        <div class="card"><h3>🏛 Civic</h3><p>Police &amp; Fire, Schools → University, Clinics → Medical Center. Each projects a coverage radius.</p></div>
-        <div class="card"><h3>🌳 Leisure</h3><p>Parks, plazas, gardens, pools, stadiums, zoo, seaport, airport — all lift nearby land value.</p></div>
-        <div class="card"><h3>⛰ Terrain</h3><p>Plant trees, dig lakes, level ground, and raise or lower hills to sculpt the land itself.</p></div>
-      </div>
-      <div class="note" style="margin-top:22px"><b>Tip —</b> click a tool group to fly out its variants. Drag to paint roads, zones, terrain, and landfill rows in one stroke.</div>
-    </div>
-  </section>
-
-  <!-- 10 · OVERLAYS & RCI -->
-  <section class="slide" data-label="Read the city">
-    <div class="slide-inner">
-      <div class="eyebrow">How to play · reading the city</div>
-      <h2>Demand &amp; <span class="ac">overlays</span></h2>
-      <div class="two">
-        <div>
-          <p class="lead">The <strong>RCI bars</strong> show what the city is hungry for. Build toward the tall bar — that's where lots will grow.</p>
-          <div class="rci">
-            <div class="b"><div class="track"><div class="fill" style="height:72%;background:var(--green)"></div></div><span class="lab" style="color:var(--green)">R</span></div>
-            <div class="b"><div class="track"><div class="fill" style="height:48%;background:var(--blue)"></div></div><span class="lab" style="color:var(--blue)">C</span></div>
-            <div class="b"><div class="track"><div class="fill" style="height:60%;background:var(--ind)"></div></div><span class="lab" style="color:var(--ind)">I</span></div>
-          </div>
-          <p class="foot">Demand comes from the jobs ↔ pop ↔ commerce ↔ industry balance, minus a tax drag.</p>
-        </div>
-        <div>
-          <p class="lead" style="font-size:16px">Flip on an <strong>overlay</strong> to see the invisible:</p>
-          <div class="pillrow">
-            <span class="pill">🚗 Traffic</span><span class="pill">🏙 Density</span><span class="pill">💎 Land value</span>
-            <span class="pill">🌫 Pollution</span><span class="pill">⚡ Power</span><span class="pill">💧 Water</span>
-            <span class="pill">🚨 Crime</span><span class="pill">🎓 Education</span><span class="pill">➕ Health</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 11 · MILESTONES -->
-  <section class="slide" data-label="Milestones">
-    <div class="slide-inner">
-      <div class="eyebrow">How to play · progression</div>
-      <h2>From settlement to <span class="ac">Ecumenopolis</span></h2>
-      <p class="lead">Population milestones grant cash and unlock landmark buildings. Each rank is roughly the bar for the next tier of toys.</p>
-      <div class="two" style="margin-top:18px">
-        <table class="tbl">
-          <tr><th>Pop</th><th>Rank</th><th>Unlocks</th></tr>
-          <tr><td>800</td><td><b>Town</b></td><td>City Hall</td></tr>
-          <tr><td>3,000</td><td><b>Small City</b></td><td>Monument</td></tr>
-          <tr><td>6,000</td><td><b>City</b></td><td>Botanic Gardens</td></tr>
-          <tr><td>15,000</td><td><b>Metropolis</b></td><td>Grand Museum</td></tr>
-          <tr><td>40,000</td><td><b>Conurbation</b></td><td>Spaceport</td></tr>
-          <tr><td>100,000</td><td><b>World City</b></td><td>Titan Tower</td></tr>
-          <tr><td>1,000,000</td><td><b>Ecumenopolis</b></td><td>the crown</td></tr>
-        </table>
-        <div>
-          <div class="grid g2">
-            <div class="card"><div class="stat-big">12</div><div class="stat-lab">milestone ranks</div></div>
-            <div class="card"><div class="stat-big">§1.5M</div><div class="stat-lab">top reward grant</div></div>
-          </div>
-          <div class="note" style="margin-top:16px"><b>Locked tools</b> show a 🔒 with the rank you need. Rewards scale with difficulty's <code>grant</code> multiplier.</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 12 · DIFFICULTY & SCENARIOS -->
-  <section class="slide" data-label="Challenges">
-    <div class="slide-inner">
-      <div class="eyebrow">How to play · the challenge</div>
-      <h2>Difficulty &amp; <span class="ac">scenarios</span></h2>
-      <div class="two">
-        <div>
-          <h3 class="mono" style="color:var(--amber);letter-spacing:.04em;margin-bottom:10px">Five difficulties</h3>
-          <ul class="clean">
-            <li><b>Easy</b> — §30k start, generous income</li>
-            <li><b>Normal</b> — the baseline balance</li>
-            <li><b>Hard / Very Hard</b> — leaner cash, brutal upkeep</li>
-            <li><b>Kobayashi Maru</b> — the <i>no-win</i> ramp: hold the line as long as you can</li>
-          </ul>
-          <div class="note" style="margin-top:14px"><b>Easter egg —</b> name your city <code>Kobayashi</code> and you reprogram the test — the escalation freezes.</div>
-        </div>
-        <div>
-          <h3 class="mono" style="color:var(--amber);letter-spacing:.04em;margin-bottom:10px">Six scenarios</h3>
-          <table class="tbl">
-            <tr><th>Scenario</th><th>Goal</th></tr>
-            <tr><td>🌱 First Steps</td><td>2,500 happy in 4 yrs</td></tr>
-            <tr><td>📉 Housing Crash</td><td>restore 70k jobs/homes</td></tr>
-            <tr><td>⚡ Blackout</td><td>re-power 195k for a year</td></tr>
-            <tr><td>🌋 Aftershock</td><td>rebuild to 60k</td></tr>
-            <tr><td>🌊 Flood Plain</td><td>25k despite the floods</td></tr>
-            <tr><td>🪙 Iron Budget</td><td>15k + §50k, no loans</td></tr>
-          </table>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 13 · PRO TIPS -->
-  <section class="slide" data-label="Pro tips">
-    <div class="slide-inner">
-      <div class="eyebrow">Mastery · gameplay tricks</div>
-      <h2>Mayor's <span class="ac">cheat sheet</span></h2>
-      <div class="grid g3" style="margin-top:18px">
-        <div class="card"><h3>🚌 Beat gridlock</h3><p>A <b>Bus stop</b> cuts driving 45% for homes within 4 tiles; a <b>Rail station</b> reaches 6. Use <b>Avenues</b> (3× capacity) on main arteries.</p></div>
-        <div class="card"><h3>🌳 Farm land value</h3><p>Parks, plazas &amp; gardens raise value over a radius — that's what unlocks <b>higher tiers</b> and dense towers.</p></div>
-        <div class="card"><h3>🎓 Educate to densify</h3><p>Top tiers need an educated workforce. A <b>University</b> + the <b>Education Grants</b> ordinance pushes the skyline up.</p></div>
-        <div class="card"><h3>🌫 Bank the smog</h3><p>Put coal plants &amp; industry downwind at the edge. Go <b>Solar/Nuclear/Fusion</b> and run <b>Smog Controls</b> as you scale.</p></div>
-        <div class="card"><h3>🌊 Build for floods</h3><p>In the Flood Plain, <b>elevated rail doesn't mind water</b> — route transit over the river and rebuild from the banks.</p></div>
-        <div class="card"><h3>🗑 Don't forget garbage</h3><p>Sanitation collects trash <b>over the road network</b>. Recycling is clean; landfill is cheap but smelly.</p></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 14 · ORDINANCES -->
-  <section class="slide" data-label="Ordinances">
-    <div class="slide-inner">
-      <div class="eyebrow">Mastery · ongoing decisions</div>
-      <h2>Ordinances are <span class="ac">trade-offs</span></h2>
-      <p class="lead">Free to toggle, but each carries a budget effect and a field/mood/demand cost — a healthy city always has live decisions to make.</p>
-      <table class="tbl" style="margin-top:22px">
-        <tr><th>Ordinance</th><th>Upside</th><th>Cost</th></tr>
-        <tr><td>♻ <b>Recycling Program</b></td><td>−25% factory smog</td><td>§0.04 / resident</td></tr>
-        <tr><td>🌫 <b>Smog Controls</b></td><td>−40% plant smog</td><td>industry cools</td></tr>
-        <tr><td>👁 <b>Neighborhood Watch</b></td><td>−20% crime, cheap</td><td>small running cost</td></tr>
-        <tr><td>🌙 <b>Night Curfew</b></td><td>crime crushed</td><td>mood &amp; commerce dip</td></tr>
-        <tr><td>📈 <b>Business Incentives</b></td><td>+C &amp; +I demand</td><td>per-job subsidy</td></tr>
-        <tr><td>🛣 <b>Road Tolls</b></td><td>steady income</td><td>unpopular, −R demand</td></tr>
-        <tr><td>🎉 <b>Public Festivals</b></td><td>+mood, +commerce</td><td>§0.05 / resident</td></tr>
-        <tr><td>🎓 <b>Education Grants</b></td><td>denser towers</td><td>§0.05 / resident</td></tr>
-      </table>
-    </div>
-  </section>
-
-  <!-- 15 · UNDER THE HOOD (save/test/deploy) -->
-  <section class="slide" data-label="Pipeline">
-    <div class="slide-inner">
-      <div class="eyebrow">Engineering · save, test, ship</div>
-      <h2>Saving, testing &amp; <span class="ac">shipping</span></h2>
-      <div class="grid g3" style="margin-top:18px">
-        <div class="card"><h3>💾 Save format</h3><p>A city encodes to <code>TLV5.&lt;base64(JSON)&gt;</code> — per-cell <code>[type, lv, dev, bitmask]</code> plus state. The version prefix bumps when the payload shape changes; older codes still load.</p></div>
-        <div class="card"><h3>🧪 Tests</h3><p>A headless <b>Playwright</b> suite loads the real file and asserts <b>invariants</b> — save round-trips, the budget identity, growth gating, flood-fills, loan amortization — not golden numbers, so honest tuning stays green.</p></div>
-        <div class="card"><h3>🚀 Deploy</h3><p>Hosted on <b>GitHub Pages</b> at <a class="link" href="https://polis-game.com">polis-game.com</a>. Deploy = commit + push; the live site updates within a minute. <code>CNAME</code> pins the domain.</p></div>
-      </div>
-      <div class="note" style="margin-top:24px"><b>Tile types serialize by array index —</b> appended to <code>TYPE_IDS</code>, never reordered, or every saved city breaks. Order is load-bearing.</div>
-    </div>
-  </section>
-
-  <!-- 16 · CLOSE -->
-  <section class="slide" data-label="Start">
-    <div class="slide-inner" style="text-align:center">
-      <div class="eyebrow" style="justify-content:center">Now go build</div>
-      <h1 style="font-size:clamp(34px,6vw,68px)">Power. Water. <span style="color:var(--amber)">Road. Grow.</span></h1>
-      <p class="lead" style="margin:0 auto">That's the whole loop. Lay the bones, zone along them, read the bars, and watch a living city assemble itself one tick at a time.</p>
-      <div class="pillrow" style="justify-content:center;margin-top:26px">
-        <span class="pill">🌐 <b>polis-game.com</b></span>
-        <span class="pill">📂 one <code>index.html</code></span>
-        <span class="pill">🛠 just open it</span>
-      </div>
-      <p class="foot" style="margin-top:30px">POLIS — an isometric city builder, in your browser.</p>
-    </div>
-  </section>
-
+<!-- ===================== MARQUEE ===================== -->
+<div class="strip" aria-hidden="true">
+  <div class="run">
+    <span><b>Power.</b> Water. Road. Grow.</span>
+    <span>Procedural <b>3D-look</b> buildings</span>
+    <span>Live <b>generative</b> soundtrack</span>
+    <span>Day &amp; <b>night</b></span>
+    <span>Weather &amp; <b>seasons</b></span>
+    <span>Real <b>traffic</b></span>
+    <span>Natural <b>disasters</b></span>
+    <span>Million-citizen <b>megacities</b></span>
+    <span><b>Power.</b> Water. Road. Grow.</span>
+    <span>Procedural <b>3D-look</b> buildings</span>
+    <span>Live <b>generative</b> soundtrack</span>
+    <span>Day &amp; <b>night</b></span>
+    <span>Weather &amp; <b>seasons</b></span>
+    <span>Real <b>traffic</b></span>
+    <span>Natural <b>disasters</b></span>
+    <span>Million-citizen <b>megacities</b></span>
+  </div>
 </div>
 
+<!-- ===================== WHY YOU'LL LOVE IT ===================== -->
+<section id="why">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="eyebrow">Why sim fans love it</div>
+      <h2>It's not a toy. <span class="ac">It's a simulation.</span></h2>
+      <p class="lead">Every system you remember from the classics — RCI demand, land value, traffic, services, budgets, disasters — running honestly under the hood, with no shortcuts and no microtransactions.</p>
+    </div>
+    <div class="grid g3 reveal" style="margin-top:34px">
+      <div class="card"><div class="ic">🧠</div><h3>A real economy</h3><p>Population, jobs, commerce and industry chase each other through supply and demand. Raise taxes too high and growth stalls. Every number is connected.</p></div>
+      <div class="card"><div class="ic">🏙️</div><h3>Buildings that grow</h3><p>Zone a block and lots level up 1→7 on their own — then four mature lots merge into a tower that can climb to a skyscraper, highrise, and megatower.</p></div>
+      <div class="card"><div class="ic">🚗</div><h3>Traffic that bites</h3><p>Cars actually drive your roads. Gridlock chokes land value and growth — so you fight back with avenues, buses, and elevated rail.</p></div>
+      <div class="card"><div class="ic">⚡</div><h3>Networks to manage</h3><p>Roads carry power and water through the whole grid. Plan plants, pumps and reach, or watch unpowered blocks wither and downgrade.</p></div>
+      <div class="card"><div class="ic">🗺️</div><h3>See the invisible</h3><p>Flip overlays for traffic, density, land value, pollution, power, water, crime, education and health — and read your city like an X-ray.</p></div>
+      <div class="card"><div class="ic">🎚️</div><h3>Govern with trade-offs</h3><p>Funding sliders, ordinances, loans and tax rates. Recycling, curfews, festivals, tolls — every policy is a cost weighed against a payoff.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== NO FRICTION ===================== -->
+<section id="play" class="band">
+  <div class="wrap center reveal">
+    <div class="eyebrow c">Play anywhere, instantly</div>
+    <h2>Zero friction. <span class="ac">Pure city-building.</span></h2>
+    <p class="lead">No launcher, no patch day, no 40GB download, no login wall. Click a link and you're already mayor.</p>
+  </div>
+  <div class="wrap" style="margin-top:38px">
+    <div class="hl reveal">
+      <div class="item"><div class="big">📱</div><h4>Mobile-first</h4><p>Built for touch from the ground up — pinch to zoom, drag to paint, crisp on any screen.</p></div>
+      <div class="item"><div class="big">✈️</div><h4>Nothing phones home</h4><p>The whole game runs on your device with no server in the loop — once it's loaded, the simulation needs no connection.</p></div>
+      <div class="item"><div class="big">💾</div><h4>Saves on device</h4><p>Your cities live in your browser. Export a save code to carry a city anywhere.</p></div>
+      <div class="item"><div class="big">🆓</div><h4>Truly free</h4><p>No ads, no paywalls, no microtransactions, no account. The whole game, all of it.</p></div>
+    </div>
+    <div class="note reveal" style="margin-top:26px;max-width:860px;margin-left:auto;margin-right:auto"><b>Add to Home Screen</b> and POLIS installs like a native app — its own icon and full-screen, launching straight into the game.</div>
+  </div>
+</section>
+
+<!-- ===================== DEPTH ===================== -->
+<section id="depth">
+  <div class="wrap">
+    <div class="split">
+      <div class="reveal">
+        <div class="eyebrow">The depth is the point</div>
+        <h2>One simple loop. <span class="ac">Endless mastery.</span></h2>
+        <p class="lead">It's easy to learn — a friendly advisor tells new mayors exactly what's missing. But mastering land value, traffic flow, education and the budget? That's hundreds of hours.</p>
+        <ul class="clean">
+          <li><b>3 map sizes</b> — from a Cozy 32² town to a Boundless 128² megacity</li>
+          <li><b>Levels 1→7</b> per lot, then towers, skyscrapers &amp; megatowers</li>
+          <li><b>Land value</b> woven from pollution, traffic, parks, water &amp; crime</li>
+          <li><b>Education &amp; leisure</b> gate the densest, tallest tiers</li>
+          <li><b>12 milestone ranks</b> from settlement to <b>Ecumenopolis</b></li>
+          <li><b>Landmarks</b> unlock as you grow — City Hall to the Titan Tower</li>
+        </ul>
+      </div>
+      <div class="reveal">
+        <div class="loop">
+          <div class="lp"><div class="k"><em>1</em>Power</div><h4>Make energy</h4><p>Coal, solar, nuclear or fusion — each with its own reach and smog.</p></div>
+          <div class="lp"><div class="k"><em>2</em>Water</div><h4>Pump &amp; store</h4><p>Riverside pumps or water towers feed the grid through your roads.</p></div>
+          <div class="lp"><div class="k"><em>3</em>Road</div><h4>Lay the spine</h4><p>Roads carry cars, power and water out to every lot you'll zone.</p></div>
+          <div class="lp"><div class="k"><em>4</em>Grow</div><h4>Zone &amp; thrive</h4><p>Paint R, C, I, read the demand bars, and the city builds itself.</p></div>
+        </div>
+        <div class="note" style="margin-top:18px"><b>The whole loop —</b> Power. Water. Road. Grow. Lay the bones, zone along them, and a living city assembles itself.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== STAT BAND ===================== -->
+<section class="band">
+  <div class="wrap">
+    <div class="stats reveal">
+      <div class="stat"><div class="n">1M+</div><div class="l">citizens per city</div></div>
+      <div class="stat"><div class="n">12</div><div class="l">ranks to climb</div></div>
+      <div class="stat"><div class="n">6</div><div class="l">scenarios + sandbox</div></div>
+      <div class="stat"><div class="n">5</div><div class="l">difficulty modes</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== REPLAY ===================== -->
+<section id="replay">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="eyebrow">It keeps surprising you</div>
+      <h2>A new city <span class="ac">every time.</span></h2>
+      <p class="lead">Sandbox-build for the pure joy of it, or take on a hand-crafted challenge with a real goal and a clock ticking.</p>
+    </div>
+    <div class="grid g2 reveal" style="margin-top:34px">
+      <div class="card">
+        <div class="ic">🎯</div>
+        <h3>Scenarios with real stakes</h3>
+        <p style="margin-bottom:14px">Six authored challenges — rescue a city in crisis, then prove you can hold the line.</p>
+        <div class="chips">
+          <span class="chip">🌱 <b>First Steps</b></span>
+          <span class="chip">📉 <b>Housing Crash</b></span>
+          <span class="chip">⚡ <b>Blackout</b></span>
+          <span class="chip">🌋 <b>Aftershock</b></span>
+          <span class="chip">🌊 <b>Flood Plain</b></span>
+          <span class="chip">🪙 <b>Iron Budget</b></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ic">🔥</div>
+        <h3>Tune the challenge — or test your luck</h3>
+        <p style="margin-bottom:14px">Five difficulties from generous to merciless, plus disasters you can summon (or let the gods send).</p>
+        <div class="chips">
+          <span class="chip">🟢 <b>Easy</b></span>
+          <span class="chip">⚖️ <b>Normal</b></span>
+          <span class="chip">🔴 <b>Hard</b> · <b>Very Hard</b></span>
+          <span class="chip">☠️ <b>Kobayashi Maru</b></span>
+        </div>
+        <div class="chips">
+          <span class="chip">🌍 <b>Earthquake</b></span>
+          <span class="chip">🌀 <b>Typhoon</b></span>
+          <span class="chip">🌊 <b>Flood</b></span>
+        </div>
+      </div>
+    </div>
+    <div class="note reveal" style="margin-top:22px"><b>Endgame for completionists —</b> push a single city all the way to one million citizens and earn the crown: <b>Ecumenopolis</b>.</div>
+  </div>
+</section>
+
+<!-- ===================== QUOTE / VIBE ===================== -->
+<section class="band">
+  <div class="wrap quote reveal">
+    <p>Lay a road. Zone beside it. Add power and water — and watch the lights flick on as your first neighborhood <span class="ac">comes to life.</span></p>
+  </div>
+</section>
+
+<!-- ===================== LIVING WORLD ===================== -->
+<section id="alive">
+  <div class="wrap">
+    <div class="split">
+      <div class="reveal">
+        <div class="eyebrow">A world worth watching</div>
+        <h2>Hand-drawn, <span class="ac">never canned.</span></h2>
+        <p class="lead">Every building is procedurally drawn geometry — not stock sprites — so the skyline is genuinely yours. And the whole place breathes.</p>
+        <ul class="clean">
+          <li><b>Day &amp; night</b> — windows glow as dusk falls over the city</li>
+          <li><b>Weather &amp; seasons</b> roll across the map and recolor the world</li>
+          <li><b>Cars, pedestrians, trains &amp; planes</b> move through the streets and skies</li>
+          <li><b>Rotate &amp; zoom</b> the isometric view to frame your masterpiece</li>
+        </ul>
+      </div>
+      <div class="reveal">
+        <div class="card" style="margin-bottom:18px">
+          <div class="ic">🎵</div>
+          <h3>A soundtrack composed live</h3>
+          <p style="margin-bottom:14px">Nothing is pre-recorded — the music is generated in real time, and you pick the mood:</p>
+          <div class="chips">
+            <span class="chip">🎻 Classical</span>
+            <span class="chip">🌌 Ambient</span>
+            <span class="chip">📻 Lo-fi</span>
+            <span class="chip">👾 Chiptune</span>
+            <span class="chip">🌆 Synthwave</span>
+            <span class="chip">🎷 Jazz</span>
+          </div>
+        </div>
+        <div class="note"><b>Plus a living ambience —</b> tactile sound effects and a soundscape that shifts with your city, day, and weather.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FINAL CTA ===================== -->
+<section class="final">
+  <div class="wrap reveal">
+    <div class="eyebrow c">Your city is waiting</div>
+    <h2>Power. Water. <span class="ac">Road. Grow.</span></h2>
+    <p class="lead center" style="margin-bottom:30px">That's the whole loop. Open one tab and start building — free, instant, and entirely yours.</p>
+    <div class="cta-row" style="justify-content:center">
+      <a class="btn btn-primary" href="https://polis-game.com">▶ Play POLIS free</a>
+      <a class="btn btn-ghost" href="https://polis-game.com">Add to your home screen</a>
+    </div>
+    <p class="cta-note">polis-game.com · works on phone, tablet &amp; desktop · no account needed</p>
+  </div>
+</section>
+
+<footer>
+  <div class="brand"><span class="dot"></span>POLIS</div>
+  <div>An isometric city-builder, in your browser. · <a href="https://polis-game.com">polis-game.com</a></div>
+</footer>
+
 <script>
-  const deck = document.getElementById('deck');
-  const slides = [...document.querySelectorAll('.slide')];
-  const nav = document.getElementById('nav');
-  const bar = document.getElementById('bar');
-
-  // build dot nav
-  slides.forEach((s, i) => {
-    const a = document.createElement('a');
-    a.dataset.l = s.dataset.label || ('Slide ' + (i + 1));
-    a.addEventListener('click', () => slides[i].scrollIntoView({behavior:'smooth'}));
-    nav.appendChild(a);
-  });
-  const dots = [...nav.children];
-
-  // progress bar + active dot via IntersectionObserver
+  // gentle scroll reveal
   const io = new IntersectionObserver((entries) => {
-    entries.forEach(e => {
-      if (e.isIntersecting) {
-        const i = slides.indexOf(e.target);
-        dots.forEach((d, j) => d.classList.toggle('on', j === i));
-      }
-    });
-  }, {threshold: 0.55});
-  slides.forEach(s => io.observe(s));
-
-  deck.addEventListener('scroll', () => {
-    const max = deck.scrollHeight - deck.clientHeight;
-    bar.style.width = (max ? (deck.scrollTop / max) * 100 : 0) + '%';
-  }, {passive: true});
-
-  // keyboard nav
-  function current(){
-    const top = deck.scrollTop + deck.clientHeight / 2;
-    let best = 0, bd = Infinity;
-    slides.forEach((s, i) => {
-      const c = s.offsetTop + s.offsetHeight / 2;
-      const d = Math.abs(c - top);
-      if (d < bd){ bd = d; best = i; }
-    });
-    return best;
-  }
-  addEventListener('keydown', (e) => {
-    const i = current();
-    if (e.key === 'ArrowRight' || e.key === 'PageDown'){ e.preventDefault(); slides[Math.min(i+1, slides.length-1)].scrollIntoView({behavior:'smooth'}); }
-    else if (e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); slides[Math.max(i-1, 0)].scrollIntoView({behavior:'smooth'}); }
-    else if (e.key === 'Home'){ e.preventDefault(); slides[0].scrollIntoView({behavior:'smooth'}); }
-    else if (e.key === 'End'){ e.preventDefault(); slides[slides.length-1].scrollIntoView({behavior:'smooth'}); }
-  });
-
-  // hide the hint after first interaction
-  const hint = document.getElementById('hint');
-  let hidden = false;
-  const hide = () => { if (!hidden){ hidden = true; hint.style.transition='opacity .4s'; hint.style.opacity = '0'; } };
-  deck.addEventListener('scroll', hide, {once:true, passive:true});
-  addEventListener('keydown', hide, {once:true});
+    entries.forEach(e => { if (e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, {threshold: 0.15});
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 </script>
 </body>
 </html>
