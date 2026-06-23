@@ -439,81 +439,47 @@ function generate(opts){
     return t? u/t:1; };
   R=clamp(R/Math.sqrt(Math.max(0.28,usableFrac(R))),3,G*0.47);
 
-  /* ---------------- 5. ROAD NETWORK (irregular grid + arteries) ---------------- */
+  /* ---------------- 5. ROAD NETWORK (hierarchical lattice: avenues + local roads) ----------------
+     A plausible city is a TWO-TIER, LATTICE-ALIGNED street network. Every street sits on one integer
+     lattice anchored at the centre with block pitch B, so each tile lies on a constant-x/constant-y
+     line (no diagonal staircases). Every SUPER-th lattice line is an AVENUE (dead-straight skeleton,
+     spaced SUPER*B apart); the rest are LOCAL roads filling the blocks. Because avenues share the
+     lattice, the nearest local line is always B tiles away — an avenue is never parallel-adjacent to
+     a road. Irregularity comes only from terrain clipping, dropped fringe segments, and rare 1-tile
+     doglegs on local lines; avenues never wobble. */
   const isRoadT=t=>t==='road'||t==='avenue';
   const setRoad=(x,y,ave)=>{ if(!onLand(x,y)) return false; const c=M[y][x];
     if(c.t==='res'||c.t==='com'||c.t==='ind') return false;
     if(c.t==='avenue' && !ave) return true;          // a crossing minor street must NOT chop an avenue into stubs
     c.t=ave?'avenue':'road'; c.lv=0; c.dev=0; c.mg=0; return true; };
 
-  // avenue cadence scales with size: a small town has a couple of high streets,
-  // a dense metropolis needs frequent arterials or it gridlocks
-  const avEvery = target>20000 ? 3 : target>6000 ? 4 : 6;
-  // primary arteries: crossing avenues through the centre, gently wandering. Bigger
-  // cities get several, spread across the core, to spread the load.
-  function artery(vertical, offset){
-    const amp=R*0.22, f=0.05+rnd()*0.05, p=rnd()*6.28;
-    const base=(vertical?cx0:cy0)+offset;
-    for(let i=-Math.ceil(R*1.25);i<=Math.ceil(R*1.25);i++){
+  // model knobs: block pitch (B) and avenue cadence in blocks (SUPER, 0 = no avenues for small towns)
+  const B = target>20000 ? 4 : 5;
+  const SUPER = target>20000 ? 3 : target>6000 ? 4 : 0;
+  const reach = Math.ceil(R*1.08);                    // footprint radius the lattice fills
+
+  // one straight axis-aligned lattice line, clipped to land + footprint. Local lines may take a
+  // single 1-tile dogleg and may drop their outer segment near the fringe; avenues stay perfectly straight.
+  function layLine(vertical, k){
+    const n=Math.abs(k);
+    const ave = SUPER>0 && (n % SUPER === 0);
+    const base=(vertical?cx0:cy0)+k*B;
+    // local-only controlled variation
+    const dogAt = (!ave && rnd()<0.15) ? Math.round((rnd()-0.5)*reach*1.2) : null;   // where the dogleg happens
+    const dogShift = dogAt!==null ? (rnd()<0.5?1:-1) : 0;
+    const dropOuter = (!ave && rnd()<0.12) ? (rnd()<0.5?1:-1) : 0;                    // skip one outer half past d>0.7
+    for(let i=-reach;i<=reach;i++){
       const along=(vertical?cy0:cx0)+i;
-      const off=Math.round(base+amp*Math.sin(i*f+p));
+      let off=base + (dogAt!==null && i>=dogAt ? dogShift : 0);
       const x=vertical?off:along, y=vertical?along:off;
-      if(Math.hypot(x-cx0,y-cy0)>R*1.18) continue;
-      setRoad(x,y,true);
+      const d=Math.hypot(x-cx0,y-cy0)/R;
+      if(d>1.10) continue;
+      if(dropOuter && d>0.7 && Math.sign(i)===dropOuter) continue;
+      setRoad(x,y,ave);
     }
   }
-  const nArt=R<18?0:Math.max(1,Math.round(R/18));      // small towns have no big arterials
-  for(let i=0;i<nArt;i++){
-    const spread=(nArt===1)?0:(i/(nArt-1)-0.5)*R*1.1;
-    artery(true, Math.round(spread)); artery(false, Math.round(spread));
-  }
-
-  // secondary grid: irregular spacing, jittered offsets, jogs, ragged periphery.
-  // spacing widens with distance from centre (downtown is finer-grained).
-  function gridLines(vertical){
-    const lo=-Math.ceil(R*1.2), hi=Math.ceil(R*1.2);
-    let pos=lo, lineNo=0;
-    while(pos<=hi){
-      const distC=Math.abs(pos)/R;                       // 0 centre .. 1 edge
-      const gap=Math.round(lerp(3,6,clamp(distC,0,1)) + (rnd()-0.5)*1.6);
-      pos += Math.max(2,gap);
-      if(pos>hi) break;
-      lineNo++;
-      const ave=(lineNo%avEvery===0);                    // arterial avenues (3x capacity) carry the dense traffic
-      // avenues run as clean, continuous boulevards; minor streets are irregular
-      const jog=ave?0:((rnd()<0.35)? (rnd()<0.5?1:-1):0);
-      const f=0.06+rnd()*0.06, ph=rnd()*6.28, amp=ave?0.4:(rnd()<0.4? 1.5:0.6);
-      const base=(vertical?cx0:cy0)+pos;
-      const span=Math.ceil(R*1.15);
-      // ragged ends on minor streets only (avenues span the whole city)
-      const trimA=ave?0:Math.floor(rnd()*R*0.16), trimB=ave?0:Math.floor(rnd()*R*0.16);
-      for(let i=-span+trimA;i<=span-trimB;i++){
-        const along=(vertical?cy0:cx0)+i;
-        const off=Math.round(base+jog+amp*Math.sin(i*f+ph));
-        const x=vertical?off:along, y=vertical?along:off;
-        const d=Math.hypot(x-cx0,y-cy0)/R;
-        if(d>1.12) continue;
-        if(!ave && d>0.72 && rnd()<0.08) continue;       // rare gaps right at the fringe (minor streets only)
-        setRoad(x,y,ave);
-      }
-    }
-  }
-  gridLines(true); gridLines(false);
-
-  // a few organic local lanes that CONNECT two existing roads (through-streets, not
-  // dangling stubs) to break up the grid without leaving roads that go nowhere
-  const lanes=Math.round(R*0.6);
-  for(let n=0;n<lanes;n++){
-    let x=Math.round(cx0+(rnd()-0.5)*R*1.5), y=Math.round(cy0+(rnd()-0.5)*R*1.5);
-    if(!onLand(x,y)||isRoadT(M[y][x].t)) continue;
-    const dir=rnd()<0.5?[1,0]:[0,1];
-    // walk until we hit another road; only commit if it bridges two roads (≤ a short block)
-    const path=[]; let cx=x, cy=y, hit=false;
-    for(let s=0;s<6;s++){ if(!onLand(cx,cy))break; if(isRoadT(M[cy][cx].t)){hit=path.length>0;break;} path.push([cx,cy]); cx+=dir[0]; cy+=dir[1]; }
-    // also require the start to be adjacent to a road, so both ends connect
-    const startAdj=isRoadT(onLand(x-dir[0],y-dir[1])?M[y-dir[1]][x-dir[0]].t:'');
-    if(hit && startAdj) for(const[px,py]of path) setRoad(px,py,false);
-  }
+  const kMax=Math.ceil(reach/B)+1;
+  for(let k=-kMax;k<=kMax;k++){ layLine(true,k); layLine(false,k); }
 
   // keep only the road component connected to the centre (guarantees one utility network)
   pruneRoads();
@@ -774,19 +740,26 @@ function generate(opts){
   if(!placed.some(p=>p[2]==='pump'||p[2]==='tower')) (place1('tower',0)||place1('pump',0));
   if(!placed.some(p=>p[2]==='power'||p[2]==='solar'||p[2]==='nuclear')) place1('power',0);
 
-  // --- clean up roads that serve nothing: trim dead-end stubs that don't reach any
-  //     building or lot (cascading), so there are no roads/avenues "to nowhere". ---
-  trimDeadEnds();
-  function trimDeadEnds(){
+  // --- clean up streets that serve nothing. A street tile is kept only if some developable
+  //     lot/building sits within its 5x5 neighbourhood; otherwise it is a fringe line or a loop
+  //     wrapping an empty/water-locked block and is removed. Then re-prune to drop anything that
+  //     became disconnected, and cascade-trim any leftover dead-end stubs. ---
+  trimRoads();
+  function trimRoads(){
     const served=(x,y)=>{ for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){ const nx=x+dx,ny=y+dy; if(!inB(nx,ny))continue; const t=M[ny][nx].t; if(t!=='grass'&&t!=='tree'&&t!=='water'&&t!=='road'&&t!=='avenue')return true; } return false; };
+    // 1) remove every street tile that borders no developable lot (static rule → one sweep)
+    for(let y=0;y<G;y++)for(let x=0;x<G;x++){ if(isRoadT(M[y][x].t) && !served(x,y)) M[y][x].t='grass'; }
+    // 2) keep only the component still connected to the centre
+    pruneRoads();
+    // 3) cascade-trim any dead-end stubs left behind (a served stub ending at a lot is fine)
     let changed=true, guard=0;
     while(changed && guard++<90){ changed=false;
       for(let y=0;y<G;y++)for(let x=0;x<G;x++){
         if(!isRoadT(M[y][x].t)) continue;
         let deg=0; for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]) if(isRoad(x+dx,y+dy)) deg++;
-        if(deg>1) continue;                 // through-road
-        if(served(x,y)) continue;           // feeds a nearby lot/building
-        M[y][x].t='grass'; changed=true;    // a stub to nowhere
+        if(deg>1) continue;
+        if(served(x,y)) continue;
+        M[y][x].t='grass'; changed=true;
       }
     }
   }
