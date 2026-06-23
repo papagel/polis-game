@@ -30,6 +30,14 @@ the frame governor skips redraws when idle.
 
 ## Adding a new building / tile type — checklist
 
+A tile type only fully exists once it is registered at **every** site below.
+The engine is data-driven: the presence of a key in a lookup table is
+load-bearing, and its **absence is invisible** — a tile missing from `WSRC`
+(or `PLANT`/`SVC`/`LEIS`/…) is silently skipped by that system with no error,
+no crash, nothing red. It will draw perfectly and do nothing. The wiring is
+multi-site; verify each site landed (re-read the file after editing — a
+silently-dropped edit is exactly how these half-wired bugs happen).
+
 Tile types are serialized **by array index**, so order is load-bearing:
 
 - [ ] Append the id to **`TYPE_IDS`** (~10738) — **never reorder or remove**
@@ -37,10 +45,35 @@ Tile types are serialized **by array index**, so order is load-bearing:
 - [ ] Add a display name in `NAMES` (~9104).
 - [ ] Register it in the relevant trait tables so systems pick it up:
       `ZONE`/`SVC`/`ROADTYPE`/`WALKTYPE`/`CONDUCT`, plus `UPKEEP`, and
-      `CAP`/`PLANT`/`WSRC`/`LEIS`/`FOOT` as applicable.
+      `CAP`/`PLANT`/`WSRC`/`LEIS`/`FOOT` as applicable. **A building that
+      produces an effect (water, power, a service, leisure) is dead until its
+      type is a key in that effect's table.**
 - [ ] Add it to the `TOOLS` catalog (~963) with cost `c`, icon, group.
 - [ ] Give it a draw path in `render()` / a `draw*` function.
-- [ ] Handle placement in `place()` (~2211) if it needs special rules.
+- [ ] Handle placement in `place()` (~2211) if it needs special rules
+      (terrain validity, special footprint, etc.).
+- [ ] Confirm save/load round-trips it (it rides on `TYPE_IDS`, but verify).
+
+### Verify the consequence, not the artifact
+
+The dangerous class of bug here is an entity that must be registered in
+multiple decoupled tables where **one registration silently fails**. It passes
+every shallow check: `node --check` is green (a missing object key is valid
+JS), jsdom harnesses boot and confirm the tool exists and renders, and visual
+inspection looks perfect. None of them assert the deeper claim.
+
+So for each effect the building is supposed to have, add **one assertion on the
+effect itself**, not on its appearance:
+
+- Not "does the aqueduct draw?" but "does a building within reach of an
+  aqueduct actually become `wt` (watered)?"
+- Not "is it in `TOOLS`?" but "after placing it, does the system that consumes
+  its table actually act on the tile?"
+
+A cheap smoke test is to assert the registration directly (e.g. read the live
+`WSRC` and check `!!WSRC.<type>`), but prefer driving the sim and asserting the
+downstream state change — that catches both the missing key **and** wrong
+capacity/reach. Add or extend a `*.spec.js` accordingly (see Testing changes).
 
 ## Save format
 

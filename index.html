@@ -43,7 +43,7 @@
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   /* kill the mobile long-press text selection / copy-paste callout everywhere by default */
-  html,body{height:100%;overflow:hidden;background:#0a121c;font-family:'Inter',system-ui,sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  html,body{height:100%;height:100dvh;overflow:hidden;background:#0a121c;font-family:'Inter',system-ui,sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
   /* but real text fields must stay selectable/editable */
   input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
   #c{position:fixed;inset:0;display:block;touch-action:none;cursor:crosshair}
@@ -324,6 +324,12 @@
   #sizeChips{display:flex;gap:6px;flex-wrap:wrap}
   #sizeChips button{background:var(--panel2);border:1px solid var(--line);border-radius:9px;color:var(--dim);padding:5px 10px;cursor:pointer;font-family:'Chakra Petch';font-size:10.5px;letter-spacing:.05em;white-space:nowrap}
   #sizeChips button.on{border-color:var(--amber);color:var(--amber)}
+  .terRow{display:flex;align-items:center;gap:8px;margin:7px 0 0}
+  .terRow:first-of-type{margin-top:2px}
+  .terRow .terIco{width:16px;text-align:center;font-size:13px;line-height:1;flex:none}
+  .terRow .terName{width:74px;flex:none;font-size:12px;color:var(--dim)}
+  .terRow input[type=range]{flex:1;min-width:0;accent-color:var(--amber);height:18px;margin:0}
+  .terRow b{width:38px;flex:none;text-align:right;color:var(--ink);font-family:'Chakra Petch';font-size:12px}
   #nameRow{display:flex;align-items:center;margin-top:0}
   #nameRow input{width:100%}
   #nameRow label{font-size:12px;color:var(--dim);font-family:'Chakra Petch';letter-spacing:.08em}
@@ -886,6 +892,12 @@
         <div id="sizeRow"><div id="sizeChips"></div></div>
       </div>
       <div class="opt">
+        <div class="optLabel">Terrain</div>
+        <div class="terRow"><span class="terIco">🌊</span><span class="terName">Water</span><input type="range" id="waterSld" min="0" max="40" value="12"><b id="waterVal">12%</b></div>
+        <div class="terRow"><span class="terIco">⛰️</span><span class="terName">Mountains</span><input type="range" id="mtnSld" min="0" max="100" value="20"><b id="mtnVal">20%</b></div>
+        <div class="terRow"><span class="terIco">🌲</span><span class="terName">Trees</span><input type="range" id="treeSld" min="0" max="100" value="18"><b id="treeVal">18%</b></div>
+      </div>
+      <div class="opt">
         <div class="optLabel">Difficulty</div>
         <div id="diffRow">
           <input type="range" id="diffSlider" min="0" max="4" value="1">
@@ -1376,13 +1388,25 @@ function powerNeed(c){
 /* ---------- map generation ---------- */
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 /* pure seeded terrain — used by both the real map and the intro previews */
-function genTerrain(seed, N){
+/* terrain abundance dials (set from the map picker's % sliders). Water & Trees are fractions of the
+   map (0..1) and are interpreted PER MAP TYPE: the water fraction sets a river's width, a lake's
+   radius, or how far a sea floods, so "12% water" looks right whatever land you rolled while the
+   shape stays fixed; the tree fraction is filled to target woodland coverage. terrainMtn is a height
+   multiplier (0 = flat). All bake into the cells/elevation, so the saved city keeps its terrain. */
+let terrainWater=0.12, terrainMtn=1, terrainTrees=0.18;
+function genTerrain(seed, N, wf, tf){
   N = N||G;
+  if (wf==null) wf=terrainWater;
+  if (tf==null) tf=terrainTrees;
   const rnd=mulberry32(seed);
   const T=[];
   for (let y=0;y<N;y++){ T[y]=[]; for (let x=0;x<N;x++) T[y][x]='grass'; }
   const NB=(x,y)=>x>=0&&y>=0&&x<N&&y<N;
-  const arch = rnd()*4|0;   // each land has a distinct character
+  // a channel `wf` of the map wide (area = width·N over N²) → width = wf·N tiles; ≥1 when any water
+  const W=k=>Math.max(1, Math.round(wf*N*k));
+  // each land rolls its own water character from the full spread, so a fresh batch mixes rivers,
+  // lakes, twin streams and seas (archs: 0/1 rivers, 2 lake+brook, 3 twin streams, 4 sea, 5 pure lakes)
+  const arch = wf<=0 ? -1 : (rnd()*6|0);
   /* rivers meander on layered sine curves; each row's span must orthogonally
      overlap the previous row's, so the flow never breaks into corner-touches */
   const carve=(start,amp,wide,vertical)=>{
@@ -1409,17 +1433,39 @@ function genTerrain(seed, N){
       const d=Math.hypot(x-cxL,y-cyL) + Math.sin(a*3+ph)*0.9 + Math.sin(a*7+ph*2)*0.45;
       if (d<r) T[y][x]='water';
     } };
-  if (arch===0){ carveNS(8+(rnd()*(N*0.4)|0), 3+rnd()*4, 2); }                    // classic north–south river
-  else if (arch===1){ carveEW(8+(rnd()*(N*0.4)|0), 3+rnd()*4, 2); }               // east–west river
-  else if (arch===2){ lake(N*0.2+(rnd()*N*0.35|0), N*0.2+(rnd()*N*0.35|0), 4.5+rnd()*2.5);  // great lake + brook
-                      carveNS(N*0.5+(rnd()*N*0.3|0), 2.5+rnd()*3, 1); }
-  else { carveNS(N*0.15+(rnd()*N*0.15|0), 2+rnd()*3, 1); carveNS(N*0.6+(rnd()*N*0.2|0), 2+rnd()*3, 1); }  // twin streams
-  // forests: sparse plains to deep woods
-  const clusters = Math.round((12 + (rnd()*26|0)) * (N*N)/1600);
-  for (let i=0;i<clusters;i++){
-    const cxg = rnd()*N|0, cyg = rnd()*N|0, r = 1+rnd()*2.8;
-    for (let y=0;y<N;y++) for (let x=0;x<N;x++){
-      if (T[y][x]==='grass' && Math.hypot(x-cxg,y-cyg)<r && rnd()<.7) T[y][x]='tree';
+  /* an open sea hugging one edge: a wavy shoreline (layered sines + a couple of bays) floods the
+     near band. mean inland depth = wf·N tiles, so the flooded band is ≈ wf of the map's area. */
+  const coast=(edge)=>{
+    const reach=wf*N;
+    const f1=0.045+rnd()*0.05, f2=0.12+rnd()*0.10, p1=rnd()*6.28, p2=rnd()*6.28;
+    const amp=N*0.06, bay=N*0.09, bp=rnd()*6.28, bf=0.018+rnd()*0.02;
+    for (let i=0;i<N;i++){
+      let d=reach + amp*Math.sin(i*f1+p1) + amp*0.5*Math.sin(i*f2+p2) + bay*Math.max(0,Math.sin(i*bf+bp));
+      d=Math.max(0, Math.round(d));
+      for (let k=0;k<d;k++){
+        const X = edge===0?k : edge===1?N-1-k : i;
+        const Y = edge===2?k : edge===3?N-1-k : i;
+        if (NB(X,Y)) T[Y][X]='water';
+      }
+    } };
+  // lake radius from target area: π·r² ≈ frac·N²  →  r = N·√(frac/π)
+  const lakeR=(frac)=>N*Math.sqrt(Math.max(0,frac)/Math.PI);
+  const placeLake=(frac)=>lake(N*0.18+(rnd()*N*0.55|0), N*0.18+(rnd()*N*0.55|0), lakeR(frac));
+  if (arch===0){ carveNS(8+(rnd()*(N*0.4)|0), 3+rnd()*4, W(1)); }                    // classic north–south river
+  else if (arch===1){ carveEW(8+(rnd()*(N*0.4)|0), 3+rnd()*4, W(1)); }               // east–west river
+  else if (arch===2){ placeLake(wf);                                                  // great lake + thin brook
+                      carveNS(N*0.5+(rnd()*N*0.3|0), 2.5+rnd()*3, Math.max(1,W(0.18))); }
+  else if (arch===3){ carveNS(N*0.15+(rnd()*N*0.15|0), 2+rnd()*3, W(0.5)); carveNS(N*0.6+(rnd()*N*0.2|0), 2+rnd()*3, W(0.5)); }  // twin streams (half each)
+  else if (arch===4){ coast(rnd()*4|0); }                                            // open sea along one coast
+  else if (arch===5){ if (rnd()<0.45){ placeLake(wf*0.6); placeLake(wf*0.4); } else placeLake(wf); }  // pure lake(s), no river
+  // forests: scatter radial clusters until ~tf of the LAND (non-water) is wooded
+  const land=N*N - (()=>{ let w=0; for(let y=0;y<N;y++)for(let x=0;x<N;x++) if(T[y][x]==='water') w++; return w; })();
+  let target=Math.round(tf*land), wood=0, guard=0;
+  while (wood<target && guard++ < 6000){
+    const cxg=rnd()*N|0, cyg=rnd()*N|0, r=1+rnd()*2.8, r2=r*r;
+    const x0=Math.max(0,(cxg-r)|0), x1=Math.min(N-1,(cxg+r)|0), y0=Math.max(0,(cyg-r)|0), y1=Math.min(N-1,(cyg+r)|0);
+    for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++){
+      if (T[y][x]==='grass' && (x-cxg)*(x-cxg)+(y-cyg)*(y-cyg)<r2 && rnd()<.7){ T[y][x]='tree'; wood++; }
     }
   }
   return T;
@@ -2038,12 +2084,16 @@ function recomputeElev(){
   if (G<8){ applyElev(); return; }                   // tiny worlds stay flat (manual layer still applies)
   const rnd=mulberry32(hashElev());
   const HT=new Float32Array(G*G);                    // tile-centre heights
-  const nC=Math.max(2, Math.round(G*G/520));         // a few clustered highlands
+  const mf=terrainMtn;                               // mountain dial: 0=flat, 1=original, up = taller ranges
+  // height rides the dial linearly (A=base*mf, clamped to the 240px sculpt ceiling in applyElev),
+  // count + base width grow gently so big peaks broaden instead of needling. mf=1 reproduces the
+  // original exactly (nC=max(2,GG/520), R & A unscaled).
+  const nC = mf>0 ? Math.max(2, Math.round(G*G/520*(1+Math.max(0,mf-1)*0.2))) : 0;
   for (let i=0;i<nC;i++){
     let cx0=0, cy0=0, ok=false;
     for (let t=0; t<40 && !ok; t++){ cx0=2+(rnd()*(G-4))|0; cy0=2+(rnd()*(G-4))|0; ok=natElev(cx0,cy0); }
     if (!ok) continue;
-    const R=2.2+rnd()*3, A=(0.6+rnd()*0.4)*ELEV_MAX, ph=rnd()*6.28, wob=0.18+rnd()*0.22;
+    const R=(2.2+rnd()*3)*(1+Math.max(0,mf-1)*0.18), A=Math.min(236,(0.6+rnd()*0.4)*ELEV_MAX*mf), ph=rnd()*6.28, wob=0.18+rnd()*0.22;
     for (let y=Math.max(0,(cy0-R-1)|0); y<Math.min(G,cy0+R+2); y++)
       for (let x=Math.max(0,(cx0-R-1)|0); x<Math.min(G,cx0+R+2); x++){
         const dx=x-cx0, dy=y-cy0, d=Math.hypot(dx,dy); if (d>R) continue;
@@ -4124,6 +4174,23 @@ function duskAmt(){
   return 0;
 }
 
+// Live water shimmer. The water BASE is baked into the static ground cache (time-independent, so it
+// never re-rolls on a rebuild); this paints the moving specular glints on top each frame in the struct
+// pass (GP===2) — the same live-over-cache layering the agents use. Glints stay inside the tile's safe
+// interior so no per-tile clip is needed. Skipped in snapshot/far-zoom blits, where the scene is frozen.
+function drawWaterShimmer(x,y,sx,sy,z,now){
+  const ph=now/1000 + x*0.7 + y*1.1;
+  for (let i=0;i<3;i++){
+    const fr=((now/2600 + i/3 + (x*0.13+y*0.17))%1+1)%1;   // 0→1 upward drift, looping
+    const a=0.16*Math.sin(fr*Math.PI);                     // fade in at the trough, out at the crest
+    if (a<=0.002) continue;
+    const w=(6+4*Math.sin(ph+i))*z;
+    const xx=sx+Math.sin(ph*0.8+i*2)*4*z;
+    const yy=sy+(18-fr*10)*z;
+    cx.fillStyle=`rgba(255,255,255,${a})`;
+    cx.fillRect(xx-w/2, yy, w, 1.3*z);
+  }
+}
 function drawCell(x,y,now){
   const c=map[y][x], [sx,sy]=tileScreen(x,y), z=S.zoom;
   const night=isNight();
@@ -4140,6 +4207,7 @@ function drawCell(x,y,now){
     } else {
       const flat=(c.t==='grass'||c.t==='water'||c.t==='road'||c.t==='avenue'||c.t==='path');
       const internal=(c.t==='tree'||c.t==='res'||c.t==='com'||c.t==='ind');
+      if (GP===2 && c.t==='water'){ drawWaterShimmer(x,y,sx,sy,z,now); return; }   // animated glints over the cached base
       if (GP===2 && flat) return;               // flat ground already cached
       if (GP===1 && !flat && !internal) return; // tall structures skipped in the ground pass
     }
@@ -4281,10 +4349,11 @@ function drawCell(x,y,now){
       break; }
     case 'water': {
       if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
-      const sh = Math.sin(now/700 + (x+y)*1.3)*.06;
+      // water BASE only — baked into the static ground cache, so it must be time-independent (a `now`-based
+      // tint can't animate while cached and would re-roll its frozen phase on every rebuild). The moving
+      // glints are painted live on top in the struct pass; see drawWaterShimmer.
+      const sh = Math.sin((x+y)*1.3)*.06;
       cx.fillStyle=shade('#3a7fc1', .95+sh); cx.fill();
-      cx.fillStyle='rgba(255,255,255,.12)';
-      cx.fillRect(sx-10*z, sy+(10+Math.sin(now/900+x)*3)*z, 14*z, 1.5*z);
       break; }
     case 'path': {
       if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
@@ -4328,7 +4397,7 @@ function drawCell(x,y,now){
         const wy = sy+TH/2*z, cxg=x+.5, cyg=y+.5;
         // water beneath — the bank is pinned straight at the crossing, so a clean diamond reads
         if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
-        cx.fillStyle=shade('#3a7fc1', .95+Math.sin(now/700+(x+y)*1.3)*.06); cx.fill();
+        cx.fillStyle=shade('#3a7fc1', .95+Math.sin((x+y)*1.3)*.06); cx.fill();   // baked under bridges → keep time-independent (see water case)
         if (bd.cross){
           // two spans meet over water → a flat 4-way deck junction. Draw both axes' strips at one
           // shared (interior) height plus a stout pier; barriers are dropped so the roads run through.
@@ -11378,7 +11447,7 @@ function makeSave(){
   // player-sculpted terrain: a sparse [vertexIndex, roundedHeight, …] list (omitted if flat)
   let eh=0;
   if (EHAND){ const a=[]; for (let i=0;i<EHAND.length;i++){ const q=Math.round(EHAND[i]); if (q) a.push(i,q); } if (a.length) eh=a; }
-  const data={v:5,g:G,m:Math.round(S.money),tx:S.tax,d:S.day,p:S.pop,c:cells,fd:S.fund,df:S.diff,ms:S.milestone,hs:packHist(),wx:S.weather?1:0,au:settingsSnapshot(),cn:S.cityName,ln:S.loan||0,sc:S.scen||0,po:S.policy||{},eh};
+  const data={v:5,g:G,m:Math.round(S.money),tx:S.tax,d:S.day,p:S.pop,c:cells,fd:S.fund,df:S.diff,ms:S.milestone,hs:packHist(),wx:S.weather?1:0,au:settingsSnapshot(),cn:S.cityName,ln:S.loan||0,sc:S.scen||0,po:S.policy||{},tm:terrainMtn,eh};
   return 'TLV5.'+btoa(unescape(encodeURIComponent(JSON.stringify(data))));
 }
 function loadSave(code){
@@ -11470,6 +11539,10 @@ function loadSave(code){
   document.getElementById('taxSlider').value=S.tax;
   document.getElementById('taxLbl').textContent=S.tax+'%';
   traffic.fill(0); cars.length=0; svc.length=0; smoke.length=0; dirtyRoads=true;
+  // the mountain height factor drives the procedural elevation, which is re-derived (elevDirty) from
+  // the water layout on every load — so restore it BEFORE that recompute. Water/trees are baked into
+  // the cells, so they need no restore. Older saves predate the field and load at 1 (the default look).
+  terrainMtn = typeof data.tm==='number' ? data.tm : 1;
   EHAND=new Float32Array((G+1)*(G+1));   // sculpted terrain, restored from the sparse list (flat otherwise)
   if (Array.isArray(data.eh)) for (let k=0;k+1<data.eh.length;k+=2){ const i=data.eh[k]|0; if (i>=0&&i<EHAND.length) EHAND[i]=data.eh[k+1]; }
   elevDirty=true;
@@ -11772,18 +11845,23 @@ function resize(){
   dirty=true;
   if (S.started){ try{ render(performance.now()); }catch(_){} }
 }
-// re-run after layout/PWA chrome settles — on homescreen launch (esp. portrait) innerHeight
-// is briefly stale, which otherwise leaves dead space at the bottom of the canvas
-function scheduleResize(){ resize(); requestAnimationFrame(resize); setTimeout(resize, 250); setTimeout(resize, 600); }
+// iOS standalone PWAs report a too-short innerHeight at first paint, then silently correct it
+// 100–300ms later WITHOUT firing a resize event (leaving dead space at the bottom of the canvas)
+// — so we re-measure on every event iOS does fire, plus a spread of delayed passes to catch the
+// late correction whenever it lands.
+function scheduleResize(){ resize(); requestAnimationFrame(resize); [120,350,700,1200].forEach(t=>setTimeout(resize, t)); }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', scheduleResize);
+window.addEventListener('pageshow', scheduleResize);   // fires on bfcache restore / relaunch from homescreen
 if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
 window.addEventListener('load', scheduleResize);
 resize();
 scheduleResize();
 
 /* map picker modal: isometric previews that look like the real game */
-let mapSeeds=[], chosenSeed=null, pickSize=64;
+let mapSeeds=[], chosenSeed=null, pickSize=64, pickWaterPct=12, pickMtnPct=20, pickTreePct=18;
+// the picker's % sliders → generator inputs: water/tree are map fractions, mountains a height factor
+const pickWaterF=()=>pickWaterPct/100, pickTreeF=()=>pickTreePct/100, pickMtnF=()=>pickMtnPct/20;
 const MAP_NAMES=['RIVERBEND','GREENVALE','TWIN FORDS','WILLOWMERE','OAKRUN','FAIRWATER','MILLBROOK','EASTMARCH'];
 // Plausible English-style place names: a nature/colour root + a real toponymic
 // suffix (-ton/-field/-bridge…), or occasionally a "Prefix Root" two-worder.
@@ -11798,9 +11876,47 @@ function randomCityName(){
   do { suf=CITY_SUFFIXES[Math.random()*CITY_SUFFIXES.length|0]; } while (root.toLowerCase().endsWith(suf));
   return root+suf;
 }
+/* Per-vertex elevation for a preview's terrain, replicating the in-game generator (hashElev +
+   recomputeElev) on the standalone T grid so the thumbnail hills EXACTLY match the city you'll get.
+   Returns a (N+1)² Float32Array of world-px heights; flat ([0…]) when Hills=Flat or the map is tiny. */
+function previewElev(T, N, mf){
+  const NV=N+1, EV=new Float32Array(NV*NV);
+  if (mf<=0 || N<8) return EV;
+  let h=(2166136261^N)>>>0;                                   // mirror hashElev(), seeded by the water layout
+  for (let y=0;y<N;y++) for (let x=0;x<N;x++) if (T[y][x]==='water'){
+    h=(h^Math.imul(x+1,73856093)^Math.imul(y+1,19349663))>>>0; h=Math.imul(h,16777619)>>>0;
+  }
+  const rnd=mulberry32(h||1);
+  const nat=(x,y)=>x>=0&&y>=0&&x<N&&y<N&&(T[y][x]==='grass'||T[y][x]==='tree');
+  const HT=new Float32Array(N*N);
+  const nC=Math.max(2, Math.round(N*N/520*(1+Math.max(0,mf-1)*0.2)));
+  for (let i=0;i<nC;i++){
+    let cx0=0, cy0=0, ok=false;
+    for (let t=0; t<40 && !ok; t++){ cx0=2+(rnd()*(N-4))|0; cy0=2+(rnd()*(N-4))|0; ok=nat(cx0,cy0); }
+    if (!ok) continue;
+    const R=(2.2+rnd()*3)*(1+Math.max(0,mf-1)*0.18), A=Math.min(236,(0.6+rnd()*0.4)*ELEV_MAX*mf), ph=rnd()*6.28, wob=0.18+rnd()*0.22;
+    for (let y=Math.max(0,(cy0-R-1)|0); y<Math.min(N,cy0+R+2); y++)
+      for (let x=Math.max(0,(cx0-R-1)|0); x<Math.min(N,cx0+R+2); x++){
+        const dx=x-cx0, dy=y-cy0, d=Math.hypot(dx,dy); if (d>R) continue;
+        const uu=1-d/R; let s=uu*uu*(3-2*uu);
+        s *= 1 + wob*Math.sin(Math.atan2(dy,dx)*3+ph);
+        HT[y*N+x]+=A*s;
+      }
+  }
+  for (let gy=0; gy<NV; gy++) for (let gx=0; gx<NV; gx++){
+    let s=0;
+    for (const [tx,ty] of [[gx-1,gy-1],[gx,gy-1],[gx-1,gy],[gx,gy]]) if (nat(tx,ty)) s+=HT[ty*N+tx];
+    EV[gy*NV+gx]=s/4;
+  }
+  return EV;
+}
+const _PXC=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+const _ROCK=_PXC('#8d8472'), _SNOW=_PXC('#eef2f5');
 function drawIsoPreview(cv2, seed, N){
   N=N||G;
-  const T=genTerrain(seed, N);
+  const T=genTerrain(seed, N, pickWaterF(), pickTreeF());
+  const EV=previewElev(T, N, pickMtnF());
+  const NV=N+1;
   const dpr=Math.min(3, window.devicePixelRatio||1);
   const cw=360, ch=214;
   cv2.width=cw*dpr; cv2.height=ch*dpr;
@@ -11809,33 +11925,67 @@ function drawIsoPreview(cv2, seed, N){
   const sky=cc.createLinearGradient(0,0,0,ch);
   sky.addColorStop(0,'#9cc4e4'); sky.addColorStop(1,'#0d1622');
   cc.fillStyle=sky; cc.fillRect(0,0,cw,ch);
-  const u=(cw/2-7)/(N-1), ox=cw/2, oy=10;
+  const u=(cw/2-7)/(N-1), ox=cw/2;
+  // vertical scale: world-px → preview-px (real TW/2=32 ↔ u here), exaggerated so peaks read in the
+  // thumbnail but capped so the tallest summit stays ~24px (keeps the diamond inside the card).
+  let maxE=0; for (let i=0;i<EV.length;i++) if (EV[i]>maxE) maxE=EV[i];
+  let hs=(u/32)*2.6; if (maxE>0) hs=Math.min(hs, 24/maxE);
+  const oy=10 + maxE*hs;                                      // drop the whole field so raised peaks never clip the top
+  const Vx=(gx,gy)=>ox+(gx-gy)*u;
+  const Vy=(gx,gy)=>{ const e=(gx<=0||gy<=0||gx>=N||gy>=N)?0:EV[gy*NV+gx]; return oy+(gx+gy)*u*0.5 - e*hs; };  // rim clamps to sea level
   const dia=(px,py,w2,h2)=>{ cc.beginPath(); cc.moveTo(px,py-h2); cc.lineTo(px+w2,py); cc.lineTo(px,py+h2); cc.lineTo(px-w2,py); cc.closePath(); cc.fill(); };
-  for (let y=0;y<N;y++) for (let x=0;x<N;x++){
-    const t=T[y][x];
-    const px=ox+(x-y)*u, py=oy+(x+y)*u*0.5;
-    cc.fillStyle = t==='water' ? (((x+y)%3)?'#3a7fc1':'#4389c9')
-                 : t==='road'  ? '#4a5260'
-                 : ((x+y)%2 ? '#69a755':'#63a04f');
-    dia(px,py,u,u*0.52);
-    if (t==='tree'){
-      cc.fillStyle='#2f6b3c'; dia(px,py-1.6,u*0.62,u*0.4);
-      cc.fillStyle='#3d8a4d'; dia(px,py-2.6,u*0.45,u*0.3);
+  const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+  // back-to-front (anti-diagonal) sweep: with elevation a near tile can overlap a farther one, so
+  // strict x+y depth order is required — the row-major loop the flat version used would mis-layer hills.
+  for (let s=0; s<=2*(N-1); s++){
+    for (let x=Math.max(0,s-(N-1)); x<=Math.min(N-1,s); x++){
+      const y=s-x, t=T[y][x];
+      const ax=Vx(x,y),     ay=Vy(x,y),
+            bx=Vx(x+1,y),   by=Vy(x+1,y),
+            cx2=Vx(x+1,y+1),cy2=Vy(x+1,y+1),
+            dx2=Vx(x,y+1),  dy2=Vy(x,y+1);
+      let fill;
+      if (t==='water') fill = ((x+y)%3)?'#3a7fc1':'#4389c9';
+      else if (t==='road') fill = '#4a5260';
+      else {
+        const h00=EV[y*NV+x], h10=EV[y*NV+x+1], h11=EV[(y+1)*NV+x+1], h01=EV[(y+1)*NV+x];
+        const avgH=(h00+h10+h11+h01)*0.25, pk=maxE||1;
+        // fake directional light (sun upper-left): faces whose back/left edge is higher catch more.
+        // normalise the slope by peak height so contrast reads the same on gentle hills and alps.
+        const slope=(((h00+h01)-(h10+h11)) + ((h00+h10)-(h01+h11)))/pk;
+        const light=clamp(1 + slope*0.85, 0.74, 1.30);
+        // rock/snow keyed to a fraction of THIS map's tallest peak, so caps appear on alps but not on hills
+        const rockT=clamp((avgH/pk-0.34)/0.40,0,1), snowT=clamp((avgH/pk-0.72)/0.28,0,1);
+        let c=_PXC((x+y)%2 ? '#69a755':'#63a04f');
+        c=c.map((v,i)=>v+(_ROCK[i]-v)*rockT);
+        c=c.map((v,i)=>v+(_SNOW[i]-v)*snowT);
+        c=c.map(v=>clamp(Math.round(v*light),0,255));
+        fill=`rgb(${c[0]},${c[1]},${c[2]})`;
+      }
+      cc.fillStyle=fill; cc.strokeStyle=fill; cc.lineWidth=0.7;   // stroke seals hairline AA seams between shared edges
+      cc.beginPath(); cc.moveTo(ax,ay); cc.lineTo(bx,by); cc.lineTo(cx2,cy2); cc.lineTo(dx2,dy2); cc.closePath();
+      cc.fill(); cc.stroke();
+      if (t==='tree'){
+        const cxp=ox+(x-y)*u, cyp=(ay+by+cy2+dy2)*0.25;          // plant on the raised tile centre
+        cc.fillStyle='#2f6b3c'; dia(cxp,cyp-1.6,u*0.62,u*0.4);
+        cc.fillStyle='#3d8a4d'; dia(cxp,cyp-2.6,u*0.45,u*0.3);
+      }
     }
   }
   cc.fillStyle='rgba(255,255,255,.06)';
   cc.fillRect(0,0,cw,26);
 }
-function rollMaps(){
-  mapSeeds=[0,0,0,0].map(()=>(Math.random()*1e9)|0);
+// keep=true re-renders the SAME four lands (after a size/terrain change); falsy rolls fresh seeds.
+function rollMaps(keep){
   const grid=document.getElementById('mapGrid');
   if (!grid) return;
+  if (!keep || mapSeeds.length!==4) mapSeeds=[0,0,0,0].map(()=>(Math.random()*1e9)|0);
+  if (!keep || mapSeeds.indexOf(chosenSeed)<0) chosenSeed=mapSeeds[0];
   grid.innerHTML='';
   const used=new Set();
   mapSeeds.forEach((sd,i)=>{
     const card=document.createElement('div');
-    card.className='mapCard'+(i===0?' sel':'');
-    if (i===0) chosenSeed=sd;
+    card.className='mapCard'+(sd===chosenSeed?' sel':'');
     const cv2=document.createElement('canvas');
     drawIsoPreview(cv2, sd, pickSize);
     let nm, k=0;
@@ -11859,12 +12009,27 @@ function rollMaps(){
       pickSize=ws.g;
       sc.querySelectorAll('button').forEach(x2=>x2.classList.remove('on'));
       b.classList.add('on');
-      rollMaps();
+      rollMaps(true);                 // keep the same lands, just resize them
     };
     sc.appendChild(b);
   }); }
+// Terrain % sliders (water / mountains / trees): live-update the previews so you sculpt the land
+// before committing. Dragging is throttled to one re-roll per animation frame to stay smooth.
+function bindTerSlider(id, lblId, set){
+  const sl=document.getElementById(id), lbl=document.getElementById(lblId);
+  if (!sl) return;
+  let raf=0;
+  sl.oninput=()=>{
+    set(+sl.value);
+    if (lbl) lbl.textContent=sl.value+'%';
+    if (!raf) raf=requestAnimationFrame(()=>{ raf=0; rollMaps(true); });   // same lands, new terrain
+  };
+}
+bindTerSlider('waterSld','waterVal', v=>pickWaterPct=v);
+bindTerSlider('mtnSld',  'mtnVal',   v=>pickMtnPct=v);
+bindTerSlider('treeSld', 'treeVal',  v=>pickTreePct=v);
 const rerollBtn=document.getElementById('mapReroll');
-if (rerollBtn) rerollBtn.onclick=rollMaps;
+if (rerollBtn) rerollBtn.onclick=()=>rollMaps();   // fresh seeds (avoid passing the click event as `keep`)
 genMap();
 recomputeNets();
 recomputeFields();
@@ -12875,6 +13040,7 @@ function scenFresh(size,diff,seed,name){
   document.getElementById('intro').style.display='none';
   S.diff=diff;
   setWorldSize(size);
+  terrainWater=0.12; terrainMtn=1; terrainTrees=0.18;   // scenarios author against the standard generator
   if (seed!=null) genMap(seed); else genMap();
   traffic.fill(0); cars.length=0; svc.length=0; peds.length=0; smoke.length=0; dirtyRoads=true; dirtyWalk=true;
   undoStack.length=0; redoStack.length=0; updateUndoUI();
@@ -13251,6 +13417,7 @@ document.getElementById('mapBegin').onclick=()=>{
   S.scen=null; updateScenChip();
   try{ if (store.available()) localStorage.setItem('tlv_weather', S.weather?'1':'0'); }catch(_){}
   setWorldSize(pickSize);
+  terrainWater=pickWaterF(); terrainMtn=pickMtnF(); terrainTrees=pickTreeF();
   if (chosenSeed!==null) genMap(chosenSeed); else genMap();
   traffic.fill(0); cars.length=0; svc.length=0; peds.length=0; smoke.length=0; dirtyRoads=true; dirtyWalk=true;
   undoStack.length=0; redoStack.length=0; updateUndoUI();
