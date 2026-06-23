@@ -59,15 +59,35 @@ test('generator codes load into the game and stay stable', async ({ browser }) =
       const pop1 = S.pop;
       const d1 = {r:Math.round(S.demand.r*100), c:Math.round(S.demand.c*100), i:Math.round(S.demand.i*100)};
       const happy1 = S.happy, cong1 = S.congested;
-      // service / road tallies for realism checks
-      let nPolice=0,nFire=0,nSchool=0,nHosp=0,nRoad=0,nAve=0,deadEnds=0;
+      // service / road tallies + plausible-city MODEL conformance metrics
+      let nPolice=0,nFire=0,nSchool=0,nHosp=0,nRoad=0,nAve=0,deadEnds=0,staircase=0,aveParallel=0,footprint=0;
       const isR=t=>t==='road'||t==='avenue';
+      const road=(x,y)=>x>=0&&y>=0&&x<G&&y<G&&isR(map[y][x].t);
+      const ave=(x,y)=>x>=0&&y>=0&&x<G&&y<G&&map[y][x].t==='avenue';
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
         const t=map[y][x].t;
         if(t==='police')nPolice++; else if(t==='fire')nFire++;
         else if(t==='school'||t==='highschool')nSchool++; else if(t==='hospital'||t==='clinic'||t==='medcenter')nHosp++;
         else if(t==='road')nRoad++; else if(t==='avenue')nAve++;
-        if(isR(t)){ let deg=0; for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy; if(nx>=0&&ny>=0&&nx<G&&ny<G&&isR(map[ny][nx].t))deg++;} if(deg<=1)deadEnds++; }
+        if(t!=='grass'&&t!=='tree'&&t!=='water') footprint++;   // urbanized tiles (roads + buildings)
+        if(isR(t)){
+          let deg=0; for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){if(road(x+dx,y+dy))deg++;} if(deg<=1)deadEnds++;
+          // diagonal staircase: a diagonal road neighbour with NEITHER of the two connecting orthogonals
+          for(const[dx,dy]of[[1,1],[1,-1],[-1,1],[-1,-1]]) if(road(x+dx,y+dy) && !road(x+dx,y) && !road(x,y+dy)){ staircase++; break; }
+        }
+        // avenue tile running parallel-adjacent to a same-orientation road line (the "mix per tile" defect).
+        // a road that merely crosses the avenue is a perpendicular T/junction and is fine; a road running
+        // PARALLEL one tile to the side (its own line continues N-S beside a N-S avenue) is the defect.
+        const lr=(x,y)=>x>=0&&y>=0&&x<G&&y<G&&map[y][x].t==='road';
+        if(t==='avenue'){
+          const vert = ave(x,y-1)||ave(x,y+1);     // this avenue runs N-S here
+          const horz = ave(x-1,y)||ave(x+1,y);     // this avenue runs E-W here
+          if(vert){
+            if((lr(x-1,y)&&(road(x-1,y-1)||road(x-1,y+1))) || (lr(x+1,y)&&(road(x+1,y-1)||road(x+1,y+1)))) aveParallel++;
+          } else if(horz){
+            if((lr(x,y-1)&&(road(x-1,y-1)||road(x+1,y-1))) || (lr(x,y+1)&&(road(x-1,y+1)||road(x+1,y+1)))) aveParallel++;
+          }
+        }
       }
       // count any cell stuck unpowered while developed (a connectivity bug)
       let devUnpowered = 0, devLots = 0;
@@ -79,7 +99,7 @@ test('generator codes load into the game and stay stable', async ({ browser }) =
       }
       // round-trip the loaded city back out
       const re = makeSave();
-      return { pop0, jobs0, pop1, cap, use, wcap, wuse, devLots, devUnpowered, reLen: re.length, d0, d1, happy0, happy1, cong0, cong1, nPolice, nFire, nSchool, nHosp, nRoad, nAve, deadEnds };
+      return { pop0, jobs0, pop1, cap, use, wcap, wuse, devLots, devUnpowered, reLen: re.length, d0, d1, happy0, happy1, cong0, cong1, nPolice, nFire, nSchool, nHosp, nRoad, nAve, deadEnds, staircase, aveParallel, footprint };
     }, r);
     report.push({ name: r.name, cfg: r.cfg, gen: { pop: r.pop, jobs: r.jobs, plants: r.plants }, dbg: r.dbg, game: out });
   }
@@ -90,7 +110,9 @@ test('generator codes load into the game and stay stable', async ({ browser }) =
     console.log(`\n${r.name}  gen.pop=${r.gen.pop}  game.pop(1tick)=${g.pop0}  pop(120ticks)=${g.pop1}  (${Math.round(100*g.pop1/g.pop0)}%)`);
     console.log(`  jobs gen=${r.gen.jobs} game=${g.jobs0} | power ${g.use}/${g.cap} | water ${g.wuse}/${g.wcap} | devLots=${g.devLots} unpowered=${g.devUnpowered}`);
     console.log(`  demand t0 r${g.d0.r} c${g.d0.c} i${g.d0.i} -> t1 r${g.d1.r} c${g.d1.c} i${g.d1.i} | happy ${g.happy0}->${g.happy1} | congested ${g.cong0}->${g.cong1}`);
-    const d=r.dbg; console.log(`  dbg R=${d.R} peak=${d.peak}px | svc police=${g.nPolice} fire=${g.nFire} school=${g.nSchool} health=${g.nHosp} | roads ${g.nRoad} av=${g.nAve} (${Math.round(100*g.nAve/(g.nRoad+g.nAve))}%) deadEnds=${g.deadEnds} | cong ${g.cong0}->${g.cong1} happy ${g.happy0}->${g.happy1}`);
+    const d=r.dbg; const rt=g.nRoad+g.nAve;
+    console.log(`  dbg R=${d.R} peak=${d.peak}px | svc police=${g.nPolice} fire=${g.nFire} school=${g.nSchool} health=${g.nHosp} | roads ${g.nRoad} av=${g.nAve} (${Math.round(100*g.nAve/rt)}%) | cong ${g.cong0}->${g.cong1} happy ${g.happy0}->${g.happy1}`);
+    console.log(`  model: roadFrac=${(rt/g.footprint).toFixed(3)} deadEnd%=${(100*g.deadEnds/rt).toFixed(1)} staircase=${g.staircase} aveParallel=${g.aveParallel}`);
   }
   console.log('=====================================\n');
 
@@ -115,6 +137,20 @@ test('generator codes load into the game and stay stable', async ({ browser }) =
     }
     if (r.cfg.mtnPct >= 20 && r.cfg.mtnSteep >= 90) {
       expect(r.dbg.peak, `${r.name} high steepness should create tall mountains`).toBeGreaterThan(190);
+    }
+    // --- plausible-city road MODEL conformance ---
+    const roadTiles = g.nRoad + g.nAve;
+    if (roadTiles > 40) {
+      // lattice-aligned: essentially no diagonal staircases (a true defect at any size)
+      expect(g.staircase / roadTiles, `${r.name} too many diagonal road staircases`).toBeLessThan(0.02);
+      // avenues never run parallel-adjacent to a local road line (the "mix per tile" defect)
+      expect(g.aveParallel / roadTiles, `${r.name} avenues run parallel to roads (mix per tile)`).toBeLessThan(0.02);
+      // road area (share of urbanized tiles) bounded — sanity cap against a road explosion. The
+      // floor is loose because low-density / struggling cities read higher (fewer building tiles).
+      expect(roadTiles / g.footprint, `${r.name} road area out of plausible band`).toBeGreaterThan(0.20);
+      expect(roadTiles / g.footprint, `${r.name} road area out of plausible band`).toBeLessThan(0.55);
+      // few dead-ends: real cities end streets at lots, not nowhere. Villages allow more cul-de-sacs.
+      expect(g.deadEnds / roadTiles, `${r.name} too many dead-end streets`).toBeLessThan(roadTiles > 300 ? 0.14 : 0.22);
     }
   }
 });

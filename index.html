@@ -4400,9 +4400,12 @@ function drawCell(x,y,now){
         // markings: solid amber median + dashed white lanes, drawn in grid space so they meet across tiles
         for (const [dx,dy] of conns){
           const [c1x,c1y]=P(x+.5,y+.5), [e1x,e1y]=P(x+.5+dx*.5, y+.5+dy*.5);
-          cx.strokeStyle='rgba(255,196,90,.85)'; cx.lineWidth=Math.max(1,1.5*z); cx.setLineDash([]);
+          // widths scale straight with zoom (NO max(1,…) floor): the markings bake into the ground/scene
+          // cache, and a floored 1px line magnifies disproportionately when that low-zoom bake is re-projected
+          // on zoom-in — reading as a fat amber "highlight" until the cache re-bakes. Proportional widths re-project true.
+          cx.strokeStyle='rgba(255,196,90,.85)'; cx.lineWidth=1.5*z; cx.setLineDash([]);
           cx.beginPath(); cx.moveTo(c1x,c1y); cx.lineTo(e1x,e1y); cx.stroke();
-          cx.strokeStyle='rgba(240,244,248,.55)'; cx.lineWidth=Math.max(1,1.1*z); cx.setLineDash([3.5*z,4*z]);
+          cx.strokeStyle='rgba(240,244,248,.55)'; cx.lineWidth=1.1*z; cx.setLineDash([3.5*z,4*z]);
           const other = bend ? (conns[0][0]===dx&&conns[0][1]===dy ? conns[1] : conns[0]) : null;
           for (const sgn of [1,-1]){
             const px2=-dy*.21*sgn, py2=dx*.21*sgn;
@@ -4441,7 +4444,7 @@ function drawCell(x,y,now){
           }
         }
         // dashed centerline
-        cx.strokeStyle='rgba(235,225,160,.5)'; cx.lineWidth=Math.max(1,1.2*z); cx.setLineDash([3*z,5*z]);
+        cx.strokeStyle='rgba(235,225,160,.5)'; cx.lineWidth=1.2*z; cx.setLineDash([3*z,5*z]);   // no 1px floor — see avenue markings: a floored width bloats when the low-zoom ground bake re-projects
         for (const [dx,dy] of conns){
           const [c1x,c1y]=P(cxg,cyg), [e1x,e1y]=P(cxg+dx*.5, cyg+dy*.5);
           cx.beginPath(); cx.moveTo(c1x,c1y); cx.lineTo(e1x,e1y); cx.stroke();

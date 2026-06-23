@@ -453,29 +453,31 @@ function generate(opts){
     if(c.t==='avenue' && !ave) return true;          // a crossing minor street must NOT chop an avenue into stubs
     c.t=ave?'avenue':'road'; c.lv=0; c.dev=0; c.mg=0; return true; };
 
-  // model knobs: block pitch (B) and avenue cadence in blocks (SUPER, 0 = no avenues for small towns)
-  const B = target>20000 ? 4 : 5;
-  const SUPER = target>20000 ? 3 : target>6000 ? 4 : 0;
+  // model knobs: block pitch (B, 5 keeps every lot within the game's 2-tile frontage rule while
+  // holding road area down) and avenue cadence in blocks (SUPER, 0 = no avenues for small towns)
+  const B = 5;
+  const SUPER = target>60000 ? 2 : target>20000 ? 3 : target>6000 ? 4 : 0;
   const reach = Math.ceil(R*1.08);                    // footprint radius the lattice fills
 
   // one straight axis-aligned lattice line, clipped to land + footprint. Local lines may take a
-  // single 1-tile dogleg and may drop their outer segment near the fringe; avenues stay perfectly straight.
+  // single 1-tile dogleg (drawn as an L-corner so it stays orthogonal, never a diagonal step) and
+  // may drop their outer segment near the fringe; avenues stay perfectly straight.
   function layLine(vertical, k){
     const n=Math.abs(k);
     const ave = SUPER>0 && (n % SUPER === 0);
     const base=(vertical?cx0:cy0)+k*B;
-    // local-only controlled variation
     const dogAt = (!ave && rnd()<0.15) ? Math.round((rnd()-0.5)*reach*1.2) : null;   // where the dogleg happens
     const dogShift = dogAt!==null ? (rnd()<0.5?1:-1) : 0;
     const dropOuter = (!ave && rnd()<0.12) ? (rnd()<0.5?1:-1) : 0;                    // skip one outer half past d>0.7
+    let prevOff=null;
     for(let i=-reach;i<=reach;i++){
       const along=(vertical?cy0:cx0)+i;
-      let off=base + (dogAt!==null && i>=dogAt ? dogShift : 0);
-      const x=vertical?off:along, y=vertical?along:off;
-      const d=Math.hypot(x-cx0,y-cy0)/R;
-      if(d>1.10) continue;
-      if(dropOuter && d>0.7 && Math.sign(i)===dropOuter) continue;
-      setRoad(x,y,ave);
+      const off=base + (dogAt!==null && i>=dogAt ? dogShift : 0);
+      const place=(o)=>{ const x=vertical?o:along, y=vertical?along:o; const d=Math.hypot(x-cx0,y-cy0)/R;
+        if(d>1.10) return; if(dropOuter && d>0.7 && Math.sign(i)===dropOuter) return; setRoad(x,y,ave); };
+      if(prevOff!==null && off!==prevOff) place(prevOff);   // L-corner connector at the jog (no diagonal step)
+      place(off);
+      prevOff=off;
     }
   }
   const kMax=Math.ceil(reach/B)+1;
