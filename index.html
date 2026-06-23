@@ -1493,8 +1493,11 @@ function setWorldSize(n){
 // (G-1)*TH/2 iso-units below tile (0,0)'s centre, and that offset scales with zoom — the term the
 // old formula dropped, which is why bigger/smaller maps drifted up or down.
 function centerCamera(){
-  S.ox = window.innerWidth/2;
-  S.oy = window.innerHeight/2 - (G-1)*TH/2*S.zoom;
+  // center on the canvas, not window.innerHeight — on iOS the canvas may be sized to the larger
+  // layout viewport, so using innerHeight here would bias the city upward off-center.
+  const W=cv.width/DPR, H=cv.height/DPR;
+  S.ox = W/2;
+  S.oy = H/2 - (G-1)*TH/2*S.zoom;
 }
 // Grow the (square) world in place by adding a `pad`-tile ring on ALL four sides,
 // keeping every existing cell. Existing land shifts by `pad`, so tower roots (grp)
@@ -11835,24 +11838,51 @@ function updateHUD(){
 /* ============================================================
    MAIN LOOP
    ============================================================ */
+// Best available viewport extent. iOS standalone can disagree across these three metrics at cold
+// launch — innerHeight (visual), documentElement.clientHeight (layout), visualViewport.height —
+// so we take the largest, which keeps the canvas covering the whole screen instead of leaving the
+// near-black body background as a band under the bottom toolbar.
+function vpW(){ return Math.max(window.innerWidth||0, document.documentElement.clientWidth||0, (window.visualViewport&&window.visualViewport.width)||0); }
+function vpH(){ return Math.max(window.innerHeight||0, document.documentElement.clientHeight||0, (window.visualViewport&&window.visualViewport.height)||0); }
 function resize(){
   DPR=Math.min(PERF.saver?1.25:2, window.devicePixelRatio||1);
-  cv.width=window.innerWidth*DPR; cv.height=window.innerHeight*DPR;
-  cv.style.width=window.innerWidth+'px'; cv.style.height=window.innerHeight+'px';
+  const vw=vpW(), vh=vpH();
+  cv.width=vw*DPR; cv.height=vh*DPR;
+  cv.style.width=vw+'px'; cv.style.height=vh+'px';
   cx.setTransform(DPR,0,0,DPR,0,0);
   // setting cv.width clears the canvas to blank — repaint right away so a window-resize storm
   // (which fires this repeatedly) never leaves the frame-governed renderer showing empty frames
   dirty=true;
   if (S.started){ try{ render(performance.now()); }catch(_){} }
 }
-// iOS standalone PWAs report a too-short innerHeight at first paint, then silently correct it
-// 100–300ms later WITHOUT firing a resize event (leaving dead space at the bottom of the canvas)
-// — so we re-measure on every event iOS does fire, plus a spread of delayed passes to catch the
-// late correction whenever it lands.
-function scheduleResize(){ resize(); requestAnimationFrame(resize); [120,350,700,1200].forEach(t=>setTimeout(resize, t)); }
+const _standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || (typeof navigator!=='undefined' && navigator.standalone);
+// iOS standalone ships a STALE, too-short viewport height at cold launch that does NOT self-correct
+// until a real geometry change (rotating the phone) forces WebKit to relayout — which is exactly why
+// "rotate to landscape and back" fixes it. We reproduce that relayout without rotating: briefly
+// perturb the root element's height to force a synchronous reflow, re-measure, and repeat until the
+// height stops changing. Plain re-reads don't help because iOS keeps returning the stale number.
+function settleViewport(){
+  let last=-1, stable=0; const t0=performance.now();
+  const tick=()=>{
+    if (_standalone){
+      const de=document.documentElement, prev=de.style.height;
+      de.style.height=(vpH()+1)+'px'; void de.offsetHeight;   // perturb + force reflow…
+      de.style.height=prev;           void de.offsetHeight;   // …restore (CSS 100dvh resumes)
+    }
+    resize();
+    const h=vpH();
+    if (h===last) stable++; else { last=h; stable=0; }
+    if (stable<2 && performance.now()-t0<4000) setTimeout(tick, 300);
+  };
+  tick();
+}
+function scheduleResize(){ settleViewport(); requestAnimationFrame(resize); }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', scheduleResize);
 window.addEventListener('pageshow', scheduleResize);   // fires on bfcache restore / relaunch from homescreen
+// the standalone height often only settles once the app regains focus / becomes visible — catch those too
+window.addEventListener('focus', scheduleResize);
+document.addEventListener('visibilitychange', ()=>{ if (!document.hidden) scheduleResize(); });
 if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
 window.addEventListener('load', scheduleResize);
 resize();

@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0c1422">
+<title>POLIS — Build a Living City. Free. In Your Browser.</title>
+<meta name="description" content="A deep, hand-tuned isometric city-builder that runs entirely in your browser. Free, no install, no sign-up, no server, and built mobile-first. Lay roads, zone, and watch a living city assemble itself.">
+<meta property="og:title" content="POLIS — Build a Living City">
+<meta property="og:description" content="A deep isometric city-builder in a single browser tab. Free, instant, on-device, mobile-first. Power. Water. Road. Grow.">
+<meta property="og:image" content="og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a121c;
+    --bg2:#0c1626;
+    --panel:#101a26;
+    --panel2:#16222f;
+    --line:#2b3c4e;
+    --ink:#e9eef5;
+    --dim:#93a4b8;
+    --faint:#6d8096;
+    --amber:#ffb454;
+    --amber2:#e8b04a;
+    --green:#5fd68b;
+    --red:#ff6b6b;
+    --blue:#5ab2ff;
+    --violet:#8a6fd1;
+    --ind:#f5c542;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  ::selection{background:rgba(255,180,84,.28)}
+  a{color:inherit}
+
+  /* ---------- chrome ---------- */
+  header.bar{
+    position:fixed;top:0;left:0;right:0;z-index:50;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px clamp(16px,5vw,56px);
+    background:linear-gradient(180deg,rgba(10,18,28,.92),rgba(10,18,28,.55) 70%,transparent);
+    backdrop-filter:blur(8px);
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-family:'Chakra Petch';letter-spacing:.18em;font-weight:700;font-size:16px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 12px var(--amber)}
+  .brand small{font-family:'Inter';font-weight:500;letter-spacing:.04em;color:var(--faint);font-size:11px;text-transform:uppercase}
+  .navlinks{display:flex;gap:24px;align-items:center;font-size:13.5px;color:var(--dim)}
+  .navlinks a{text-decoration:none;transition:color .2s}
+  .navlinks a:hover{color:var(--ink)}
+  @media(max-width:720px){.navlinks{display:none}}
+
+  /* ---------- buttons ---------- */
+  .btn{
+    display:inline-flex;align-items:center;gap:9px;
+    font-family:'Chakra Petch';font-weight:700;letter-spacing:.04em;font-size:15px;
+    padding:13px 24px;border-radius:11px;text-decoration:none;cursor:pointer;border:0;
+    transition:transform .2s,box-shadow .2s,background .2s;
+  }
+  .btn-primary{background:linear-gradient(135deg,var(--amber),#ff9a3c);color:#1a1205;box-shadow:0 8px 30px rgba(255,180,84,.32)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(255,180,84,.45)}
+  .btn-ghost{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--ink)}
+  .btn-ghost:hover{border-color:rgba(255,180,84,.5);transform:translateY(-2px)}
+  .btn.sm{font-size:13px;padding:10px 18px}
+
+  /* ---------- sections ---------- */
+  section{padding:clamp(72px,11vw,140px) clamp(16px,5vw,56px);position:relative}
+  .wrap{max-width:1140px;margin:0 auto;width:100%}
+  .eyebrow{font-family:'Chakra Petch';letter-spacing:.22em;text-transform:uppercase;font-size:12px;color:var(--amber);margin-bottom:18px;display:flex;align-items:center;gap:12px}
+  .eyebrow.c{justify-content:center}
+  .eyebrow::before{content:"";width:26px;height:2px;background:var(--amber);border-radius:2px}
+  .eyebrow.c::before{display:none}
+  h1{font-family:'Chakra Petch';font-weight:700;font-size:clamp(44px,8.5vw,104px);line-height:.96;letter-spacing:.01em}
+  h2{font-family:'Chakra Petch';font-weight:700;font-size:clamp(30px,5vw,52px);line-height:1.04;letter-spacing:.01em;margin-bottom:16px}
+  h2 .ac{color:var(--amber)}
+  .lead{font-size:clamp(16px,1.9vw,21px);color:var(--dim);max-width:62ch}
+  .center{text-align:center}
+  .center .lead{margin-left:auto;margin-right:auto}
+  p{color:var(--dim)}
+  code{font-family:'Chakra Petch',ui-monospace,monospace;background:rgba(90,178,255,.10);border:1px solid rgba(90,178,255,.22);color:#9fd1ff;padding:1px 6px;border-radius:5px;font-size:.86em}
+  strong{color:var(--ink);font-weight:600}
+
+  /* ---------- hero ---------- */
+  .hero{
+    min-height:100vh;display:flex;flex-direction:column;justify-content:center;
+    padding-top:120px;
+    background:
+      radial-gradient(1000px 600px at 78% 14%, rgba(255,180,84,.13), transparent 60%),
+      radial-gradient(800px 560px at 6% 96%, rgba(90,178,255,.10), transparent 60%);
+  }
+  .hero-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
+  @media(max-width:880px){.hero-grid{grid-template-columns:1fr;gap:8px}.hero svg.tower{max-width:320px;margin:0 auto}}
+  .hero h1 .l2{display:block;color:var(--amber)}
+  .badges{display:flex;flex-wrap:wrap;gap:9px;margin:22px 0 30px}
+  .badge{display:inline-flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:12.5px;color:var(--dim);font-family:'Chakra Petch';letter-spacing:.02em}
+  .badge b{color:var(--ink)}
+  .badge .g{color:var(--green)}
+  .cta-row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .cta-note{font-size:12.5px;color:var(--faint);margin-top:14px}
+
+  /* floaty tower */
+  .tower{width:100%;animation:float 7s ease-in-out infinite}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+
+  /* ---------- marquee strip ---------- */
+  .strip{padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg2);overflow:hidden;white-space:nowrap}
+  .strip .run{display:inline-block;animation:scroll 30s linear infinite}
+  .strip span{font-family:'Chakra Petch';letter-spacing:.12em;font-size:13px;color:var(--faint);text-transform:uppercase;margin:0 26px}
+  .strip span b{color:var(--amber)}
+  @keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+  /* ---------- feature cards ---------- */
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:880px){.g3,.g4{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+  .card{background:linear-gradient(160deg,rgba(22,34,47,.92),rgba(16,26,38,.92));border:1px solid var(--line);border-radius:16px;padding:24px;transition:transform .25s,border-color .25s,box-shadow .25s}
+  .card:hover{transform:translateY(-4px);border-color:rgba(255,180,84,.5);box-shadow:0 16px 40px rgba(0,0,0,.3)}
+  .card .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:23px;background:rgba(255,180,84,.12);margin-bottom:14px}
+  .card h3{font-family:'Chakra Petch';font-size:18px;letter-spacing:.02em;margin-bottom:8px}
+  .card p{font-size:14px;line-height:1.55}
+
+  /* highlight (no-friction) row */
+  .hl{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:8px}
+  @media(max-width:880px){.hl{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:460px){.hl{grid-template-columns:1fr}}
+  .hl .item{text-align:center;padding:26px 16px;border:1px solid var(--line);border-radius:16px;background:rgba(16,26,38,.55)}
+  .hl .big{font-size:34px;margin-bottom:10px}
+  .hl h4{font-family:'Chakra Petch';font-size:16px;letter-spacing:.02em;margin-bottom:6px}
+  .hl p{font-size:13px}
+
+  /* split / depth */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center}
+  @media(max-width:880px){.split{grid-template-columns:1fr;gap:28px}}
+  ul.clean{list-style:none;display:grid;gap:13px;margin-top:8px}
+  ul.clean li{padding-left:28px;position:relative;font-size:15px;color:var(--dim)}
+  ul.clean li::before{content:"▸";position:absolute;left:0;color:var(--amber);font-size:14px;top:2px}
+  ul.clean li b{color:var(--ink)}
+
+  /* stat band */
+  .band{background:linear-gradient(135deg,rgba(255,180,84,.06),rgba(90,178,255,.05));border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;text-align:center}
+  @media(max-width:720px){.stats{grid-template-columns:repeat(2,1fr);gap:32px}}
+  .stat .n{font-family:'Chakra Petch';font-weight:700;font-size:clamp(34px,5vw,52px);color:var(--amber);line-height:1}
+  .stat .l{font-size:12.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-top:8px}
+
+  /* loop steps */
+  .loop{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  @media(max-width:880px){.loop{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:460px){.loop{grid-template-columns:1fr}}
+  .lp{background:rgba(16,26,38,.6);border:1px solid var(--line);border-radius:14px;padding:22px}
+  .lp .k{font-family:'Chakra Petch';font-weight:700;font-size:13px;color:var(--amber);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .lp .k em{font-style:normal;width:26px;height:26px;border-radius:8px;background:rgba(255,180,84,.14);display:grid;place-items:center;font-size:14px}
+  .lp h4{font-family:'Chakra Petch';font-size:17px;margin-bottom:6px}
+  .lp p{font-size:13.5px}
+
+  .note{border-left:3px solid var(--amber);background:rgba(255,180,84,.06);border-radius:0 12px 12px 0;padding:14px 18px;font-size:14.5px;color:var(--dim)}
+  .note b{color:var(--amber)}
+
+  /* tag chips */
+  .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:18px}
+  .chip{display:inline-flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:13px;color:var(--dim)}
+  .chip b{color:var(--ink)}
+
+  /* quote */
+  .quote{max-width:820px;margin:0 auto;text-align:center}
+  .quote p{font-family:'Chakra Petch';font-size:clamp(20px,3vw,30px);color:var(--ink);line-height:1.35;font-weight:600}
+  .quote p .ac{color:var(--amber)}
+
+  /* final cta */
+  .final{
+    text-align:center;
+    background:
+      radial-gradient(800px 480px at 50% 0%, rgba(255,180,84,.14), transparent 62%);
+  }
+  .final h2{font-size:clamp(34px,6.5vw,76px)}
+
+  footer{padding:40px clamp(16px,5vw,56px);border-top:1px solid var(--line);color:var(--faint);font-size:13px;display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:center}
+  footer a{color:var(--blue);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+
+  /* reveal on scroll */
+  .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s cubic-bezier(.2,.8,.2,1),transform .7s cubic-bezier(.2,.8,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}.tower{animation:none}.strip .run{animation:none}}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand"><span class="dot"></span>POLIS <small>city builder</small></div>
+  <nav class="navlinks">
+    <a href="#depth">Depth</a>
+    <a href="#play">Play anywhere</a>
+    <a href="#replay">Replay</a>
+    <a href="#alive">Living world</a>
+    <a class="btn btn-primary sm" href="https://polis-game.com">Play free →</a>
+  </nav>
+</header>
+
+<!-- ===================== HERO ===================== -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">A free isometric city-builder</div>
+        <h1>Build a city<span class="l2">that's alive.</span></h1>
+        <p class="lead" style="margin-top:20px">POLIS is a deep, hand-tuned city-builder that runs in a single browser tab. Lay roads, zone neighborhoods, and watch homes, towers, traffic, and a whole economy assemble themselves — one tick at a time. No download. No account. No catch.</p>
+        <div class="badges">
+          <span class="badge">💸 <b class="g">Free</b>, forever</span>
+          <span class="badge">⚡ <b>Instant</b> — no install</span>
+          <span class="badge">✈ <b>No server</b> — runs on-device</span>
+          <span class="badge">📱 <b>Mobile-first</b></span>
+          <span class="badge">🙅 <b>No sign-up</b></span>
+        </div>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://polis-game.com">▶ Play now at polis-game.com</a>
+          <a class="btn btn-ghost" href="#depth">See how deep it goes</a>
+        </div>
+        <p class="cta-note">Opens straight into the game. Works on your phone, tablet, or laptop.</p>
+      </div>
+      <svg class="tower" viewBox="0 0 360 420" width="100%" aria-hidden="true">
+        <defs>
+          <radialGradient id="g" cx="0.6" cy="0.4" r="0.7">
+            <stop offset="0" stop-color="#e8b04a" stop-opacity=".25"/>
+            <stop offset="1" stop-color="#e8b04a" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect width="360" height="420" fill="url(#g)"/>
+        <polygon points="180,250 320,310 180,370 40,310" fill="#3f8f55"/>
+        <polygon points="180,310 320,310 180,370 40,310" fill="#000" fill-opacity=".22"/>
+        <polygon points="180,330 270,290 270,150 180,190" fill="#43568f"/>
+        <polygon points="180,330 90,290 90,150 180,190" fill="#5a6fae"/>
+        <polygon points="180,190 270,150 180,110 90,150" fill="#8b9fd6"/>
+        <polygon points="180,210 240,182 240,90 180,118" fill="#4a5f9d"/>
+        <polygon points="180,210 120,182 120,90 180,118" fill="#6278ba"/>
+        <polygon points="180,118 240,90 180,62 120,90" fill="#8b9fd6"/>
+        <rect x="120" y="56" width="120" height="13" fill="#e8b04a"/>
+        <line x1="180" y1="62" x2="180" y2="16" stroke="#e8b04a" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="180" cy="16" r="7" fill="#ffd23f"/>
+        <g fill="#ffe096" fill-opacity=".85">
+          <rect x="150" y="160" width="9" height="12"/><rect x="200" y="160" width="9" height="12"/>
+          <rect x="172" y="142" width="9" height="12"/>
+          <rect x="108" y="210" width="11" height="14"/><rect x="138" y="217" width="11" height="14"/>
+          <rect x="108" y="240" width="11" height="14"/><rect x="210" y="210" width="11" height="14"/>
+          <rect x="240" y="217" width="11" height="14"/><rect x="210" y="240" width="11" height="14"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== MARQUEE ===================== -->
+<div class="strip" aria-hidden="true">
+  <div class="run">
+    <span><b>Power.</b> Water. Road. Grow.</span>
+    <span>Procedural <b>3D-look</b> buildings</span>
+    <span>Live <b>generative</b> soundtrack</span>
+    <span>Day &amp; <b>night</b></span>
+    <span>Weather &amp; <b>seasons</b></span>
+    <span>Real <b>traffic</b></span>
+    <span>Natural <b>disasters</b></span>
+    <span>Million-citizen <b>megacities</b></span>
+    <span><b>Power.</b> Water. Road. Grow.</span>
+    <span>Procedural <b>3D-look</b> buildings</span>
+    <span>Live <b>generative</b> soundtrack</span>
+    <span>Day &amp; <b>night</b></span>
+    <span>Weather &amp; <b>seasons</b></span>
+    <span>Real <b>traffic</b></span>
+    <span>Natural <b>disasters</b></span>
+    <span>Million-citizen <b>megacities</b></span>
+  </div>
+</div>
+
+<!-- ===================== WHY YOU'LL LOVE IT ===================== -->
+<section id="why">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="eyebrow">Why sim fans love it</div>
+      <h2>It's not a toy. <span class="ac">It's a simulation.</span></h2>
+      <p class="lead">Every system you remember from the classics — RCI demand, land value, traffic, services, budgets, disasters — running honestly under the hood, with no shortcuts and no microtransactions.</p>
+    </div>
+    <div class="grid g3 reveal" style="margin-top:34px">
+      <div class="card"><div class="ic">🧠</div><h3>A real economy</h3><p>Population, jobs, commerce and industry chase each other through supply and demand. Raise taxes too high and growth stalls. Every number is connected.</p></div>
+      <div class="card"><div class="ic">🏙️</div><h3>Buildings that grow</h3><p>Zone a block and lots level up 1→7 on their own — then four mature lots merge into a tower that can climb to a skyscraper, highrise, and megatower.</p></div>
+      <div class="card"><div class="ic">🚗</div><h3>Traffic that bites</h3><p>Cars actually drive your roads. Gridlock chokes land value and growth — so you fight back with avenues, buses, and elevated rail.</p></div>
+      <div class="card"><div class="ic">⚡</div><h3>Networks to manage</h3><p>Roads carry power and water through the whole grid. Plan plants, pumps and reach, or watch unpowered blocks wither and downgrade.</p></div>
+      <div class="card"><div class="ic">🗺️</div><h3>See the invisible</h3><p>Flip overlays for traffic, density, land value, pollution, power, water, crime, education and health — and read your city like an X-ray.</p></div>
+      <div class="card"><div class="ic">🎚️</div><h3>Govern with trade-offs</h3><p>Funding sliders, ordinances, loans and tax rates. Recycling, curfews, festivals, tolls — every policy is a cost weighed against a payoff.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== NO FRICTION ===================== -->
+<section id="play" class="band">
+  <div class="wrap center reveal">
+    <div class="eyebrow c">Play anywhere, instantly</div>
+    <h2>Zero friction. <span class="ac">Pure city-building.</span></h2>
+    <p class="lead">No launcher, no patch day, no 40GB download, no login wall. Click a link and you're already mayor.</p>
+  </div>
+  <div class="wrap" style="margin-top:38px">
+    <div class="hl reveal">
+      <div class="item"><div class="big">📱</div><h4>Mobile-first</h4><p>Built for touch from the ground up — pinch to zoom, drag to paint, crisp on any screen.</p></div>
+      <div class="item"><div class="big">✈️</div><h4>Nothing phones home</h4><p>The whole game runs on your device with no server in the loop — once it's loaded, the simulation needs no connection.</p></div>
+      <div class="item"><div class="big">💾</div><h4>Saves on device</h4><p>Your cities live in your browser. Export a save code to carry a city anywhere.</p></div>
+      <div class="item"><div class="big">🆓</div><h4>Truly free</h4><p>No ads, no paywalls, no microtransactions, no account. The whole game, all of it.</p></div>
+    </div>
+    <div class="note reveal" style="margin-top:26px;max-width:860px;margin-left:auto;margin-right:auto"><b>Add to Home Screen</b> and POLIS installs like a native app — its own icon and full-screen, launching straight into the game.</div>
+  </div>
+</section>
+
+<!-- ===================== DEPTH ===================== -->
+<section id="depth">
+  <div class="wrap">
+    <div class="split">
+      <div class="reveal">
+        <div class="eyebrow">The depth is the point</div>
+        <h2>One simple loop. <span class="ac">Endless mastery.</span></h2>
+        <p class="lead">It's easy to learn — a friendly advisor tells new mayors exactly what's missing. But mastering land value, traffic flow, education and the budget? That's hundreds of hours.</p>
+        <ul class="clean">
+          <li><b>3 map sizes</b> — from a Cozy 32² town to a Boundless 128² megacity</li>
+          <li><b>Levels 1→7</b> per lot, then towers, skyscrapers &amp; megatowers</li>
+          <li><b>Land value</b> woven from pollution, traffic, parks, water &amp; crime</li>
+          <li><b>Education &amp; leisure</b> gate the densest, tallest tiers</li>
+          <li><b>12 milestone ranks</b> from settlement to <b>Ecumenopolis</b></li>
+          <li><b>Landmarks</b> unlock as you grow — City Hall to the Titan Tower</li>
+        </ul>
+      </div>
+      <div class="reveal">
+        <div class="loop">
+          <div class="lp"><div class="k"><em>1</em>Power</div><h4>Make energy</h4><p>Coal, solar, nuclear or fusion — each with its own reach and smog.</p></div>
+          <div class="lp"><div class="k"><em>2</em>Water</div><h4>Pump &amp; store</h4><p>Riverside pumps or water towers feed the grid through your roads.</p></div>
+          <div class="lp"><div class="k"><em>3</em>Road</div><h4>Lay the spine</h4><p>Roads carry cars, power and water out to every lot you'll zone.</p></div>
+          <div class="lp"><div class="k"><em>4</em>Grow</div><h4>Zone &amp; thrive</h4><p>Paint R, C, I, read the demand bars, and the city builds itself.</p></div>
+        </div>
+        <div class="note" style="margin-top:18px"><b>The whole loop —</b> Power. Water. Road. Grow. Lay the bones, zone along them, and a living city assembles itself.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== STAT BAND ===================== -->
+<section class="band">
+  <div class="wrap">
+    <div class="stats reveal">
+      <div class="stat"><div class="n">1M+</div><div class="l">citizens per city</div></div>
+      <div class="stat"><div class="n">12</div><div class="l">ranks to climb</div></div>
+      <div class="stat"><div class="n">6</div><div class="l">scenarios + sandbox</div></div>
+      <div class="stat"><div class="n">5</div><div class="l">difficulty modes</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== REPLAY ===================== -->
+<section id="replay">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="eyebrow">It keeps surprising you</div>
+      <h2>A new city <span class="ac">every time.</span></h2>
+      <p class="lead">Sandbox-build for the pure joy of it, or take on a hand-crafted challenge with a real goal and a clock ticking.</p>
+    </div>
+    <div class="grid g2 reveal" style="margin-top:34px">
+      <div class="card">
+        <div class="ic">🎯</div>
+        <h3>Scenarios with real stakes</h3>
+        <p style="margin-bottom:14px">Six authored challenges — rescue a city in crisis, then prove you can hold the line.</p>
+        <div class="chips">
+          <span class="chip">🌱 <b>First Steps</b></span>
+          <span class="chip">📉 <b>Housing Crash</b></span>
+          <span class="chip">⚡ <b>Blackout</b></span>
+          <span class="chip">🌋 <b>Aftershock</b></span>
+          <span class="chip">🌊 <b>Flood Plain</b></span>
+          <span class="chip">🪙 <b>Iron Budget</b></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ic">🔥</div>
+        <h3>Tune the challenge — or test your luck</h3>
+        <p style="margin-bottom:14px">Five difficulties from generous to merciless, plus disasters you can summon (or let the gods send).</p>
+        <div class="chips">
+          <span class="chip">🟢 <b>Easy</b></span>
+          <span class="chip">⚖️ <b>Normal</b></span>
+          <span class="chip">🔴 <b>Hard</b> · <b>Very Hard</b></span>
+          <span class="chip">☠️ <b>Kobayashi Maru</b></span>
+        </div>
+        <div class="chips">
+          <span class="chip">🌍 <b>Earthquake</b></span>
+          <span class="chip">🌀 <b>Typhoon</b></span>
+          <span class="chip">🌊 <b>Flood</b></span>
+        </div>
+      </div>
+    </div>
+    <div class="note reveal" style="margin-top:22px"><b>Endgame for completionists —</b> push a single city all the way to one million citizens and earn the crown: <b>Ecumenopolis</b>.</div>
+  </div>
+</section>
+
+<!-- ===================== QUOTE / VIBE ===================== -->
+<section class="band">
+  <div class="wrap quote reveal">
+    <p>Lay a road. Zone beside it. Add power and water — and watch the lights flick on as your first neighborhood <span class="ac">comes to life.</span></p>
+  </div>
+</section>
+
+<!-- ===================== LIVING WORLD ===================== -->
+<section id="alive">
+  <div class="wrap">
+    <div class="split">
+      <div class="reveal">
+        <div class="eyebrow">A world worth watching</div>
+        <h2>Hand-drawn, <span class="ac">never canned.</span></h2>
+        <p class="lead">Every building is procedurally drawn geometry — not stock sprites — so the skyline is genuinely yours. And the whole place breathes.</p>
+        <ul class="clean">
+          <li><b>Day &amp; night</b> — windows glow as dusk falls over the city</li>
+          <li><b>Weather &amp; seasons</b> roll across the map and recolor the world</li>
+          <li><b>Cars, pedestrians, trains &amp; planes</b> move through the streets and skies</li>
+          <li><b>Rotate &amp; zoom</b> the isometric view to frame your masterpiece</li>
+        </ul>
+      </div>
+      <div class="reveal">
+        <div class="card" style="margin-bottom:18px">
+          <div class="ic">🎵</div>
+          <h3>A soundtrack composed live</h3>
+          <p style="margin-bottom:14px">Nothing is pre-recorded — the music is generated in real time, and you pick the mood:</p>
+          <div class="chips">
+            <span class="chip">🎻 Classical</span>
+            <span class="chip">🌌 Ambient</span>
+            <span class="chip">📻 Lo-fi</span>
+            <span class="chip">👾 Chiptune</span>
+            <span class="chip">🌆 Synthwave</span>
+            <span class="chip">🎷 Jazz</span>
+          </div>
+        </div>
+        <div class="note"><b>Plus a living ambience —</b> tactile sound effects and a soundscape that shifts with your city, day, and weather.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FINAL CTA ===================== -->
+<section class="final">
+  <div class="wrap reveal">
+    <div class="eyebrow c">Your city is waiting</div>
+    <h2>Power. Water. <span class="ac">Road. Grow.</span></h2>
+    <p class="lead center" style="margin-bottom:30px">That's the whole loop. Open one tab and start building — free, instant, and entirely yours.</p>
+    <div class="cta-row" style="justify-content:center">
+      <a class="btn btn-primary" href="https://polis-game.com">▶ Play POLIS free</a>
+      <a class="btn btn-ghost" href="https://polis-game.com">Add to your home screen</a>
+    </div>
+    <p class="cta-note">polis-game.com · works on phone, tablet &amp; desktop · no account needed</p>
+  </div>
+</section>
+
+<footer>
+  <div class="brand"><span class="dot"></span>POLIS</div>
+  <div>An isometric city-builder, in your browser. · <a href="https://polis-game.com">polis-game.com</a></div>
+</footer>
+
+<script>
+  // gentle scroll reveal
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, {threshold: 0.15});
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>
