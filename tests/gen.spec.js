@@ -81,7 +81,7 @@ test('generator codes load into the game and stay stable', async ({ browser }) =
       const re = makeSave();
       return { pop0, jobs0, pop1, cap, use, wcap, wuse, devLots, devUnpowered, reLen: re.length, d0, d1, happy0, happy1, cong0, cong1, nPolice, nFire, nSchool, nHosp, nRoad, nAve, deadEnds };
     }, r);
-    report.push({ name: r.name, gen: { pop: r.pop, jobs: r.jobs, plants: r.plants }, dbg: r.dbg, game: out });
+    report.push({ name: r.name, cfg: r.cfg, gen: { pop: r.pop, jobs: r.jobs, plants: r.plants }, dbg: r.dbg, game: out });
   }
 
   console.log('\n===== GENERATED CITY VALIDATION =====');
@@ -90,7 +90,7 @@ test('generator codes load into the game and stay stable', async ({ browser }) =
     console.log(`\n${r.name}  gen.pop=${r.gen.pop}  game.pop(1tick)=${g.pop0}  pop(120ticks)=${g.pop1}  (${Math.round(100*g.pop1/g.pop0)}%)`);
     console.log(`  jobs gen=${r.gen.jobs} game=${g.jobs0} | power ${g.use}/${g.cap} | water ${g.wuse}/${g.wcap} | devLots=${g.devLots} unpowered=${g.devUnpowered}`);
     console.log(`  demand t0 r${g.d0.r} c${g.d0.c} i${g.d0.i} -> t1 r${g.d1.r} c${g.d1.c} i${g.d1.i} | happy ${g.happy0}->${g.happy1} | congested ${g.cong0}->${g.cong1}`);
-    const d=r.dbg; console.log(`  dbg R=${d.R} | svc police=${g.nPolice} fire=${g.nFire} school=${g.nSchool} health=${g.nHosp} | roads ${g.nRoad} av=${g.nAve} (${Math.round(100*g.nAve/(g.nRoad+g.nAve))}%) deadEnds=${g.deadEnds} | cong ${g.cong0}->${g.cong1} happy ${g.happy0}->${g.happy1}`);
+    const d=r.dbg; console.log(`  dbg R=${d.R} peak=${d.peak}px | svc police=${g.nPolice} fire=${g.nFire} school=${g.nSchool} health=${g.nHosp} | roads ${g.nRoad} av=${g.nAve} (${Math.round(100*g.nAve/(g.nRoad+g.nAve))}%) deadEnds=${g.deadEnds} | cong ${g.cong0}->${g.cong1} happy ${g.happy0}->${g.happy1}`);
   }
   console.log('=====================================\n');
 
@@ -112,6 +112,9 @@ test('generator codes load into the game and stay stable', async ({ browser }) =
     // it should ship near equilibrium, not bleed population over a season
     if (g.pop0 > 200) {
       expect(g.pop1, `${r.name} city is unstable (${g.pop0}->${g.pop1})`).toBeGreaterThan(g.pop0 * 0.78);
+    }
+    if (r.cfg.mtnPct >= 20 && r.cfg.mtnSteep >= 90) {
+      expect(r.dbg.peak, `${r.name} high steepness should create tall mountains`).toBeGreaterThan(190);
     }
   }
 });

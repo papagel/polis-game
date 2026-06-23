@@ -86,6 +86,7 @@
   .tool.poor .cost{color:var(--red)}
   #flyout{display:none;position:fixed;z-index:30;background:var(--panel);border:1px solid var(--amber);border-radius:10px;padding:6px;min-width:230px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
   #flyout .fhead{font-family:'Chakra Petch';font-size:10px;color:var(--dim);letter-spacing:.12em;padding:4px 8px}
+  #flyout .fdiv{height:1px;margin:5px 8px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.14),transparent)}
   #flyout button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;border-radius:8px;padding:7px 8px;color:var(--ink);cursor:pointer;text-align:left}
   #flyout button:hover{background:#22324a}
   #flyout button.cur{background:#2a3a26;outline:1px solid var(--green)}
@@ -967,10 +968,16 @@ const S = {
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 /* power saver: caps the frame rate (30fps running / ~12fps paused) and renders at a slightly
    lower pixel density — the simulation itself always runs at full fidelity */
-const PERF={ saver:true, spr:true, gnd:true, lod:true };   // spr: cache static building sprites; gnd: cache the flat ground layer; lod: cheap massing blocks (only the giant world, zoomed right out)
-const LOD_Z=0.20;   // ONLY on BOUNDLESS (G>110) zoomed nearly all the way out: buildings are a few px, so a block is imperceptible — and it's the only way a ~1M city surveys smoothly. Normal worlds never reach this (their min-zoom floor is higher), so they always keep full detail.
+const PERF={ saver:true, spr:true, gnd:true, snap:true };   // spr: cache static building sprites; gnd: cache the flat ground layer; snap: freeze the whole static scene into one re-projected blit during camera gestures (the win on big/heavy maps, where the per-frame tile walk dominates)
+const FAR_Z=0.20;   // ONLY on BOUNDLESS (G>110) zoomed nearly all the way out: full geometry is ~140 ms/frame, so instead of redrawing it live we snapshot the whole scene (full detail) once and re-project that blit for free. Normal worlds never reach this (their min-zoom floor is higher).
+const TIP_MINZ=0.32;   // below this the hover info card is suppressed: zoomed this far out buildings are tiny and the card would just blanket them while you survey
+const GND_HZ=0.6;   // gesture ground re-bakes at this fraction of the live zoom (i.e. MORE zoomed out), so each bake's headroom covers ~1/GND_HZ−1 of further zoom-out before another repaint. Lower = fewer repaints/smoother zoom-out, but softer (more-upscaled) ground mid-gesture until it settles.
 let GP=0;   // ground pass: 0=full (default/catalog), 1=flat ground only, 2=structures+agents only
 let gndCache=null, gndKey='', gndVer=0;   // screen-space cache of the flat ground; gndVer bumps on any map change
+let gndGeom='', gndBZ=0, gndBOx=0, gndBOy=0;   // bake's geometry-id + camera, so a pan/zoom can re-project the cache instead of repainting live
+let SCENE_SNAP=null, snapKey='', snapGeom='', snapBZ=0, snapBOx=0, snapBOy=0;   // full static scene (ground+buildings) frozen for camera gestures; same re-projection trick as the ground cache, one layer up
+const SNAP_BUDGET=22;   // ms. Above this measured frame cost, a camera gesture freezes the static scene and re-projects it (smooth but slightly soft until you let go); below it the gesture redraws live and stays crisp. So small/normal maps and zoomed-in play stay sharp while only genuinely heavy views fall back to the soft path.
+let RCOST=0, SNAP_HEAVY=false, snapUsed=false;   // EWMA of the live render cost → whether the scene is heavy enough to warrant the cache
 try{ if (localStorage.getItem('tlv_saver')==='0') PERF.saver=false; }catch(_){}
 const YEAR_DAYS=1080, MONTH_DAYS=YEAR_DAYS/12;   // the displayed calendar runs 3× slower than the old one,
                                                  // so each season lasts ~2.5 minutes at normal speed
@@ -1042,9 +1049,9 @@ const TOOLS = [
   { id:'road',     n:'Road',        c:10,  ic:'▦', col:'#5b6b7d', sub:[
       { id:'road',   n:'Road',     c:10, ic:'▦', col:'#5b6b7d', d:'carries cars, power & water' },
       { id:'avenue', n:'Avenue',   c:30, ic:'▣', col:'#7d8da0', d:'3× capacity · sidewalks' },
-      { id:'path',   n:'Footpath', c:5,  ic:'··', col:'#b0a070', d:'pedestrians only — no cars' },
+      { id:'path',   n:'Footpath', c:5,  ic:'··', col:'#b0a070', d:'pedestrians only — no cars', br:1 },
       { id:'busstop',n:'Bus stop', c:120, ic:'🚏', col:'#3aa6a0', d:'homes in 4 tiles drive 45% less' },
-      { id:'rail',   n:'Elevated rail', c:40, ic:'🚈', col:'#8a6fd1', d:'crosses roads & water on pylons' },
+      { id:'rail',   n:'Elevated rail', c:40, ic:'🚈', col:'#8a6fd1', d:'crosses roads & water on pylons', br:1 },
       { id:'rstation',n:'Rail station', c:450, ic:'🚉', col:'#8a6fd1', d:'homes in 6 tiles ride instead of drive' } ] },
   { id:'bulldoze', n:'Bulldoze',    c:5,   ic:'✕', col:'#a85b4b' },
   { g:'Zone' },
@@ -1054,7 +1061,7 @@ const TOOLS = [
   { g:'Utilities' },
   { id:'power',    n:'Coal plant',  c:1200,ic:'⚡', col:'#7a6a8c', cap:'400 MW', sub:[
       { id:'power',   n:'Coal plant',    c:1200, ic:'⚡', col:'#7a6a8c', d:'400 MW · reach 5 · heavy smog' },
-      { id:'solar',   n:'Solar farm',    c:900,  ic:'☀', col:'#d8a23a', d:'120 MW · reach 3 · clean' },
+      { id:'solar',   n:'Solar farm',    c:900,  ic:'☀', col:'#d8a23a', d:'120 MW · reach 3 · clean', br:1 },
       { id:'nuclear', n:'Nuclear plant', c:4500, ic:'☢', col:'#4aa86a', d:'2×2 campus · 1600 MW · reach 7 · costly upkeep' },
       { id:'fusion',  n:'Fusion plant',  c:16000,ic:'⚛', col:'#46c7d8', d:'2×2 campus · 4200 MW · reach 9 · near-clean · very costly' } ] },
   { id:'pump',     n:'Water pump',  c:350, ic:'◉', col:'#2e7fb8', sub:[
@@ -1082,17 +1089,17 @@ const TOOLS = [
       { id:'playground', n:'Playground',  c:110,  ic:'⛹', col:'#e0784a', d:'value +8 over 3 tiles' },
       { id:'plaza',      n:'Plaza',       c:160,  ic:'▢', col:'#c3c89a', d:'value +10 over 4 tiles' },
       { id:'garden',     n:'Garden',      c:140,  ic:'✿', col:'#67b86f', d:'value +13 over 4 tiles' },
-      { id:'pool',       n:'Public pool', c:320,  ic:'≈', col:'#3aa0c9', d:'a little resort · value +10 over 4 tiles' },
+      { id:'pool',       n:'Public pool', c:320,  ic:'≈', col:'#3aa0c9', d:'a little resort · value +10 over 4 tiles', br:1 },
       { id:'stadium',    n:'Stadium',     c:1100, ic:'◎', col:'#b86a8f', d:'2×2 grounds · value +12 over 6 tiles' },
       { id:'arena',      n:'Arena',       c:1400, ic:'◍', col:'#8f6ab8', d:'2×2 grounds · value +12 over 6 tiles · light show' },
       { id:'zoo',        n:'City Zoo',    c:2600, ic:'🦁', col:'#c79a5b', d:'3×3 grounds · home to dozens of animals · value +16 over 8 tiles' },
-      { id:'airport',    n:'Airport',     c:9000, ic:'✈', col:'#9ab8d8', d:'4×2 runway · rotatable · tourism income scales with population', lockAt:6 },
+      { id:'airport',    n:'Airport',     c:9000, ic:'✈', col:'#9ab8d8', d:'4×2 runway · rotatable · tourism income scales with population', lockAt:6, br:1 },
       { id:'port',       n:'Seaport',     c:1800, ic:'⚓', col:'#3a77b8', d:'2×2 waterfront dock · ships sail the river · value +9 over 5 tiles' } ] },
   { id:'cityhall', n:'City Hall', c:1500, ic:'⚖', col:'#c9b87a', sub:[
       { id:'church',   n:'Church',   c:700,  ic:'✝', col:'#e0d8c6', d:'a neighbourhood landmark with a steeple · value +12 over 6 tiles' },
       { id:'cityhall', n:'City Hall', c:1500, ic:'⚖', col:'#c9b87a', d:'value +14 over 6 tiles', lockAt:3 },
       { id:'monument', n:'Monument',  c:2500, ic:'▲', col:'#d8cfc0', d:'value +16 over 7 tiles', lockAt:5 },
-      { id:'botanic',  n:'Botanic Gardens', c:2200, ic:'✿', col:'#8fd6a8', d:'2×2 grounds · value +15 over 8 tiles', lockAt:6 },
+      { id:'botanic',  n:'Botanic Gardens', c:2200, ic:'✿', col:'#8fd6a8', d:'2×2 grounds · value +15 over 8 tiles', lockAt:6, br:1 },
       { id:'museum',   n:'Grand Museum',    c:3200, ic:'◤', col:'#cfd6df', d:'2×2 grounds · value +17 over 8 tiles', lockAt:7 },
       { id:'titan',    n:'Titan Tower',     c:20000, ic:'△', col:'#7fb6e8', d:'2×2 grounds · value +20 over 9 tiles · the skyline crown', lockAt:9 },
       { id:'spaceport',n:'Spaceport',       c:14000, ic:'🚀', col:'#cfd6df', d:'2×2 pad · towering launch gantry · value +18 over 8 tiles · fires rockets to orbit', lockAt:8 } ] },
@@ -1101,7 +1108,7 @@ const TOOLS = [
       { id:'tree',  n:'Plant trees',  c:8,  ic:'🌲', col:'#3e8d54', d:'woodland · lifts nearby land value · drag to paint' },
       { id:'water', n:'Dig lake',     c:40, ic:'≈',  col:'#2e7fb8', d:'carve open water · roads & rail bridge it · drag to paint' },
       { id:'grass', n:'Level ground', c:15, ic:'▱',  col:'#4f7a44', d:'fill water or clear trees back to open land · drag to paint' },
-      { id:'raise', n:'Raise land',   c:6,  ic:'⛰',  col:'#7a8a5a', d:'sculpt hills on open land — drag to raise the ground' },
+      { id:'raise', n:'Raise land',   c:6,  ic:'⛰',  col:'#7a8a5a', d:'sculpt hills on open land — drag to raise the ground', br:1 },
       { id:'lower', n:'Lower land',   c:6,  ic:'⤓',  col:'#6a7a8a', d:'sink the ground back down — drag to lower it' } ] },
   { g:'Other' },
   { id:'inspect',  n:'Inspect',     c:0,   ic:'?', col:'#a9b6c6' },
@@ -4012,6 +4019,7 @@ function faceDoor(f, side, u, col, tall=0.42){
   cx.beginPath(); cx.arc(k[0],k[1],Math.max(.5,.55*S.zoom),0,7); cx.fill();
 }
 function windows(f, rows, cols, lit){
+  if (f.H*0.46/rows < 1.1) return;   // a row is sub-pixel at this zoom → the panes can't be resolved, so skip the ~5 ops each (cuts the far-zoom snapshot/sprite bake; invisible, the massing stays full)
   for (const side of ['L','R']){
     const p0 = side==='L'?f.L:f.B, p1 = side==='L'?f.B:f.R;
     const hw=Math.min(0.30/cols, 0.13);
@@ -5501,16 +5509,6 @@ function drawTowerTile(c,x,y,sx,sy,night,now){
         cx.fillStyle='rgba(10,16,28,.75)';
         cx.font=`${Math.max(8,8.5*z)}px 'Chakra Petch'`; cx.textAlign='center';
         cx.fillText('L'+root.lv, f.cx, f.cy-f.H*0.5+3*z);
-      });
-      return;
-    }
-    if (PERF.lod && z<LOD_Z && G>110){
-      // giant world, zoomed right out: a single tall block for the 2×2 tower (skips sprite bake + full geometry)
-      queueStruct(true, h, ()=>{
-        const [vcx2,vcy2]=rotC(bx+1,by+1);
-        const [fsx,fsy]=toScreen(vcx2-.5,vcy2-.5);
-        const col = root.t==='res'?'#aab59a' : root.t==='com'?'#9fb0c4' : '#bcae8a';
-        lodMass(fsx, fsy, .8, .8, h, col, .9+root.vary*.18);
       });
       return;
     }
@@ -7617,13 +7615,6 @@ function drawZone(c,x,y,sx,sy,night,now){
     }
     return;
   }
-  if (PERF.lod && z<LOD_Z && G>110 && !S.flatten){
-    // giant world, zoomed right out: a single massing block instead of full (and, for com/ind, animated) geometry
-    const col = c.t==='res'?'#b6bf9f' : c.t==='com'?'#a6b3c5' : '#c2b58f';
-    const h = (8 + c.lv*8) * (c.bld>0 ? 0.45 : 1);
-    queueStruct(false, h, ()=> lodMass(sx, sy, .52, .48, h, col, .9+c.vary*.2));
-    return;
-  }
   const hf = c.bld>0 ? 0.22+0.78*(1-c.bld) : 1;   // construction: the building rises as it's built
   const pk=(n)=>Math.min(n-1,(c.vary*n)|0);
   const cyp=sy+TH/2*z;
@@ -7683,12 +7674,13 @@ function drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk){
         cx.fillStyle='#5d4a38'; cx.fillRect(sx+5*z, cyp-9*hf*z-9*z, 2.6*z, 6*z); // chimney
         windows(f,1,1,night);
         break; }
-      case 3: { // modern flat-roof house — main block beside a low garage wing, glazed living front
-        vol(sx,sy,-.20,.12,.16,.16,5*hf,'#d2ccc0',{roof:'#aaa294'});                 // garage wing, set forward
-        const f=vol(sx,sy,.10,-.04,.24,.22,11*hf,'#e9e2d4',{roof:'#3c4853'});         // main block under a dark flat roof
-        faceWin(f,1,3,night,(side)=>side==='R');                                      // bedroom windows on the side wall
-        storefront(f,'R',.12,.62,.40,night);                                          // big picture window into the living room
-        faceDoor(f,'R',.82,'#5a4634',.5);
+      case 3: { // modern flat-roof house — a level main block with a lower garage wing flush on its front-right corner
+        const f=vol(sx,sy,-.06,-.10,.24,.20,11*hf,'#e9e2d4',{roof:'#3c4853'});         // main block under a dark flat roof
+        faceWin(f,1,3,night,(side)=>side==='R');                                      // bedroom windows on the front-left wall
+        faceDoor(f,'R',.24,'#5a4634',.5);                                             // entrance on the open left part of the front-right wall
+        // garage tucked into the front-right: its right & back walls sit flush with the main block, so the pair reads as one L-shaped house
+        const g=vol(sx,sy,.10,.22,.12,.12,6*hf,'#d8d2c6',{roof:'#b4ac9e'});
+        storefront(g,'R',.16,.84,.40,night);                                          // glazed garage door facing the street
         break; }
       default: { // two-tone duplex
         const f=box(sx,sy,.58,10*hf,'#b8a8c4',{roof:'#5d5a72'});
@@ -7905,23 +7897,6 @@ function vol(sx,sy,ox,oy,ax,ay2,hp,col,opts={}){
   cx.beginPath(); cx.moveTo(L[0],L[1]); cx.lineTo(B[0],B[1]); cx.lineTo(R[0],R[1]); cx.stroke();
   if (opts.line){ cx.strokeStyle='rgba(20,30,45,.35)'; cx.lineWidth=1; cx.stroke(); }
   return {T,R,B,L,H,cx:cxp,cy:cyp};
-}
-/* far-zoom level-of-detail massing: one cheap extruded block standing in for a building's full
-   geometry (and, for com/ind, its per-frame animation) when it's only a few pixels on screen at
-   whole-map zoom. Two side faces + a roof — ~3 fills vs the dozens a real building costs, and no
-   shadow/windows/sprite-bake. Geometry mirrors vol() so it reads like the flatten stand-in. */
-function lodMass(sx,sy,ax,ay2,hp,col,vmul){   // col = HEX; vmul = per-building brightness jitter (≈0.9..1.1)
-  const z=S.zoom, v=vmul||1;
-  const cxp=sx, cyp=sy+TH/2*z, H=hp*z;
-  const xw=ax*TW/2*z, xh=ax*TH/2*z, yw=ay2*TW/2*z, yh=ay2*TH/2*z;
-  const T=[cxp+(yw-xw), cyp-(xh+yh)-H], R=[cxp+(xw+yw), cyp+(xh-yh)-H],
-        B=[cxp+(xw-yw), cyp+(xh+yh)-H], L=[cxp-(xw+yw), cyp+(yh-xh)-H];
-  cx.fillStyle=shade(col,.66*v);
-  cx.beginPath(); cx.moveTo(L[0],L[1]); cx.lineTo(B[0],B[1]); cx.lineTo(B[0],B[1]+H); cx.lineTo(L[0],L[1]+H); cx.closePath(); cx.fill();
-  cx.fillStyle=shade(col,.84*v);
-  cx.beginPath(); cx.moveTo(B[0],B[1]); cx.lineTo(R[0],R[1]); cx.lineTo(R[0],R[1]+H); cx.lineTo(B[0],B[1]+H); cx.closePath(); cx.fill();
-  cx.fillStyle=shade(col,1.06*v);
-  cx.beginPath(); cx.moveTo(T[0],T[1]); cx.lineTo(R[0],R[1]); cx.lineTo(B[0],B[1]); cx.lineTo(L[0],L[1]); cx.closePath(); cx.fill();
 }
 /* vertical cylinder (silos, tanks, kiosks) */
 function cyl(sx,sy,ox,oy,r,hp,col){
@@ -8717,42 +8692,50 @@ function render(now){
   // PASS 1 — flat ground. Drawn once into a screen-space offscreen and blitted each frame; rebaked
   // only when the camera, season, day/night, or the map (gndVer) changes. Rotations and pans/pinches
   // bypass the cache and draw straight to the canvas, so interaction never pays the bake+blit cost.
+  // Recomputes its own cull window from the LIVE S.zoom (not the outer z), so a "headroom" bake at a
+  // reduced zoom legitimately captures the wider slice of world that lands on the same screen rect.
   const paintGround = (ctx)=>{
     const sv=cx; cx=ctx; GP=1;
-    for (let s=sLo; s<=sHi; s++){
-      const vxA=Math.max(0, s-G+1, Math.ceil((s+dLo)/2)-1);
-      const vxB=Math.min(G-1, s,   Math.floor((s+dHi)/2)+1);
+    const z=S.zoom, th2=TH/2*z, tw2=TW/2*z;
+    const gsLo=Math.max(0, Math.floor((-200*z - S.oy)/th2));
+    const gsHi=Math.min(2*(G-1), Math.ceil((H + TH*2*z - S.oy)/th2));
+    const gdLo=(-TW*z - S.ox)/tw2, gdHi=(W + TW*z - S.ox)/tw2;
+    for (let s=gsLo; s<=gsHi; s++){
+      const vxA=Math.max(0, s-G+1, Math.ceil((s+gdLo)/2)-1);
+      const vxB=Math.min(G-1, s,   Math.floor((s+gdHi)/2)+1);
       for (let vx=vxA; vx<=vxB; vx++){
         const vy=s-vx;
         const [x,y]=v2g(vx,vy);
         const [px,py]=toScreen(vx,vy);
-        if (px<-TW*S.zoom||px>W+TW*S.zoom||py<-200*S.zoom||py>H+TH*2*S.zoom) continue;
+        if (px<-TW*z||px>W+TW*z||py<-200*z||py>H+TH*2*z) continue;
         drawCell(x,y,now);
         if (map[y][x].rail) drawRail(x,y);   // tracks are flat ground
       }
     }
     cx=sv;
   };
-  if (PERF.gnd){
-    if (ROTA || SPR_INTERACT){ paintGround(cx); }   // live during rotate/pan/pinch — no cache churn
-    else {
-      const key=S.ox+'|'+S.oy+'|'+S.zoom+'|'+S.rot+'|'+SEAS.name+'|'+(isNight()?1:0)+'|'+S.overlay+'|'+gndVer+'|'+cv.width+'x'+cv.height;
-      if (!gndCache || gndCache.width!==cv.width || gndCache.height!==cv.height){
-        gndCache=document.createElement('canvas'); gndCache.width=cv.width; gndCache.height=cv.height; gndKey='';
-      }
-      if (key!==gndKey){
-        const gc=gndCache.getContext('2d');
-        gc.setTransform(DPR,0,0,DPR,0,0); gc.clearRect(0,0,W,H);
-        paintGround(gc); gndKey=key;
-      }
-      cx.drawImage(gndCache, 0,0,cv.width,cv.height, 0,0,W,H);
-    }
-    GP=2;   // main loop below now runs the structure + agent pass
-  }
-  STRUCT_Q=[];   // collect each band's building superstructures, flushed (height-sorted) after its ground
-  for (let s=sLo; s<=sHi; s++){
-    const vxA=Math.max(0, s-G+1, Math.ceil((s+dLo)/2)-1);
-    const vxB=Math.min(G-1, s,   Math.floor((s+dHi)/2)+1);
+  // geometry-id shared by the ground cache and the full-scene snapshot: anything that decides the
+  // PIXELS, not just where they land. If it changes no camera transform can salvage a bake (rotation
+  // reorders tiles; season/night/overlay/map repaint them). Camera (ox/oy/zoom) is excluded — the affine
+  // re-projection handles that.
+  const geom=S.rot+'|'+SEAS.name+'|'+(isNight()?1:0)+'|'+S.overlay+'|'+gndVer+'|'+cv.width+'x'+cv.height;
+  // The far-zoom regime: on the BOUNDLESS world zoomed nearly all the way out, full geometry is ~140 ms/
+  // frame to redraw live. A one-off full-detail bake is ~220 ms and then re-projects for free, so when
+  // SETTLED there we snapshot full detail and blit it — the whole-map survey stays smooth and never blocky.
+  const farZoom = G>110 && S.zoom<FAR_Z && !S.flatten;
+  // Freeze the whole static scene into one offscreen and re-project it as a single blit, redrawing only
+  // the cheap agents live on top. Active during a camera gesture (pan/pinch/wheel — not a build drag,
+  // which mutates the map, nor a rotation, which is non-affine) ONLY when the live frame is too heavy to
+  // keep up (SNAP_HEAVY) — otherwise the gesture redraws live and stays crisp, so normal maps never go
+  // faint while panning. Always on when SETTLED in the far-zoom regime (a cached full-detail blit beats redrawing).
+  const snapMode = PERF.snap && !ROTA && !painting && !pend && (farZoom || (SPR_INTERACT && SNAP_HEAVY));
+  snapUsed = snapMode;
+  // one diagonal band's structures (buildings/props/elevated relief/rail/bus) into the current cx —
+  // shared by the live band loop and the snapshot bake so the two can never diverge. GP decides whether
+  // flat ground is folded in (GP=0) or assumed already laid (GP=2).
+  const drawStructBand=(s,dlo,dhi)=>{
+    const vxA=Math.max(0, s-G+1, Math.ceil((s+dlo)/2)-1);
+    const vxB=Math.min(G-1, s,   Math.floor((s+dhi)/2)+1);
     for (let vx=vxA; vx<=vxB; vx++){
       const vy=s-vx;
       const [x,y]=v2g(vx,vy);
@@ -8760,12 +8743,113 @@ function render(now){
       if (px<-TW*S.zoom||px>W+TW*S.zoom||py<-200*S.zoom||py>H+TH*2*S.zoom) continue;
       drawCell(x,y,now);
       if (map[y][x].bus) drawBusStop(px,py);
-      if (GP!==2 && map[y][x].rail) drawRail(x,y);   // GP===2: rail already drawn in pass 1
+      if (GP!==2 && map[y][x].rail) drawRail(x,y);   // GP===2: rail already drawn in the ground pass
     }
-    // band complete: ground is down → paint the deferred buildings tallest/2×2-first so shorter
-    // single-tile neighbours on this diagonal land on top, then the vehicles riding the same band
     if (STRUCT_Q.length){ STRUCT_Q.sort((a,b)=>b.k-a.k); for (const e of STRUCT_Q) e.fn(); STRUCT_Q.length=0; }
-    // flush every vehicle and pedestrian whose footprint ends on this diagonal
+  };
+  const coversSnap=()=>{
+    const k=S.zoom/snapBZ, tx=S.ox-snapBOx*k, ty=S.oy-snapBOy*k;
+    return tx<=0.5 && ty<=0.5 && tx+k*W>=W-0.5 && ty+k*H>=H-0.5;
+  };
+  // Bake sky-less ground+buildings into SCENE_SNAP — always real, full-detail buildings. Two modes:
+  //  · gesture (crisp=false): a REDUCED (headroom) zoom about the viewport centre — same trick the ground
+  //    cache uses, so a later pan/zoom-out blits into the margin instead of revealing empty tiles.
+  //  · settled (crisp=true): the EXACT camera (k=1, sharp). Costs one heavier bake, then re-projects for
+  //    free (and a later zoom-IN re-uses it directly, no re-bake) until the camera/scene actually moves.
+  // Agents are deliberately NOT baked; they stay live on top.
+  const bakeScene=(crisp)=>{
+    if (!SCENE_SNAP || SCENE_SNAP.width!==cv.width || SCENE_SNAP.height!==cv.height){
+      SCENE_SNAP=document.createElement('canvas'); SCENE_SNAP.width=cv.width; SCENE_SNAP.height=cv.height;
+    }
+    const oz=S.zoom, oox=S.ox, ooy=S.oy, bz=crisp?oz:oz*GND_HZ, r=bz/oz;
+    if (!crisp){ S.zoom=bz; S.ox=W/2-(W/2-oox)*r; S.oy=H/2-(H/2-ooy)*r; }
+    const sc=SCENE_SNAP.getContext('2d');
+    sc.setTransform(DPR,0,0,DPR,0,0); sc.clearRect(0,0,W,H);
+    const svCx=cx; cx=sc;
+    paintGround(sc);                                       // flat ground (paintGround sets GP=1)
+    GP=2; STRUCT_Q=[];                                     // tall structures + elevated relief, tallest-first per band
+    const th2=TH/2*S.zoom;
+    const sl=Math.max(0, Math.floor((-200*S.zoom - S.oy)/th2));
+    const sh=Math.min(2*(G-1), Math.ceil((H + TH*2*S.zoom - S.oy)/th2));
+    const dl=(-TW*S.zoom - S.ox)/(TW/2*S.zoom), dh=(W + TW*S.zoom - S.ox)/(TW/2*S.zoom);
+    for (let s=sl; s<=sh; s++) drawStructBand(s, dl, dh);
+    STRUCT_Q=null; cx=svCx;
+    snapKey = crisp ? ('S'+oox+'|'+ooy+'|'+oz+'|'+geom) : 'snap';
+    snapGeom=geom; snapBZ=bz; snapBOx=S.ox; snapBOy=S.oy;
+    S.zoom=oz; S.ox=oox; S.oy=ooy;
+  };
+  if (snapMode){
+    if (SPR_INTERACT){
+      // mid-gesture: re-project whatever snapshot we already have — the crisp settled one OR a prior gesture
+      // bake — as long as it still covers the screen. So zooming IN from a settled far view shows the REAL
+      // (softening) city for free, never blocks. Only re-bake (with headroom) when coverage is actually lost.
+      if (!(snapGeom===geom && snapBZ>0 && coversSnap())) bakeScene(false);
+      const k=S.zoom/snapBZ;
+      cx.save();
+      cx.transform(k,0,0,k, S.ox-snapBOx*k, S.oy-snapBOy*k);
+      cx.drawImage(SCENE_SNAP, 0,0,cv.width,cv.height, 0,0,W,H);
+      cx.restore();
+    } else {
+      // settled far-zoom: one crisp full-detail bake keyed to the exact camera, then a 1:1 blit each frame
+      const key='S'+S.ox+'|'+S.oy+'|'+S.zoom+'|'+geom;
+      if (snapKey!==key) bakeScene(true);
+      cx.drawImage(SCENE_SNAP, 0,0,cv.width,cv.height, 0,0,W,H);
+    }
+    GP=0;
+  } else if (PERF.gnd){
+    if (!gndCache || gndCache.width!==cv.width || gndCache.height!==cv.height){
+      gndCache=document.createElement('canvas'); gndCache.width=cv.width; gndCache.height=cv.height; gndKey=''; gndGeom='';
+    }
+    // During a pan/pinch/zoom we DON'T repaint the whole-map ground live (that live repaint is the
+    // ~2× cost that makes a big city stutter the instant you grab it). toScreen is a pure scale+translate,
+    // so the last good bake re-projects through the camera delta with one affine blit: a point baked at
+    // (gndBOx,gndBOy,gndBZ) lands at k=z/bz, t=o−bo·k. The ground softens mid-gesture and re-sharpens on
+    // settle — exactly how the building sprites already scale, so the two never drift apart and flicker.
+    const blitCache=()=>{
+      const k=S.zoom/gndBZ;
+      cx.save();
+      cx.transform(k,0,0,k, S.ox-gndBOx*k, S.oy-gndBOy*k);
+      cx.drawImage(gndCache, 0,0,cv.width,cv.height, 0,0,W,H);
+      cx.restore();
+    };
+    const covers=()=>{
+      const k=S.zoom/gndBZ, tx=S.ox-gndBOx*k, ty=S.oy-gndBOy*k;
+      return tx<=0.5 && ty<=0.5 && tx+k*W>=W-0.5 && ty+k*H>=H-0.5;
+    };
+    if (ROTA){
+      paintGround(cx);   // rotating is non-affine vs the cache (tiles reorder) — must draw live
+    } else if (SPR_INTERACT){
+      // light enough to keep up: repaint the ground crisply each frame (no cache upscale = no faintness).
+      // Only when heavy do we re-project the last bake, re-baking at a reduced "headroom" zoom on a miss.
+      if (!SNAP_HEAVY){ paintGround(cx); }
+      else if (gndKey && gndGeom===geom && gndBZ>0 && covers()){ blitCache(); }
+      else {
+        const oz=S.zoom, oox=S.ox, ooy=S.oy, bz=oz*GND_HZ, r=bz/oz;
+        S.zoom=bz; S.ox=W/2-(W/2-oox)*r; S.oy=H/2-(H/2-ooy)*r;
+        const gc=gndCache.getContext('2d');
+        gc.setTransform(DPR,0,0,DPR,0,0); gc.clearRect(0,0,W,H);
+        paintGround(gc);
+        gndKey='interact'; gndGeom=geom; gndBZ=bz; gndBOx=S.ox; gndBOy=S.oy;
+        S.zoom=oz; S.ox=oox; S.oy=ooy;
+        blitCache();
+      }
+    } else {
+      const key=S.ox+'|'+S.oy+'|'+S.zoom+'|'+geom;   // settled: bake crisp at the exact camera (k=1)
+      if (key!==gndKey){
+        const gc=gndCache.getContext('2d');
+        gc.setTransform(DPR,0,0,DPR,0,0); gc.clearRect(0,0,W,H);
+        paintGround(gc); gndKey=key; gndGeom=geom; gndBZ=S.zoom; gndBOx=S.ox; gndBOy=S.oy;
+      }
+      cx.drawImage(gndCache, 0,0,cv.width,cv.height, 0,0,W,H);
+    }
+    GP=2;   // main loop below now runs the structure + agent pass
+  }
+  STRUCT_Q = snapMode ? null : [];   // snapMode: structures already in the frozen scene blit — only agents stay live
+  for (let s=sLo; s<=sHi; s++){
+    // ground is down (cache/snapshot) → paint this band's deferred buildings tallest/2×2-first so shorter
+    // single-tile neighbours land on top. Skipped entirely under snapMode (the whole static scene is frozen).
+    if (!snapMode) drawStructBand(s, dLo, dHi);
+    // flush every vehicle / pedestrian / train whose footprint ends on this diagonal (always live)
     const cb=carBands.get(s);
     if (cb) for (const e of cb) drawVehicle(e.car, e.fx, e.fy);
     const pbd=pedBands.get(s);
@@ -9388,7 +9472,7 @@ cv.addEventListener('pointerdown', e=>{
   const [gx,gy]= S.tool==='inspect' ? pickTile(px,py) : toGrid(px,py);
   if (PAINTABLE[S.tool]){
     if (!inB(gx,gy)) return;
-    tipEl.style.display='none';
+    hideTip();
     statTip.style.display='none';
     pend={a:[gx,gy], b:[gx,gy]};   // nothing is built yet — preview only
     painting=true;
@@ -9437,14 +9521,19 @@ cv.addEventListener('pointermove', e=>{
   const [tx,ty]=pickTile(px,py);                                 // height-aware: point at the structure you see, not the lot behind it
   if (S.tool==='inspect'){ showTip(tx,ty,false); return; }       // inspect is immediate
   if (moved){
-    tipEl.style.display='none';
-    clearTimeout(tipTimer);
+    hideTip();
     tipTimer=setTimeout(()=>{                                    // others show after a dwell
       if (S.hover && S.hover[0]===gx && S.hover[1]===gy && !painting && !pend) showTip(tx,ty,false,true);
-    }, 850);
+    }, TIP_DWELL_MS);
   }
 });
 let tipTimer=0;
+const TIP_DWELL_MS=2000;
+function hideTip(){
+  clearTimeout(tipTimer);
+  tipEl.style.display='none';
+  commuteViz=null;
+}
 cv.addEventListener('pointerup', e=>{
   if (pend) commitPending();
   else if (tapPend && !pinch && touches.size<2) placeSingle(tapPend[0], tapPend[1]);  // a real tap, not the start of a pinch
@@ -9459,17 +9548,15 @@ cv.addEventListener('pointerup', e=>{
   dragging=false; painting=false; lastP=null;
 });
 cv.addEventListener('pointercancel', ()=>{ tapPend=null; cancelPending(); });
-cv.addEventListener('pointerleave', ()=>{ S.hover=null; tipEl.style.display='none'; commuteViz=null; dirty=true; });
+cv.addEventListener('pointerleave', ()=>{ S.hover=null; hideTip(); dirty=true; });
 // zooming shifts the world under a stationary cursor, so the tile/structure under the pointer
-// changes without a pointermove — re-pick and keep the hover state + tooltip in sync
+// changes without a pointermove — re-pick hover state but dismiss any open dwell card
 function syncHover(px,py){
   const [gx,gy]=toGrid(px,py);
-  if (!inB(gx,gy)){ S.hover=null; tipEl.style.display='none'; return; }
+  hideTip();
+  if (!inB(gx,gy)){ S.hover=null; return; }
   S.hover=[gx,gy];
   if (S.overlay && S.overlay!=='none') dirty=true;
-  const [tx,ty]=pickTile(px,py);
-  if (S.tool==='inspect') showTip(tx,ty,false);                  // inspect tip is live: follow the zoom
-  else if (tipEl.style.display!=='none') showTip(tx,ty,false,true);   // keep an open dwell-tip pointing at the right thing
 }
 cv.addEventListener('wheel', e=>{
   e.preventDefault();
@@ -9487,6 +9574,7 @@ cv.addEventListener('dblclick', e=>{
 function zoomAt(px,py,f){
   const minZ=Math.min(.22, 21/G);   // larger worlds (BOUNDLESS+) may zoom out further so the whole map still fits
   const nz=clamp(S.zoom*f, minZ, 4.8);
+  hideTip();
   S.ox = px - (px-S.ox)*(nz/S.zoom);
   S.oy = py - (py-S.oy)*(nz/S.zoom);
   S.zoom=nz;
@@ -9716,6 +9804,7 @@ function feedersThrough(tx,ty, field, isOrigin, isDest, lim){
 }
 function showTip(x,y,force,light){
   if (!inB(x,y)){ tipEl.style.display='none'; return; }
+  if (S.zoom<TIP_MINZ){ tipEl.style.display='none'; commuteViz=null; return; }   // surveying zoomed right out: buildings are tiny, so don't blanket them with the info card
   let c=map[y][x];
   if (c.grp){ c = map[c.grp[1]][c.grp[0]]; }   // tower footprint resolves to its root
   if (light && !ZONE[c.t] && !SVC[c.t] && !ROADTYPE[c.t] && c.t!=='rstation'){ tipEl.style.display='none'; commuteViz=null; return; }
@@ -10971,10 +11060,11 @@ let flyFor=null;
 function hideFly(){ flyEl.style.display='none'; flyFor=null; }
 function showFly(btn, t){
   flyFor=t.id;
-  flyEl.innerHTML = `<div class="fhead">OPTIONS</div>` + t.sub.map(o=>{
+  flyEl.innerHTML = `<div class="fhead">OPTIONS</div>` + t.sub.map((o,i)=>{
     const locked=isToolLocked(o.id);
     const sub = locked ? `<i class="lockmsg">${lockNote(o)}</i>` : `<i>${o.d||''}</i>`;
-    return `<button data-id="${o.id}" class="${locked?'locked ':''}${S.tool===o.id?'cur':''}"><span class="ic" style="color:${o.col}">${tintI(ICONS[o.id])||o.ic}</span>
+    const div = (o.br && i>0) ? `<div class="fdiv"></div>` : '';   // thematic break between item groups
+    return `${div}<button data-id="${o.id}" class="${locked?'locked ':''}${S.tool===o.id?'cur':''}"><span class="ic" style="color:${o.col}">${tintI(ICONS[o.id])||o.ic}</span>
      <span class="ftxt"><b>${o.n}</b>${sub}</span><span class="cost">§${o.c}</span></button>`;
   }).join('');
   const r=btn.getBoundingClientRect();
@@ -11817,8 +11907,13 @@ function loop(now){
   // Running (speed>0) and interaction always fall through, so live play is untouched.
   if (S.started && S.speed===0 && !interacting && !dirty && !DIS && !ROTA
       && WX.rain<0.03 && !smoke.length && !S.hover && !commuteViz) return;
+  const rt0=performance.now();
   render(now);
   dirty=false;
+  // measure only LIVE frames (a snapshot re-projection is a near-free blit, not representative of draw cost);
+  // the EWMA then decides whether the NEXT gesture frame can afford to stay crisp or must use the cache.
+  if (!snapUsed){ const rt=performance.now()-rt0; RCOST = RCOST ? RCOST*0.82+rt*0.18 : rt; }
+  SNAP_HEAVY = RCOST > SNAP_BUDGET;
 }
 requestAnimationFrame(loop);
 
