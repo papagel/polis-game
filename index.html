@@ -4274,24 +4274,33 @@ function drawCell(x,y,now){
         cx.moveTo(P[0]+px*rr,P[1]+py*rr); cx.lineTo(Q[0]+px*rr,Q[1]+py*rr);
         cx.moveTo(P[0]-px*rr,P[1]-py*rr); cx.lineTo(Q[0]-px*rr,Q[1]-py*rr); cx.stroke();
       };
-      if (cons.length===2){
-        // straight-through or a turn: one continuous deck A->centre->B across the platform
-        const A=cons[0], B=cons[1];
-        const dO=railLane(A,Crail,B,W,1), dI=railLane(A,Crail,B,W,-1);
+      // the through/turn deck is one bezier A->centre->B. drawDeckArc draws the slice of it
+      // for t in [s,e] (s,e in 0..1), so we can repaint just the OUTER ends on top of the
+      // house later WITHOUT a straight stub jogging off the curve at the platform edge.
+      const subQuad=(P0,P1,P2,s,e)=>{   // control pts of the quadratic restricted to t in [s,e]
+        const Q=t=>[(1-t)*(1-t)*P0[0]+2*(1-t)*t*P1[0]+t*t*P2[0],(1-t)*(1-t)*P0[1]+2*(1-t)*t*P1[1]+t*t*P2[1]];
+        const D=t=>[2*(1-t)*(P1[0]-P0[0])+2*t*(P2[0]-P1[0]),2*(1-t)*(P1[1]-P0[1])+2*t*(P2[1]-P1[1])];
+        const a=Q(s), b=Q(e), d=D(s);
+        return {a, c:[a[0]+d[0]*(e-s)/2, a[1]+d[1]*(e-s)/2], b};
+      };
+      const drawDeckArc=(A,B,s,e)=>{
+        const oA=railLane(A,Crail,B,W,1), iA=railLane(A,Crail,B,W,-1);
+        const so=subQuad(oA.PA,oA.C,oA.PB,s,e), si=subQuad(iA.PA,iA.C,iA.PB,s,e);
         cx.fillStyle=RAIL_DECK;
         cx.beginPath();
-        cx.moveTo(dO.PA[0],dO.PA[1]); cx.quadraticCurveTo(dO.C[0],dO.C[1],dO.PB[0],dO.PB[1]);
-        cx.lineTo(dI.PB[0],dI.PB[1]); cx.quadraticCurveTo(dI.C[0],dI.C[1],dI.PA[0],dI.PA[1]);
+        cx.moveTo(so.a[0],so.a[1]); cx.quadraticCurveTo(so.c[0],so.c[1],so.b[0],so.b[1]);
+        cx.lineTo(si.b[0],si.b[1]); cx.quadraticCurveTo(si.c[0],si.c[1],si.a[0],si.a[1]);
         cx.closePath(); cx.fill();
         cx.strokeStyle=RAIL_EDGE; cx.lineWidth=Math.max(.7,.9*z);
         cx.beginPath();
-        cx.moveTo(dO.PA[0],dO.PA[1]); cx.quadraticCurveTo(dO.C[0],dO.C[1],dO.PB[0],dO.PB[1]);
-        cx.moveTo(dI.PA[0],dI.PA[1]); cx.quadraticCurveTo(dI.C[0],dI.C[1],dI.PB[0],dI.PB[1]); cx.stroke();
+        cx.moveTo(so.a[0],so.a[1]); cx.quadraticCurveTo(so.c[0],so.c[1],so.b[0],so.b[1]);
+        cx.moveTo(si.a[0],si.a[1]); cx.quadraticCurveTo(si.c[0],si.c[1],si.b[0],si.b[1]); cx.stroke();
         cx.strokeStyle=RAIL_RAILC; cx.lineWidth=Math.max(.6,.8*z);
-        for (const s of [1,-1]){
-          const r=railLane(A,Crail,B,rr,s);
-          cx.beginPath(); cx.moveTo(r.PA[0],r.PA[1]); cx.quadraticCurveTo(r.C[0],r.C[1],r.PB[0],r.PB[1]); cx.stroke();
-        }
+        for (const sg of [1,-1]){ const r=railLane(A,Crail,B,rr,sg), sr=subQuad(r.PA,r.C,r.PB,s,e);
+          cx.beginPath(); cx.moveTo(sr.a[0],sr.a[1]); cx.quadraticCurveTo(sr.c[0],sr.c[1],sr.b[0],sr.b[1]); cx.stroke(); }
+      };
+      if (cons.length===2){
+        drawDeckArc(cons[0], cons[1], 0, 1);   // one continuous deck across the platform
       } else {
         for (const M of cons) trackStrip(Crail,M);
       }
@@ -4335,9 +4344,16 @@ function drawCell(x,y,now){
       // line reads as severed. Repainting just the outer ring (from beyond the roof eave out to
       // the shared tile edge) makes the track visibly emerge from under the canopy toward every
       // viaduct, on all four sides, without overpainting the hall walls.
-      for (const M of cons){
-        const P=[Crail[0]+(M[0]-Crail[0])*0.62, Crail[1]+(M[1]-Crail[1])*0.62];
-        trackStrip(P,M);
+      if (cons.length===2){
+        // repaint the two OUTER ends of the SAME deck bezier (not straight stubs): on a turn a
+        // straight stub jogs off the curve at the platform edge and breaks the upper rail line.
+        drawDeckArc(cons[0], cons[1], 0, 0.42);
+        drawDeckArc(cons[0], cons[1], 0.58, 1);
+      } else {
+        for (const M of cons){
+          const P=[Crail[0]+(M[0]-Crail[0])*0.62, Crail[1]+(M[1]-Crail[1])*0.62];
+          trackStrip(P,M);
+        }
       }
       break;
     }
@@ -4628,21 +4644,27 @@ function drawCell(x,y,now){
       cx.bezierCurveTo(tk.cx-2.2*z, tk.cy-tk.H*.58+3*z, tk.cx-2.6*z, tk.cy-tk.H*.58, tk.cx, tk.cy-tk.H*.58-3*z);
       cx.closePath(); cx.fill();
       break; }
-    case 'port': { // quay apron per tile, full wharf anchored on the view-bottom tile
-      diamond(sx,sy); cx.fillStyle=shade('#7d8893',.96+c.vary*.05); cx.fill();
-      cx.strokeStyle='rgba(38,54,64,.30)'; cx.lineWidth=1; diamond(sx,sy,.98); cx.stroke();
+    case 'port': { // quay apron per tile; the tall sheds are split onto the landward tile so a building standing in front of the dock occludes them correctly
+      diamond(sx,sy); cx.fillStyle=shade('#828d98',.98+c.vary*.03); cx.fill();   // concrete apron — uniform slab colour, no tile joints (replaces the old unified deck poly)
       if (!c.grp) break;
       const r=grpRoot(c), [abx,aby]=c.grp, fw=r.fw||2, fh=r.fh||2;
-      let lastX=-1,lastY=-1,best=-1;
-      for (const [qx,qy] of grpCells(c)){
-        const [vqx,vqy]=g2v(qx,qy);
-        if (vqx+vqy>best){ best=vqx+vqy; lastX=qx; lastY=qy; }
+      const sd=portSeaward(abx,aby,fw,fh);                                        // grid dir toward the water
+      let avx,avy,pvx,pvy;                                                        // replicate drawPort's water-facing frame so we can tell landward cells from seaward ones
+      if (sd[0]||sd[1]){ [pvx,pvy]=rotD(sd[0],sd[1]); avx=pvy; avy=-pvx; }
+      else { const long=fw>=fh; [avx,avy]=rotD(long?1:0,long?0:1); pvx=-avy; pvy=avx; }
+      let svx=0,svy=0,nC=0; const pcells=[...grpCells(c)];
+      for (const [qx,qy] of pcells){ const [vx,vy]=g2v(qx,qy); svx+=vx; svy+=vy; nC++; }
+      const cvx=svx/nC, cvy=svy/nC;                                              // block centre in view-tile space
+      let frontX=-1,frontY=-1,fb=-9, landX=-1,landY=-1,lb=-9;
+      for (const [qx,qy] of pcells){ const [vx,vy]=g2v(qx,qy);
+        if (vx+vy>fb){ fb=vx+vy; frontX=qx; frontY=qy; }                          // seaward-front tile → yard, quay + crane
+        if ((vx-cvx)*(-pvx)+(vy-cvy)*(-pvy) > 0.01 && vx+vy>lb){ lb=vx+vy; landX=qx; landY=qy; }   // landward-front tile (−pv side) → the sheds
       }
-      if (x===lastX && y===lastY){
-        const [vcx,vcy]=rotC(abx+fw/2, aby+fh/2);
-        const [amx,amy]=toScreen(vcx-.5,vcy-.5);
-        drawPort(amx,amy,z,night,now, fw,fh, r.pw);
-      }
+      if (landX<0){ landX=frontX; landY=frontY; }                                // degenerate footprint: keep everything on the front tile
+      const [vcx,vcy]=rotC(abx+fw/2, aby+fh/2);
+      const [amx,amy]=toScreen(vcx-.5,vcy-.5);
+      if (x===landX  && y===landY ) drawPort(amx,amy,z,night,now, fw,fh, r.pw, 'land', sd);
+      if (x===frontX && y===frontY) drawPort(amx,amy,z,night,now, fw,fh, r.pw, 'sea', sd);
       break;
     }
     case 'tower': {
@@ -6890,11 +6912,19 @@ function drawFusionCampus(mx,my,z,night,now){
   for (let k=0;k<3;k++){ const ph=((now/1300)+k*0.34)%1; E(tcx+Math.sin((ph+k)*5)*3*u, tbase-9*u-(ph*10)*u, (3+ph*4)*u, (1.6+ph*2.4)*u, 'rgba(225,245,250,'+(0.16*(1-ph)).toFixed(3)+')'); }
   if (night){ cx.fillStyle='rgba(120,235,255,'+(0.12+0.1*pulse).toFixed(3)+')'; cx.beginPath(); cx.ellipse(tcx, tbase-4*u, 22*u, 12*u, 0,0,7); cx.fill(); }
 }
-function drawPort(mx,my,u,night,now, fw=2, fh=2, on=true){
+function drawPort(mx,my,u,night,now, fw=2, fh=2, on=true, phase='all', seaward=null){
   const z=S.zoom;
-  const long = fw>=fh;
-  const [avx,avy]=rotD(long?1:0, long?0:1);             // view-space long axis
-  const [pvx,pvy]=[-avy,avx];
+  // Orient the dock to the WORLD, not the camera: the quay (+pv) faces the real water,
+  // the sheds (−pv) sit on land. Without this the building side flips to the water in
+  // half the rotations — sheds float over the river and the quay covers the land.
+  // Falls back to a camera-aligned frame only when the seaward direction is unknown.
+  let avx,avy,pvx,pvy;
+  if (seaward && (seaward[0]||seaward[1])){
+    [pvx,pvy]=rotD(seaward[0],seaward[1]);              // seaward grid dir → +pv (quay side)
+    avx=pvy; avy=-pvx;                                  // quay runs ⟂ to the seaward direction
+  } else {
+    const long=fw>=fh; [avx,avy]=rotD(long?1:0,long?0:1); pvx=-avy; pvy=avx;
+  }
   const P=(du,dv)=>{                                    // footprint-plane offset → screen
     const dX=avx*du+pvx*dv, dY=avy*du+pvy*dv;
     return [mx+(dX-dY)*(TW/2)*z, my+TH/2*z+(dX+dY)*(TH/2)*z];
@@ -6903,8 +6933,37 @@ function drawPort(mx,my,u,night,now, fw=2, fh=2, on=true){
     pts.forEach((q,k)=>{ const [qx,qy]=P(q[0],q[1]); k?cx.lineTo(qx,qy):cx.moveTo(qx,qy); });
     cx.closePath(); cx.fill(); };
   const L=Math.max(fw,fh)/2, W2=Math.min(fw,fh)/2;
-  // unified concrete deck across the whole footprint
-  poly([[-L,-W2],[L,-W2],[L,W2],[-L,W2]], '#828d98');
+  // vol() re-cast into the port's rotated footprint frame: anchor where P() would, and
+  // swap the box's long/short extents to follow avx/pvx so every box stays square to the
+  // apron in all four rotations. rise = px the box is lifted for stacking.
+  const volP=(du,dv,hu,hv,hp,col,opts,rise=0)=>{
+    const ox=avx*du+pvx*dv, oy=avy*du+pvy*dv;
+    const ax=avx!==0?hu:hv, ay=avx!==0?hv:hu;
+    return vol(mx, my-rise, ox, oy, ax, ay, hp, col, opts);
+  };
+  const depthOf=(du,dv)=> (avx+avy)*du + (pvx+pvy)*dv;                       // bigger = nearer the camera → painted later
+  const drawSorted=(items)=> items.sort((a,b)=>a.d-b.d).forEach(it=>it.f()); // back-to-front so overlapping volumes layer right
+
+  // The dock is painted in two passes keyed to different tiles of the 2×2 block, so
+  // depth sorts correctly against neighbours: the apron + tall landward sheds at the
+  // landward tile (a building in front of the dock then occludes them), the seaward
+  // yard/quay/crane at the front tile (so they sit over the water).
+  const doLand = phase==='all'||phase==='land';
+  const doSea  = phase==='all'||phase==='sea';
+
+  if (doLand){
+    poly([[-L,-W2],[L,-W2],[L,W2],[-L,W2]], '#828d98');                        // concrete apron, laid first so the sheds read as grounded (matches the per-tile diamond colour → no seam)
+    drawSorted([
+      { d:depthOf(-L*0.34,-W2+0.36), f:()=>{                                   // main warehouse along the landward edge
+          const f=volP(-L*0.34,-W2+0.36, .66,.30, 12, '#b5683a', {roof:'#d8c0a0',line:true});
+          cx.fillStyle = night&&on ? 'rgba(255,236,170,.7)' : 'rgba(150,172,194,.5)';   // big roller-door / glazing on the camera face
+          cx.beginPath(); cx.moveTo(f.L[0]+1.5*z,f.L[1]+f.H*0.42); cx.lineTo(f.B[0],f.B[1]+f.H*0.42); cx.lineTo(f.B[0],f.B[1]+f.H); cx.lineTo(f.L[0]+1.5*z,f.L[1]+f.H); cx.closePath(); cx.fill();
+        } },
+      { d:depthOf(L*0.5,-W2+0.32), f:()=> volP(L*0.5,-W2+0.32, .34,.22, 8, '#c98a4a', {roof:'#e0c8a0',line:true}) },   // smaller cargo shed
+    ]);
+  }
+
+  if (!doSea) return;
   // timber wharf running the seaward long edge, with plank seams + a kerb shadow
   poly([[-L,W2-0.34],[L,W2-0.34],[L,W2],[-L,W2]], '#6f5a44');
   cx.strokeStyle='rgba(38,26,16,.40)'; cx.lineWidth=Math.max(.6,.8*z);
@@ -6912,24 +6971,26 @@ function drawPort(mx,my,u,night,now, fw=2, fh=2, on=true){
   // mooring bollards along the quay edge
   cx.fillStyle='#2c3540';
   for (const du of [-L*0.72,-L*0.12,L*0.5]){ const [bx,by]=P(du, W2-0.12); cx.beginPath(); cx.ellipse(bx,by,1.5*z,1.05*z,0,0,7); cx.fill(); }
-  // main warehouse along the landward edge
-  { const [wx,wy]=P(-L*0.34,-W2+0.36);
-    const f=vol(wx,wy-TH/2*z,0,0,.66,.30,12,'#b5683a',{roof:'#d8c0a0',line:true});
-    cx.fillStyle = night&&on ? 'rgba(255,236,170,.7)' : 'rgba(150,172,194,.5)';   // big roller-door / glazing on the camera face
-    cx.beginPath(); cx.moveTo(f.L[0]+1.5*z,f.L[1]+f.H*0.42); cx.lineTo(f.B[0],f.B[1]+f.H*0.42); cx.lineTo(f.B[0],f.B[1]+f.H); cx.lineTo(f.L[0]+1.5*z,f.L[1]+f.H); cx.closePath(); cx.fill();
-  }
-  // a smaller cargo shed
-  { const [wx,wy]=P(L*0.5,-W2+0.32); vol(wx,wy-TH/2*z,0,0,.34,.22,8,'#c98a4a',{roof:'#e0c8a0',line:true}); }
-  // stacked shipping containers in the yard
+  // stacked shipping containers in the yard — full iso boxes, painted back-to-front
   const cols=['#3f6f9c','#3f8f57','#c7913a','#a64a4a','#5a7d8c'];
   let ci=(now/4000|0);
+  const cax=0.20, cay=0.085, chp=5;                                  // long, slim
+  const stack=[];
   for (const [du,dv,h] of [[-L*0.12,0.02,0],[-L*0.12,0.02,1],[L*0.16,0.10,0],[L*0.16,0.10,1],[L*0.5,-0.06,0]]){
-    const [gx2,gy2]=P(du,dv);
-    cx.fillStyle=cols[ci%cols.length]; ci++;
-    cx.fillRect(gx2-5*z, gy2-7*z-h*5*z, 10*z, 5*z);
-    cx.fillStyle='rgba(0,0,0,.12)'; cx.fillRect(gx2-5*z, gy2-7*z-h*5*z, 10*z, 1.3*z);
-    cx.fillStyle='rgba(255,255,255,.09)'; cx.fillRect(gx2-5*z, gy2-7*z-h*5*z, 10*z, 0.6*z);
+    const col=cols[ci%cols.length]; ci++;
+    stack.push({ d:depthOf(du,dv)+h*0.001, f:()=>{                   // +h nudges a stacked box just past its base
+      const f=volP(du,dv, cax,cay, chp, col, {roof:shade(col,1.14), noShadow:h>0}, chp*z*h);
+      // vertical corrugation ribs down the two camera-facing walls
+      cx.strokeStyle='rgba(8,14,22,.22)'; cx.lineWidth=Math.max(.5,.6*z);
+      for (let k=1;k<6;k++){ const t=k/6;
+        const lx=f.L[0]+(f.B[0]-f.L[0])*t, ly=f.L[1]+(f.B[1]-f.L[1])*t;
+        cx.beginPath(); cx.moveTo(lx,ly); cx.lineTo(lx,ly+f.H); cx.stroke();
+        const rx=f.B[0]+(f.R[0]-f.B[0])*t, ry=f.B[1]+(f.R[1]-f.B[1])*t;
+        cx.beginPath(); cx.moveTo(rx,ry); cx.lineTo(rx,ry+f.H); cx.stroke();
+      }
+    } });
   }
+  drawSorted(stack);
   // dockside gantry crane: legs straddling the wharf, boom cantilevered over the water
   const legH=23*z;
   const [le_x,le_y]=P(L*0.62,-W2+0.55), [re_x,re_y]=P(L*0.62,W2-0.04);
@@ -7195,6 +7256,16 @@ function trainBandEntries(){
   return m;
 }
 const RAIL_H=13, RAIL_DECK='#6e6886', RAIL_EDGE='#4c4660', RAIL_RAILC='#d8d4e8';
+/* A rail tile touching a station must paint in the STRUCT pass, not the cached flat-ground
+   bake. Rail is normally treated as "flat ground" and baked behind every structure, but a
+   viaduct meeting an (elevated) station has to composite by depth with that station — a
+   front-side approach must draw OVER the platform, a back-side one UNDER it. Baked flat it
+   always lands behind, severing the join in the cached path (which is what ships). So these
+   tiles are excluded from the bake and redrawn live, per-band, in painter's order. */
+function railAdjStation(x,y){
+  return (inB(x+1,y)&&map[y][x+1].t==='rstation')||(inB(x-1,y)&&map[y][x-1].t==='rstation')||
+         (inB(x,y+1)&&map[y+1][x].t==='rstation')||(inB(x,y-1)&&map[y-1][x].t==='rstation');
+}
 /* offset endpoints for a rail lane A->C->B at perpendicular distance side*off.
    The control point sits on the bend's bisector so the two parallel lanes of a
    turn curve cleanly through the centre instead of crossing each other. */
@@ -7375,6 +7446,16 @@ function portRoots(){
     if (c.t==='port' && !c.part) r.push([x,y]);
   }
   return r;
+}
+function portSeaward(bx,by,fw,fh){
+  // dominant grid direction from the dock footprint toward open water — used to face the
+  // quay at the river so the dock orients to the world instead of the camera
+  let sx=0,sy=0;
+  for (const [qx,qy] of footCells(bx,by,fw,fh))
+    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
+      if (inB(qx+dx,qy+dy) && map[qy+dy][qx+dx].t==='water'){ sx+=dx; sy+=dy; }
+  if (!sx && !sy) return [0,0];
+  return Math.abs(sx)>=Math.abs(sy) ? [Math.sign(sx),0] : [0,Math.sign(sy)];
 }
 function portDockTile(root){
   // the water tile a ship moors at: the seaward neighbour of the 2×2 wharf footprint
@@ -8832,7 +8913,7 @@ function render(now){
         const [px,py]=toScreen(vx,vy);
         if (px<-TW*z||px>W+TW*z||py<-200*z||py>H+TH*2*z) continue;
         drawCell(x,y,now);
-        if (map[y][x].rail) drawRail(x,y);   // tracks are flat ground
+        if (map[y][x].rail && !railAdjStation(x,y)) drawRail(x,y);   // tracks are flat ground — except where they meet a station (drawn live, by depth, in the struct pass)
       }
     }
     cx=sv;
@@ -8866,7 +8947,9 @@ function render(now){
       if (px<-TW*S.zoom||px>W+TW*S.zoom||py<-200*S.zoom||py>H+TH*2*S.zoom) continue;
       drawCell(x,y,now);
       if (map[y][x].bus) drawBusStop(px,py);
-      if (GP!==2 && map[y][x].rail) drawRail(x,y);   // GP===2: rail already drawn in the ground pass
+      // GP===2: rail is baked in the ground pass — EXCEPT station-adjacent tiles, which were
+      // held out of the bake so they can composite with the station here, in painter's order.
+      if (map[y][x].rail && (GP!==2 || railAdjStation(x,y))) drawRail(x,y);
     }
     if (STRUCT_Q.length){ STRUCT_Q.sort((a,b)=>b.k-a.k); for (const e of STRUCT_Q) e.fn(); STRUCT_Q.length=0; }
   };

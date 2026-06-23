@@ -34,6 +34,44 @@ When adding or moving any geometry, check these — most building bugs are one o
   already place the 4 corners, faces and shading correctly — build from them
   instead of hand-rolling polygons that can drift off the iso axes.
 
+## Three failure modes that recur on bigger builds
+
+These bite multi-tile buildings (port, airport, venues, anything ≥2×2) and any
+build that abuts a feature like water or a road. They pass `node --check` and a
+single screenshot, then look broken once you **rotate the camera** or place a
+**neighbour** beside them. Check all three whenever you add/edit such a build.
+
+- **Orient to the WORLD, not the camera.** A draw fn that derives its frame from
+  `rotD(...)` alone spins the building with the camera, so an edge that must face
+  a fixed feature (a quay facing water, a frontage facing its road) ends up facing
+  the wrong way in 2 of the 4 rotations — props then float over the river / hang
+  off the deck and the "front" covers the land behind. Instead derive the frame
+  from the world direction (e.g. `seaward = dominant grid dir to adjacent water`,
+  then `[pvx,pvy]=rotD(seaward); avx=pvy; avy=-pvx`) so the build re-orients as the
+  map turns. See `drawPort`/`portSeaward`. `drawCom` does the road-frontage version
+  via `frontSide(x,y)` + a mirror.
+
+- **A multi-tile building is painted at ONE tile — so it over-covers front
+  neighbours.** A ≥2×2 build draws all its art when its *view-bottom* tile renders
+  (`vqx+vqy` max, see the `lastX/lastY` pattern). A tall part that physically sits
+  at the **back** of the footprint is then painted at front-tile time and covers a
+  neighbour standing in front of it (the classic "warehouse drawn over the factory"
+  bug). Fix by **splitting the draw across tiles by depth**: dispatch the tall
+  landward/back structures from their *own* (earlier) tile and the front/ground
+  detail from the front tile — pass a `phase` arg and call the draw fn twice from
+  the two tiles (see the `port` case → `drawPort(...,'land')` / `'sea'`). Within a
+  single pass, paint overlapping volumes **back-to-front** by a depth key
+  (`depthOf=(du,dv)=>(avx+avy)*du+(pvx+pvy)*dv`, sort ascending), never in source
+  order — source order looks fine in one rotation and wrong in the other three.
+
+- **Ground the building, not just props.** The contact-shadow rule applies to
+  whole buildings too. Lay the ground slab/apron **before** the structure in the
+  same pass (and from the same/earlier tile), so the base reads as planted; if the
+  slab is painted *after* (e.g. a later tile's diamond, or a deck poly drawn at the
+  front tile while the building drew at the back tile) it clips the base and the
+  building looks like it floats. Keep slab colours consistent (per-tile diamond ==
+  unified deck) so the seam between passes is invisible.
+
 ### Example — forecourt flags (convention center, ~line 8239)
 
 ```js
