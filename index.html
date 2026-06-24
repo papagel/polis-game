@@ -671,12 +671,14 @@
 </div>
 <div id="disModal" class="modalWrap">
   <div class="modal panel">
-    <h3 style="color:var(--amber);font-family:'Chakra Petch';letter-spacing:.08em;margin:0 0 6px">NATURAL DISASTERS</h3>
-    <p style="font-size:12.5px;color:var(--dim);margin:0 0 14px">Test your city against nature — damage is permanent, so keep a save handy. One disaster at a time.</p>
+    <h3 style="color:var(--amber);font-family:'Chakra Petch';letter-spacing:.08em;margin:0 0 6px">DISASTERS</h3>
+    <p style="font-size:12.5px;color:var(--dim);margin:0 0 14px">Test your city against nature — and worse. Damage is permanent, so keep a save handy. One disaster at a time.</p>
     <div id="disBtns">
       <button class="disBtn" data-dis="quake"><span class="dIc mi" data-mi="quake"></span><span><b>Earthquake</b><i>a fault rips across the map — collapses, broken roads, fires</i></span></button>
       <button class="disBtn" data-dis="typhoon"><span class="dIc mi" data-mi="typhoon"></span><span><b>Typhoon</b><i>a storm eye crosses the city — driving rain, wind damage</i></span></button>
       <button class="disBtn" data-dis="flood"><span class="dIc mi" data-mi="flood"></span><span><b>Flood</b><i>the river bursts its banks, then recedes through ruined lots</i></span></button>
+      <button class="disBtn" data-dis="monster"><span class="dIc mi" data-mi="monster"></span><span><b>The Gozilla</b><i>a colossal beast stomps across the city, breathing fire</i></span></button>
+      <button class="disBtn" data-dis="ufo"><span class="dIc mi" data-mi="ufo"></span><span><b>Alien Invasion</b><i>a UFO hovers over town, blasting buildings with energy beams</i></span></button>
     </div>
     <label id="disRndRow" style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:12.5px;color:var(--dim);cursor:pointer">
       <input type="checkbox" id="disRndChk" style="accent-color:var(--amber)"> Acts of gods — rare random disasters strike on their own
@@ -1149,6 +1151,8 @@ const MENU_IC={
   quake: MI('<path d="M3 16h3.5l2-5 3 8.5 2.5-6.5 1.5 3H21"/><path d="M3 20.5h18"/>'),
   typhoon: MI('<path d="M12 12c0-2.4 1.9-4.3 4.3-4.3 2.4 0 4.7 1.9 4.7 4.3 0 5-4 9-9 9"/><path d="M12 12c0 2.4-1.9 4.3-4.3 4.3C5.3 16.3 3 14.4 3 12c0-5 4-9 9-9"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/>'),
   flood: MI('<path d="M3 10c2.5-3 5-3 7.5 0s5 3 7.5 0"/><path d="M3 15c2.5-3 5-3 7.5 0s5 3 7.5 0"/><path d="M3 20c2.5-3 5-3 7.5 0s5 3 7.5 0"/>'),
+  monster: MI('<path d="M3 19c2 0 3.2-1.4 4.2-3l1.5 1.4 1.6-3.2 1.6 3.2 1.6-2.4 1.6 2.4 1.6-3.2 1.7 3.2c1 1.4 2.2 2 3.6 2"/><path d="M3 21h18"/><circle cx="8.5" cy="15.5" r=".85" fill="currentColor" stroke="none"/>'),
+  ufo: MI('<ellipse cx="12" cy="10.5" rx="8.5" ry="3"/><path d="M8.5 9a3.6 2.7 0 0 1 7 0"/><path d="M9 13.5l-1.6 6.5M15 13.5l1.6 6.5M12 13.5v7"/>'),
   scn_first: MI('<path d="M12 21v-7"/><path d="M12 14c0-4-2.5-6-6-6 0 4 2.5 6 6 6zM12 12c0-3 2-5 5.5-5 0 3.5-2 5-5.5 5z"/>'),
   scn_crash: MI('<path d="M4 5l5 6 3-2.5L19 15"/><path d="M19 10.5V15h-4.5"/><path d="M4 20h16"/>'),
   scn_blackout: MI('<path d="M13 2 5 13h5l-1.5 9L19 10h-5.5z"/>'),
@@ -2771,7 +2775,7 @@ function simTick(){
   { const _km=DIFF[S.diff]&&DIFF[S.diff].km;
     if ((DISRND||_km) && !DIS && S.day%MONTH_DAYS===0 && typeof triggerDisaster==='function'
         && rnd() < 0.035*(_km?kmRamp().dis:1))
-      triggerDisaster(['quake','typhoon','flood'][rnd()*3|0]); }  let pop=0, comJ=0, indJ=0, unp=0, dry=0, congested=0, strandedPop=0, devLots=0, noWaste=0;
+      triggerDisaster(['quake','typhoon','flood','quake','typhoon','flood','monster','ufo'][rnd()*8|0]); }  let pop=0, comJ=0, indJ=0, unp=0, dry=0, congested=0, strandedPop=0, devLots=0, noWaste=0;
   const D = S.demand;
   // traffic decays each day
   for (let i=0;i<traffic.length;i++) traffic[i]*=0.80;
@@ -4194,6 +4198,53 @@ function drawWaterShimmer(x,y,sx,sy,z,now){
     cx.fillRect(xx-w/2, yy, w, 1.3*z);
   }
 }
+function flameTongue(bx,by,w,h,lean){
+  // a tapering teardrop pointing up; `lean` waggles the tip for a live flicker
+  cx.beginPath();
+  cx.moveTo(bx-w,by);
+  cx.quadraticCurveTo(bx-w*0.6,by-h*0.55, bx+lean,by-h);   // up to the wavering tip
+  cx.quadraticCurveTo(bx+w*0.6,by-h*0.55, bx+w,by);
+  cx.quadraticCurveTo(bx,by+h*0.16, bx-w,by);              // rounded base
+  cx.closePath(); cx.fill();
+}
+function drawFireFX(c,x,y,sx,sy,now){
+  // layered flickering tongues + hot glow + rising embers. each tile flickers on its own
+  // phase (seed) so a block of fire churns instead of pulsing in unison. a tall burning
+  // building also flares along its roofline so the whole structure reads as ablaze.
+  const z=S.zoom, seed=x*7.13+y*3.7, intensity=Math.min(1,c.fire/10), cyp=sy+TH/2*z, fb=sy+TH*.40*z;
+  const bh=(ZONE[c.t]&&c.lv>0&&!c.part)?towerHeight(c.t,c.lv)*z*0.9:0;   // height of the thing burning
+  const cluster=(cxp,cyb,scale)=>{
+    for (let t=0;t<3;t++){
+      const ph=now/95+seed+t*2.3+cyb*0.01, lean=Math.sin(ph)*2.0*z*scale;
+      const fx=cxp+(t-1)*3.2*z*scale, h=(9+(t===1?5:0)+Math.sin(ph*1.6)*2.4)*z*scale*(0.55+0.45*intensity), w=(3.2-t*0.4)*z*scale;
+      cx.fillStyle='rgba(214,72,18,.55)'; flameTongue(fx,cyb,w*1.25,h*1.08,lean*1.3);
+      cx.fillStyle='rgba(255,120,30,.85)'; flameTongue(fx,cyb,w,h,lean);
+      cx.fillStyle='rgba(255,212,86,.92)'; flameTongue(fx,cyb,w*0.52,h*0.62,lean*0.6);
+    }
+  };
+  // hot glow pooled at the base
+  const gr=(11+Math.sin(now/120+seed)*2)*z*(0.6+0.4*intensity);
+  const gl=cx.createRadialGradient(sx,fb,1,sx,fb,gr);
+  gl.addColorStop(0,'rgba(255,170,60,.55)'); gl.addColorStop(.5,'rgba(255,110,30,.30)'); gl.addColorStop(1,'rgba(200,60,20,0)');
+  cx.fillStyle=gl; cx.beginPath(); cx.ellipse(sx,fb,gr,gr*0.5,0,0,7); cx.fill();
+  cluster(sx,fb,1);
+  cx.fillStyle='rgba(255,248,206,.9)'; cx.beginPath(); cx.ellipse(sx,fb-1*z,2.3*z,1.5*z,0,0,7); cx.fill();
+  // a tall building flares at the roofline, with a warm glow up the face
+  if (bh>16*z){
+    const ry=cyp-bh;
+    const rg=cx.createRadialGradient(sx,ry+bh*0.3,1,sx,ry+bh*0.3,bh*0.7);
+    rg.addColorStop(0,'rgba(255,140,40,.40)'); rg.addColorStop(1,'rgba(255,90,20,0)');
+    cx.fillStyle=rg; cx.beginPath(); cx.ellipse(sx,ry+bh*0.3,bh*0.5,bh*0.55,0,0,7); cx.fill();
+    cluster(sx,ry+3*z,0.9);
+  }
+  // embers lifting off the whole blaze and fading
+  for (let e=0;e<4;e++){
+    const et=((now/640)+(seed*0.7+e*0.41))%1, ey=fb-et*(17*z+bh);
+    const ex=sx+Math.sin((seed+e)*9+et*7)*4.5*z+(e-1)*2*z;
+    cx.fillStyle='rgba(255,'+(150+e*22)+',70,'+((1-et)*0.85).toFixed(3)+')';
+    cx.beginPath(); cx.arc(ex,ey,Math.max(0.3,(1.2-et)*z),0,7); cx.fill();
+  }
+}
 function drawCell(x,y,now){
   const c=map[y][x], [sx,sy]=tileScreen(x,y), z=S.zoom;
   const night=isNight();
@@ -5592,13 +5643,11 @@ function drawCell(x,y,now){
       cx.lineCap='butt';
       break; }
   }
-  // fire overlay
-  if (c.fire>0){
-    const fl = 6+Math.sin(now/80+x*3)*2;
-    cx.fillStyle='rgba(255,120,30,.85)';
-    cx.beginPath(); cx.ellipse(sx, sy+TH*.4*z, fl*z, fl*1.4*z, 0,0,7); cx.fill();
-    cx.fillStyle='rgba(255,220,90,.9)';
-    cx.beginPath(); cx.ellipse(sx, sy+TH*.42*z, fl*.5*z, fl*.8*z, 0,0,7); cx.fill();
+  // fire — queued at minimum depth so it paints AFTER (on top of) the burning structure,
+  // letting flames lick up the building instead of hiding behind it.
+  if (c.fire>0 && !PICKING){
+    if (STRUCT_Q) queueStruct(false, -1e9, ()=>drawFireFX(c,x,y,sx,sy,now));
+    else drawFireFX(c,x,y,sx,sy,now);
   }
   // no-power blink (only once a plant exists, to avoid nagging from turn one)
   if (ZONE[c.t] && !c.part && !c.pw && hasAnyPlant && (now/600|0)%2===0){
@@ -13633,6 +13682,7 @@ document.getElementById('mapBegin').onclick=()=>{
    NATURAL DISASTERS — optional, triggered at will (or by the gods)
    ============================================================ */
 let DIS=null;
+const MON_CAD=2.2;     // kaiju footfalls per tile — shared by the gait animation and the ground-thump shake
 let DISRND = (()=>{ try{ return localStorage.getItem('tlv_disRnd')==='1'; }catch(_){ return false; } })();
 function disBuildingDown(c){          // a structure falls: rubble, towers collapse whole
   if (c.grp){ const [bx,by]=c.grp; const n=(grpRoot(c).fw||2)*(grpRoot(c).fh||2); unmerge(bx,by,'rubble'); return n; }
@@ -13658,6 +13708,55 @@ function disRuin(x,y,p,opt){          // opt: {roads,trees,fireP}
       if (q && (ZONE[q.t]&&q.lv>0) && !q.fire){ q.fire=16; st.fires++; break; }
     }
   }
+}
+function disCityCenter(){              // centroid of the built-up city (falls back to the map centre)
+  let sx=0,sy=0,n=0;
+  for (let y=0;y<G;y++) for (let x=0;x<G;x++){ const c=map[y][x];
+    if ((ZONE[c.t]&&c.lv>0)||SVC[c.t]||PLANT[c.t]||WSRC[c.t]||ROADTYPE[c.t]){ sx+=x; sy+=y; n++; } }
+  return n ? [Math.round(sx/n), Math.round(sy/n)] : [G>>1, G>>1];
+}
+function disWalkTo(x,y,tx,ty,path){    // greedy, mostly-direct 4-connected walk with the odd swerve
+  let guard=0;
+  while (guard++<G*4){
+    if (!path.length || path[path.length-1][0]!==x || path[path.length-1][1]!==y) path.push([x,y]);
+    if (x===tx&&y===ty) break;
+    const dx=Math.sign(tx-x), dy=Math.sign(ty-y), r=Math.random();
+    let mx,my;
+    if (dx&&dy){ if (r<0.5){mx=dx;my=0;} else {mx=0;my=dy;} }
+    else if (dx){ if (r<0.84){mx=dx;my=0;} else {mx=0;my=(Math.random()<0.5?1:-1);} }
+    else        { if (r<0.84){mx=0;my=dy;} else {mx=(Math.random()<0.5?1:-1);my=0;} }
+    x=Math.max(0,Math.min(G-1,x+mx)); y=Math.max(0,Math.min(G-1,y+my));
+  }
+  return [x,y];
+}
+function disCrossPath(){               // enter from an edge, march to the city centre, then carry on across to the far side
+  const [ccx,ccy]=disCityCenter();
+  const e=Math.random()*4|0; let sx,sy;
+  if      (e===0){ sx=Math.random()*G|0; sy=0; }
+  else if (e===1){ sx=G-1; sy=Math.random()*G|0; }
+  else if (e===2){ sx=Math.random()*G|0; sy=G-1; }
+  else           { sx=0; sy=Math.random()*G|0; }
+  // exit = continue straight through the centre out to the opposite boundary
+  let dx=ccx-sx, dy=ccy-sy; const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;
+  let exX=ccx, exY=ccy;
+  while (exX>0 && exY>0 && exX<G-1 && exY<G-1){ exX+=dx; exY+=dy; }
+  exX=Math.max(0,Math.min(G-1,Math.round(exX))); exY=Math.max(0,Math.min(G-1,Math.round(exY)));
+  const path=[];
+  disWalkTo(sx,sy,ccx,ccy,path);       // edge → heart of the city
+  disWalkTo(ccx,ccy,exX,exY,path);     // … and out the far side
+  return path;
+}
+function ufoPickTarget(cx2,cy2){       // a standing structure to vaporise, biased to near the craft
+  for (let i=0;i<40;i++){
+    const x=Math.max(0,Math.min(G-1, cx2+(Math.random()*13-6|0))), y=Math.max(0,Math.min(G-1, cy2+(Math.random()*13-6|0)));
+    const c=map[y][x];
+    if ((ZONE[c.t]&&c.lv>0)||SVC[c.t]||PLANT[c.t]||WSRC[c.t]) return [x,y];
+  }
+  for (let i=0;i<80;i++){               // nothing nearby — strike anything still standing
+    const x=Math.random()*G|0, y=Math.random()*G|0, c=map[y][x];
+    if ((ZONE[c.t]&&c.lv>0)||SVC[c.t]) return [x,y];
+  }
+  return [Math.max(0,Math.min(G-1,cx2)), Math.max(0,Math.min(G-1,cy2))];   // last resort: scorch the ground
 }
 function triggerDisaster(type){
   if (!S.started || DIS) return false;
@@ -13700,6 +13799,19 @@ function triggerDisaster(type){
     }
     DIS={type, t0:performance.now(), dur:26000, distW, maxR:3, done:new Uint8Array(G*G), lastR:0, stats};
     msg('<b>Flood!</b> The river is bursting its banks \u2014 low ground goes under first.');
+  } else if (type==='monster'){
+    // a kaiju lumbers across the map, flattening a swath wherever it treads. it moves at a slow,
+    // heavy ~1.3 tiles/sec — the crossing scales with the map, so on a big city it's a long siege
+    // you keep playing through (zone, bulldoze, douse fires) while it grinds across.
+    const path=disCrossPath();
+    const cross=Math.round(path.length*770);     // ms to walk the whole path, foot by foot
+    DIS={type, t0:performance.now(), dur:cross+3000, cross, path, prog:0, stats, dust:[], breath:false};
+    msg('<b>The Gozilla rises!</b> A colossal beast begins a slow rampage through the city \u2014 brace yourself.');
+  } else if (type==='ufo'){
+    // a saucer drifts over town, firing energy beams that vaporise buildings
+    DIS={type, t0:performance.now(), dur:20000, x:G/2+(Math.random()*8-4), y:G/2+(Math.random()*8-4),
+         tx:G/2, ty:G/2, beams:[], sparks:[], nextBeam:700, stats};
+    msg('<b>Alien invasion!</b> A UFO hovers over the city, blasting buildings from the sky.');
   } else return false;
   return true;
 }
@@ -13757,6 +13869,63 @@ function stepDisaster(now){
       }
     }
     DIS.lastR=r;
+  } else if (DIS.type==='monster'){
+    // destruction tracks the *visible* feet: crush only up to the tile the beast currently stands on,
+    // plus the ring around it, so buildings fall exactly as it reaches them (not before).
+    const len=DIS.path.length, fi=Math.min(len-1,(el/DIS.cross)*(len-1));
+    const front=Math.min(len, Math.floor(fi)+1);
+    while (DIS.prog<front){
+      const [x,y]=DIS.path[DIS.prog++];
+      // the beast FLATTENS what it treads on — it does not set it alight (fire comes only from its breath)
+      disRuin(x,y,0.96,{roads:true,trees:true});
+      for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) disRuin(x+dx,y+dy,0.55,{roads:true,trees:true});
+      for (const [dx,dy] of [[1,1],[-1,1],[1,-1],[-1,-1]]) disRuin(x+dx,y+dy,0.30,{roads:true,trees:true});
+      for (let k=0;k<4;k++) DIS.dust.push({x:x+Math.random()-0.5, y:y+Math.random()-0.5, t:now, l:800+Math.random()*700});
+    }
+    // occasional, deliberate fire-breath — the ONLY thing that ignites. The target is a standing building
+    // in the FORWARD HEMISPHERE of the beast's heading (ahead, or to its left / right — never behind its
+    // body), chosen fresh each breath, so the flame always reads as coming out the front of the creature.
+    DIS.breath = el>3000 && fi<len-1 && (el%6000)<1100;
+    if (DIS.breath){
+      const win=(el/6000)|0;
+      if (DIS.breathWin!==win){
+        DIS.breathWin=win;
+        const bi=Math.max(0,Math.min(len-1,Math.floor(fi))), [bgx,bgy]=DIS.path[bi];
+        const ah=DIS.path[Math.min(len-1,bi+2)], hgx=ah[0]-bgx, hgy=ah[1]-bgy, cand=[];
+        for (let dy=-6;dy<=6;dy++) for (let dx=-6;dx<=6;dx++){
+          const x=bgx+dx, y=bgy+dy, d2=dx*dx+dy*dy;
+          if (d2<4||d2>42||!inB(x,y)) continue;                              // a few paces out, within reach
+          if (dx*hgx + dy*hgy < 0) continue;                                 // ahead or to the side only — never behind
+          const c=map[y][x]; if (!(ZONE[c.t]&&c.lv>0&&!c.grp&&!c.fire)) continue;
+          cand.push([x,y]);
+        }
+        DIS.breathTgt = cand.length ? cand[Math.random()*cand.length|0] : DIS.path[Math.min(len-1,bi+4)];
+      }
+      const tgt=DIS.breathTgt;
+      if (tgt){ for (const [dx,dy] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]){
+        const x=tgt[0]+dx, y=tgt[1]+dy; if (!inB(x,y)) continue; const c=map[y][x];
+        if (ZONE[c.t]&&c.lv>0&&!c.grp&&!c.fire && Math.random()<0.4){ c.fire=18; st.fires++; dirty=true; } } }
+    } else { DIS.breath=false; DIS.breathTgt=null; DIS.breathWin=-1; }
+  } else if (DIS.type==='ufo'){
+    // slow drift; pick a fresh waypoint when it arrives so the craft roams the whole city
+    const dx=DIS.tx-DIS.x, dy=DIS.ty-DIS.y, dd=Math.hypot(dx,dy)||1;
+    if (dd<1.5){ DIS.tx=2+Math.random()*(G-4); DIS.ty=2+Math.random()*(G-4); }
+    else { DIS.x+=dx/dd*0.07; DIS.y+=dy/dd*0.07; }
+    // fire a new beam on a cadence; it charges briefly, then strikes
+    if (el<DIS.dur*0.92 && el>DIS.nextBeam){
+      DIS.nextBeam=el+620+Math.random()*680;
+      DIS.beams.push({x:0,y:0,t:now,struck:false, ...(()=>{const t=ufoPickTarget(DIS.x|0,DIS.y|0);return {x:t[0],y:t[1]};})()});
+    }
+    for (let i=DIS.beams.length-1;i>=0;i--){
+      const b=DIS.beams[i], age=now-b.t;
+      if (!b.struck && age>520){
+        b.struck=true;
+        disRuin(b.x,b.y,0.97,{roads:true,trees:true,fireP:0.35});
+        for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) disRuin(b.x+dx,b.y+dy,0.30,{roads:true,trees:true,fireP:0.12});
+        for (let k=0;k<8;k++) DIS.sparks.push({x:b.x, y:b.y, a:Math.random()*7, sp:1+Math.random()*2, t:now});
+      }
+      if (age>1200) DIS.beams.splice(i,1);
+    }
   }
   if (el>DIS.dur){
     cv.style.transform='';
@@ -13765,7 +13934,9 @@ function stepDisaster(now){
     if (st.roads) parts.push(st.roads+' road tiles lost');
     if (st.trees) parts.push(st.trees+' trees down');
     if (st.fires) parts.push(st.fires+' fires burning');
-    msg('<b>'+(DIS.type==='quake'?'The shaking has stopped.':DIS.type==='typhoon'?'The storm has passed.':'The waters have receded.')+'</b> '
+    const ENDMSG={quake:'The shaking has stopped.',typhoon:'The storm has passed.',flood:'The waters have receded.',
+                  monster:'The Gozilla has stomped off into the sea.',ufo:'The UFO has vanished into the sky.'};
+    msg('<b>'+(ENDMSG[DIS.type]||'The disaster has passed.')+'</b> '
         +(parts.length?parts.join(' \u00b7 ')+'. Time to rebuild.':'The city escaped almost untouched.'));
     DIS=null;
     dirty=true; recomputeNets(); recomputeFields(); updateHUD();
@@ -13872,7 +14043,217 @@ function drawDisasterFX(now, dk){
       }
       cx.stroke();
     }
+  } else if (DIS.type==='monster'){
+    drawMonster(now);
+  } else if (DIS.type==='ufo'){
+    drawUFO(now);
   }
+}
+function disPathPos(path, fi){
+  // Catmull-Rom through the (jagged, 4-connected) tile path → a smooth, natural curve to walk
+  const len=path.length, i=Math.max(0,Math.min(len-1,Math.floor(fi))), t=fi-i;
+  const P=j=>path[Math.max(0,Math.min(len-1,j))];
+  const p0=P(i-1),p1=P(i),p2=P(i+1),p3=P(i+2), t2=t*t, t3=t2*t;
+  const cr=(a,b,c,d)=>0.5*((2*b)+(-a+c)*t+(2*a-5*b+4*c-d)*t2+(-a+3*b-3*c+d)*t3);
+  return [cr(p0[0],p1[0],p2[0],p3[0]), cr(p0[1],p1[1],p2[1],p3[1])];
+}
+function drawMonster(now){
+  const z=S.zoom, el=now-DIS.t0, path=DIS.path, len=path.length;
+  // ground point of a (float) grid position, honouring the current camera rotation
+  const gp=(ax,ay)=>{ const [rcx,rcy]=rotC(ax+.5,ay+.5); const [sx,sy]=toScreen(rcx-.5,rcy-.5); return [sx, sy+TH/2*z]; };
+  // dust plumes trail behind, painted first so the beast stands in front of them
+  for (let i=DIS.dust.length-1;i>=0;i--){
+    const d2=DIS.dust[i], a=1-(now-d2.t)/d2.l;
+    if (a<=0){ DIS.dust.splice(i,1); continue; }
+    const [px,py]=gp(d2.x,d2.y);
+    cx.fillStyle='rgba(150,140,120,'+(a*0.4).toFixed(3)+')';
+    cx.beginPath(); cx.ellipse(px, py-(1-a)*16*z, (4+(1-a)*10)*z, (2.4+(1-a)*5)*z, 0,0,7); cx.fill();
+  }
+  const fi=Math.min(len-1, (el/DIS.cross)*(len-1));
+  const [gx,gy]=disPathPos(path,fi);
+  const [bx0,by0]=gp(gx,gy);
+  // heading from a smoothed look-ahead so the facing turns gently, not in 90° snaps
+  const eps=0.7, [hx0,hy0]=disPathPos(path,Math.max(0,fi-eps)), [hx1,hy1]=disPathPos(path,Math.min(len-1,fi+eps));
+  const [vdx,vdy]=rotD(hx1-hx0, hy1-hy0);
+  const f=((vdx-vdy)>=0)?1:-1;
+  const walking=fi<len-1;
+  // gait: legs alternate on the shared footfall cadence; the body bobs up between plants,
+  // sways side-to-side once per stride, and rocks slightly — a heavy, deliberate lumber.
+  const ph=fi*MON_CAD*Math.PI;
+  const U=z*1.35;                                              // a touch larger — a properly looming kaiju
+  const by=by0 - (walking?Math.abs(Math.cos(ph))*2.0*z:0);
+  const bx=bx0 + (walking?Math.sin(ph*0.5)*1.4*z*f:0);
+  const X=dx=>bx+dx*f*U, Y=dy=>by-dy*U;
+  const BODY='#34412f', DARK='#222c23', BELLY='#5d7053', FIN='#dcd6c2', LIMB='#2a3528';
+  // contact shadow
+  cx.fillStyle='rgba(8,12,8,.34)';
+  cx.beginPath(); cx.ellipse(bx, by, 26*U, 8.5*U, 0,0,7); cx.fill();
+  // hind-leg builder: a muscular thigh tapering to a clawed foot; each leg swings on its own phase
+  const legAt=(off,p,col)=>{ const sw=walking?Math.cos(p)*5:0, lift=walking?Math.max(0,Math.sin(p))*5:0;
+    cx.fillStyle=col; cx.beginPath();
+    cx.moveTo(X(off-7),Y(34));
+    cx.quadraticCurveTo(X(off+13),Y(35),X(off+10),Y(14));      // bulging thigh
+    cx.quadraticCurveTo(X(off+8),Y(6),X(off+7+sw),Y(2+lift));  // shin
+    cx.lineTo(X(off+13+sw),Y(lift));                           // front toe
+    cx.lineTo(X(off-3+sw),Y(lift));                            // heel
+    cx.lineTo(X(off-6+sw),Y(3+lift));
+    cx.quadraticCurveTo(X(off-10),Y(18),X(off-7),Y(34));
+    cx.closePath(); cx.fill(); };
+  legAt(-4,ph+Math.PI,DARK);                                   // far leg, in shadow (opposite phase)
+  // ONE shared dorsal ridge line (shoulder → tail tip). The body's whole back edge is built from
+  // it AND the fins are seated on it, so the plates can never drift off the back.
+  const spine=[[14,53],[6,55],[-2,54],[-11,49],[-20,43],[-29,36],[-38,29],[-47,23],[-56,19]];
+  // body + tail as a single mass whose top contour is exactly the spine
+  cx.fillStyle=BODY;
+  cx.beginPath();
+  cx.moveTo(X(3),Y(11));                                       // lower front belly
+  cx.quadraticCurveTo(X(25),Y(16),X(25),Y(34));               // belly bulging forward
+  cx.quadraticCurveTo(X(23),Y(48),X(spine[0][0]),Y(spine[0][1]));   // chest up to the shoulder (ridge start)
+  for (let i=1;i<spine.length;i++) cx.lineTo(X(spine[i][0]),Y(spine[i][1]));  // down the back to the tail tip
+  cx.quadraticCurveTo(X(-34),Y(8),X(-8),Y(13));               // underside of the tail
+  cx.quadraticCurveTo(X(-3),Y(10),X(3),Y(11));                // close under the haunch
+  cx.closePath(); cx.fill();
+  // belly / chest highlight
+  cx.fillStyle=BELLY;
+  cx.beginPath();
+  cx.moveTo(X(9),Y(13)); cx.quadraticCurveTo(X(24),Y(21),X(23),Y(38));
+  cx.quadraticCurveTo(X(14),Y(24),X(9),Y(13)); cx.closePath(); cx.fill();
+  // bone-pale dorsal fins — each seated ON the spine, leaning back, tallest mid-back
+  cx.fillStyle=FIN;
+  for (let i=1;i<spine.length-1;i++){ const [px,py]=spine[i], t=i/(spine.length-1), h=6+11*Math.sin(t*Math.PI);
+    cx.beginPath(); cx.moveTo(X(px+4),Y(py-0.5)); cx.lineTo(X(px-2),Y(py+h)); cx.lineTo(X(px-5),Y(py-0.5)); cx.closePath(); cx.fill(); }
+  // neck rising to the head
+  cx.fillStyle=BODY;
+  cx.beginPath();
+  cx.moveTo(X(10),Y(54)); cx.quadraticCurveTo(X(21),Y(62),X(33),Y(64));
+  cx.quadraticCurveTo(X(25),Y(51),X(18),Y(47)); cx.closePath(); cx.fill();
+  // head: brow over the eye, a blunt snout, hinged lower jaw that drops to roar / breathe fire
+  const jaw=DIS.breath?7:1.5;
+  // head aim: while breathing, the skull pivots at the neck joint to point the snout AT the fire's target,
+  // so the head visibly looks where it breathes (not just mirrored left/right). The flame leaves the rotated snout.
+  const hpx=X(30), hpy=Y(61);                                  // neck–skull pivot
+  let aim=0, mx=X(52), my=Y(56-jaw*0.5);
+  if (DIS.breath && DIS.breathTgt){
+    const [tsx,tsy]=tileScreen(DIS.breathTgt[0],DIS.breathTgt[1]), tex=tsx, tey=tsy+TH/2*z;
+    const nat=Math.atan2(Y(58)-hpy, X(52)-hpx), des=Math.atan2(tey-hpy, tex-hpx);
+    let d=des-nat; d=Math.atan2(Math.sin(d),Math.cos(d));      // shortest signed turn toward the target
+    aim=Math.max(-0.6, Math.min(0.95, d));                     // tasteful clamp (it can dip its head to scorch the ground)
+    const ca=Math.cos(aim), sa=Math.sin(aim), ssx=X(52), ssy=Y(58);
+    mx=hpx+(ssx-hpx)*ca-(ssy-hpy)*sa; my=hpy+(ssx-hpx)*sa+(ssy-hpy)*ca;   // rotated snout tip = flame origin
+  }
+  cx.save();
+  if (aim){ cx.translate(hpx,hpy); cx.rotate(aim); cx.translate(-hpx,-hpy); }
+  cx.fillStyle=BODY;
+  cx.beginPath();
+  cx.moveTo(X(28),Y(67));                                      // back of skull
+  cx.quadraticCurveTo(X(42),Y(68),X(49),Y(63));              // brow → snout top
+  cx.lineTo(X(52),Y(59)); cx.lineTo(X(49),Y(57));            // snout tip
+  cx.lineTo(X(37),Y(58));                                     // upper lip
+  cx.quadraticCurveTo(X(30),Y(61),X(28),Y(63));             // back down to the neck
+  cx.closePath(); cx.fill();
+  cx.beginPath();                                             // lower jaw, hinged open by `jaw`
+  cx.moveTo(X(35),Y(58)); cx.lineTo(X(50),Y(57-jaw)); cx.lineTo(X(48),Y(54-jaw)); cx.lineTo(X(35),Y(55)); cx.closePath(); cx.fill();
+  // brow ridge + glowing eye
+  cx.fillStyle=DARK;
+  cx.beginPath(); cx.moveTo(X(36),Y(67)); cx.lineTo(X(45),Y(65)); cx.lineTo(X(43),Y(62)); cx.lineTo(X(36),Y(64)); cx.closePath(); cx.fill();
+  cx.fillStyle='#ffd24a'; cx.beginPath(); cx.arc(X(42),Y(63),1.8*U,0,7); cx.fill();
+  cx.restore();
+  // short, clawed forelimb over the chest
+  cx.fillStyle=LIMB;
+  cx.beginPath();
+  cx.moveTo(X(19),Y(43)); cx.quadraticCurveTo(X(29),Y(41),X(32),Y(34));
+  cx.lineTo(X(34),Y(31)); cx.lineTo(X(31),Y(31)); cx.lineTo(X(29),Y(34));
+  cx.quadraticCurveTo(X(25),Y(38),X(18),Y(39)); cx.closePath(); cx.fill();
+  legAt(5,ph,'#33402f');                                       // near leg, over the body
+  // fire-breath: a roaring cone of flame from the (aimed) jaws to the exact tile it sets ablaze
+  if (DIS.breath && DIS.breathTgt){
+    const [tsx,tsy]=tileScreen(DIS.breathTgt[0],DIS.breathTgt[1]);
+    const ex=tsx, ey=tsy+TH/2*z;                                   // ground point of the targeted tile
+    const dx=ex-mx, dy=ey-my, dl=Math.hypot(dx,dy)||1, nx=dx/dl, ny=dy/dl, px=-ny, py=nx;  // axis + perpendicular
+    const seg=11, baseW=3.5*U, tipW=15*U, fl=()=>Math.random()*2-1;
+    cx.save(); cx.globalCompositeOperation='lighter';
+    // three nested tongues: deep orange → amber → white-hot core, each widening toward the impact
+    for (const [col,wm] of [['rgba(255,90,12,0.42)',1],['rgba(255,165,40,0.55)',0.6],['rgba(255,245,190,0.85)',0.26]]){
+      cx.fillStyle=col; cx.beginPath();
+      for (let k=0;k<=seg;k++){ const t=k/seg, w=(baseW+(tipW-baseW)*t*t)*wm*(0.75+Math.random()*0.5);
+        const ox=mx+dx*t+px*w+nx*fl()*3*U, oy=my+dy*t+py*w+ny*fl()*3*U; k?cx.lineTo(ox,oy):cx.moveTo(ox,oy); }
+      for (let k=seg;k>=0;k--){ const t=k/seg, w=(baseW+(tipW-baseW)*t*t)*wm*(0.75+Math.random()*0.5);
+        cx.lineTo(mx+dx*t-px*w+nx*fl()*3*U, my+dy*t-py*w+ny*fl()*3*U); }
+      cx.closePath(); cx.fill(); }
+    // flame licks tearing off the leading edge
+    for (let i=0;i<6;i++){ const t=0.55+Math.random()*0.5, w=(Math.random()-0.5)*tipW*1.6;
+      const ox=mx+dx*t+px*w, oy=my+dy*t+py*w;
+      cx.fillStyle='rgba(255,'+(120+Math.random()*90|0)+','+(20+Math.random()*30|0)+','+(0.35+Math.random()*0.3).toFixed(2)+')';
+      cx.beginPath(); cx.ellipse(ox,oy,(2.5+Math.random()*3)*U,(4+Math.random()*5)*U,Math.atan2(dy,dx),0,7); cx.fill(); }
+    // searing impact bloom right where the tile catches fire
+    const ig=cx.createRadialGradient(ex,ey-4*U,0,ex,ey-4*U,24*U);
+    ig.addColorStop(0,'rgba(255,245,205,0.9)'); ig.addColorStop(0.45,'rgba(255,150,35,0.5)'); ig.addColorStop(1,'rgba(255,70,0,0)');
+    cx.fillStyle=ig; cx.beginPath(); cx.ellipse(ex,ey-4*U,24*U,15*U,0,0,7); cx.fill();
+    cx.restore();
+  }
+}
+function drawUFO(now){
+  const z=S.zoom, W=cv.width/DPR, H=cv.height/DPR;
+  // an eerie green pall over the city while the craft is overhead
+  cx.fillStyle='rgba(40,80,60,.10)'; cx.fillRect(0,0,W,H);
+  const [rcx,rcy]=rotC(DIS.x+.5,DIS.y+.5);
+  const [ux0,uy0]=toScreen(rcx-.5,rcy-.5);
+  const groundY=uy0+TH/2*z, alt=80*z+Math.sin(now/600)*4*z, ucx=ux0, ucy=groundY-alt;
+  // shadow tracking the craft on the ground below
+  cx.fillStyle='rgba(6,10,16,.30)';
+  cx.beginPath(); cx.ellipse(ux0, groundY, 38*z, 16*z, 0,0,7); cx.fill();
+  // energy beams (drawn under the saucer)
+  for (const b of DIS.beams){
+    const age=now-b.t, charge=Math.min(1,age/520), post=b.struck?(age-520)/680:0;
+    const w=b.struck?Math.max(0,1-post):charge;
+    if (w<=0) continue;
+    const [tx,ty0]=tileScreen(b.x,b.y), tgY=ty0+TH/2*z;
+    const topW=3*z*(0.5+charge), botW=16*z*(0.4+charge);
+    cx.save(); cx.globalCompositeOperation='lighter';
+    const g=cx.createLinearGradient(ucx,ucy,tx,tgY);
+    g.addColorStop(0,'rgba(120,255,180,'+(0.5*w).toFixed(3)+')'); g.addColorStop(1,'rgba(60,220,150,'+(0.14*w).toFixed(3)+')');
+    cx.fillStyle=g;
+    cx.beginPath(); cx.moveTo(ucx-topW,ucy); cx.lineTo(ucx+topW,ucy); cx.lineTo(tx+botW,tgY); cx.lineTo(tx-botW,tgY); cx.closePath(); cx.fill();
+    // rings of charge racing down the beam
+    for (let k=0;k<4;k++){ const tt=((now/300)+k*0.25)%1;
+      const px=ucx+(tx-ucx)*tt, py=ucy+(tgY-ucy)*tt, rw=topW+(botW-topW)*tt;
+      cx.strokeStyle='rgba(200,255,220,'+(0.5*w*(1-tt)).toFixed(3)+')'; cx.lineWidth=1.6*z;
+      cx.beginPath(); cx.ellipse(px,py,rw,rw*0.4,0,0,7); cx.stroke(); }
+    // strike flash at the target
+    if (b.struck && post<1){ const fa=1-post;
+      cx.fillStyle='rgba(180,255,210,'+(0.6*fa).toFixed(3)+')';
+      cx.beginPath(); cx.ellipse(tx,tgY,(10+post*22)*z,(5+post*11)*z,0,0,7); cx.fill();
+      cx.fillStyle='rgba(255,255,255,'+(0.7*fa).toFixed(3)+')';
+      cx.beginPath(); cx.arc(tx,tgY-2*z,Math.max(0.5,(6-post*4))*z,0,7); cx.fill(); }
+    cx.restore();
+  }
+  // sparks thrown off each impact
+  for (let i=DIS.sparks.length-1;i>=0;i--){
+    const s=DIS.sparks[i], age=(now-s.t)/700;
+    if (age>=1){ DIS.sparks.splice(i,1); continue; }
+    const [px,py]=tileScreen(s.x,s.y), d=age*s.sp*14*z;
+    cx.fillStyle='rgba(150,255,190,'+((1-age)*0.9).toFixed(3)+')';
+    cx.beginPath(); cx.arc(px+Math.cos(s.a)*d, py+TH/2*z+Math.sin(s.a)*d*0.5-age*10*z, Math.max(0.3,(1.6-age)*z), 0,7); cx.fill();
+  }
+  // the craft itself
+  const R=32*z;
+  cx.save(); cx.globalCompositeOperation='lighter';
+  const ug=cx.createRadialGradient(ucx,ucy+5*z,2,ucx,ucy+5*z,R*0.9);
+  ug.addColorStop(0,'rgba(120,255,180,.6)'); ug.addColorStop(1,'rgba(120,255,180,0)');
+  cx.fillStyle=ug; cx.beginPath(); cx.ellipse(ucx,ucy+5*z,R*0.8,R*0.4,0,0,7); cx.fill();
+  cx.restore();
+  const hg=cx.createLinearGradient(ucx,ucy-8*z,ucx,ucy+8*z);
+  hg.addColorStop(0,'#cfd8e2'); hg.addColorStop(0.5,'#8b97a6'); hg.addColorStop(1,'#4a5462');
+  cx.fillStyle=hg; cx.beginPath(); cx.ellipse(ucx,ucy,R,R*0.42,0,0,7); cx.fill();
+  cx.fillStyle='#39424d'; cx.beginPath(); cx.ellipse(ucx,ucy+3*z,R*0.96,R*0.30,0,0,7); cx.fill();
+  const dg=cx.createLinearGradient(ucx,ucy-R*0.7,ucx,ucy);
+  dg.addColorStop(0,'rgba(190,245,255,.95)'); dg.addColorStop(1,'rgba(90,150,180,.85)');
+  cx.fillStyle=dg; cx.beginPath(); cx.ellipse(ucx,ucy-2*z,R*0.42,R*0.5,0,Math.PI,2*Math.PI); cx.fill();
+  // blinking rim lights
+  for (let k=0;k<9;k++){ const a=(k/9)*Math.PI*2;
+    const lx=ucx+Math.cos(a)*R*0.82, ly=ucy+3*z+Math.sin(a)*R*0.26;
+    cx.fillStyle=(Math.sin(now/120+k*0.9)>0)?'rgba(255,210,90,.95)':'rgba(120,90,40,.5)';
+    cx.beginPath(); cx.arc(lx,ly,1.7*z,0,7); cx.fill(); }
 }
 /* wiring: menu, modal, random strikes */
 {
