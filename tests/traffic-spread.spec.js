@@ -61,3 +61,48 @@ test('an avenue laid parallel to a road shares the load by capacity, not by pili
   // and on average the parallel road stays out of gridlock
   expect(res.meanRoadCg).toBeLessThan(1.0);
 });
+
+// A crossroads tile carries the SUM of the corridors that cross it (E-W flow + N-S flow), yet a
+// straight segment and a 4-way junction used to share one capacity — so a balanced intersection
+// redded out at ~2x its arms, and adding parallel routes only minted more red crossing points
+// (the "I added verticals but the intersections stay red" report). roadCapAt() now gives junctions
+// headroom for the crossing. Invariant: at a balanced + of avenues with equal E-W and N-S demand,
+// the junction's congestion is no longer materially higher than the calm arms feeding it.
+test('a balanced crossroads is not redder than the calm arms that feed it', async ({ game }) => {
+  const res = await game.eval(inPage(`
+    S.commuteRoute = true;
+    function settle(iters){
+      for (let k=0;k<iters;k++){
+        for (let i=0;i<traffic.length;i++) traffic[i]*=0.80;
+        recomputeCommute();
+        for (let y=0;y<G;y++) for (let x=0;x<G;x++){ const c=map[y][x]; if (c.lv>0) emitTraffic(x,y,c.lv,c.t); }
+      }
+    }
+    function build(){
+      resetGrid();
+      const jx=24, jy=24;
+      set(2, jy, 'power'); set(3, jy, 'pump');
+      for (let x=6;x<=42;x++) map[jy][x].t='avenue';   // east-west arm
+      for (let y=6;y<=42;y++) map[y][jx].t='avenue';   // north-south arm (crosses at jx,jy)
+      // equal demand on both axes: homes W & N, jobs E & S
+      for (let y=jy-1;y<=jy+1;y++) for(let d=1;d<=2;d++){ const c=set(6-d,y,'res'); c.lv=5; c.dev=500; }
+      for (let y=jy-1;y<=jy+1;y++) for(let d=1;d<=2;d++){ const c=set(42+d,y,'ind'); c.lv=5; c.dev=500; }
+      for (let x=jx-1;x<=jx+1;x++) for(let d=1;d<=2;d++){ const c=set(x,6-d,'res'); c.lv=5; c.dev=500; }
+      for (let x=jx-1;x<=jx+1;x++) for(let d=1;d<=2;d++){ const c=set(x,42+d,'ind'); c.lv=5; c.dev=500; }
+      recomputeNets(); recomputeFields();
+      return { jx, jy };
+    }
+    const N=16; let sumJ=0, sumArm=0;
+    for (let r=0;r<N;r++){
+      const { jx, jy } = build(); settle(80);
+      const arm = (congestion(jx-4,jy)+congestion(jx+4,jy)+congestion(jx,jy-4)+congestion(jx,jy+4))/4;
+      sumJ += congestion(jx,jy); sumArm += arm;
+    }
+    return { meanJunction: sumJ/N, meanArm: sumArm/N };
+  `));
+
+  // the arms actually carry traffic (the test is loaded), and the junction is not the lone red
+  // hotspot — without the headroom it sat at ~2x the arms (pure crossing-flow summation)
+  expect(res.meanArm).toBeGreaterThan(0.03);
+  expect(res.meanJunction).toBeLessThan(res.meanArm * 1.4);
+});

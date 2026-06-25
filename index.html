@@ -1698,7 +1698,17 @@ function hasFrontage(x,y){
   for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++) if (isRoad(x+dx,y+dy)) return true;
   return false;
 }
-function congestion(x,y){ const c=map[y][x]; if(!ROADTYPE[c.t]) return 0; return traffic[idx(x,y)] / ROAD_CAP[c.t]; }
+// Effective capacity of a road tile. A junction carries the SUM of every corridor that crosses it
+// (the E-W flow plus the N-S flow), but a one-direction segment and a crossroads used to share one
+// capacity — so every balanced intersection redded out at ~2× its arms no matter how many parallel
+// routes you added. Give junctions headroom for the crossing: a 4-way serves ~2 corridors, a T ~1.5.
+// A straight run or a simple corner (degree ≤2) is a single corridor and keeps the base capacity.
+function roadCapAt(x,y){
+  const base=ROAD_CAP[map[y][x].t]; if(!base) return base;
+  const deg=(isRoad(x-1,y)?1:0)+(isRoad(x+1,y)?1:0)+(isRoad(x,y-1)?1:0)+(isRoad(x,y+1)?1:0);
+  return base * (deg>=4 ? 1.9 : deg===3 ? 1.5 : 1);
+}
+function congestion(x,y){ const c=map[y][x]; if(!ROADTYPE[c.t]) return 0; return traffic[idx(x,y)] / roadCapAt(x,y); }
 function adjCongested(x,y){
   for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
     if (isRoad(x+dx,y+dy) && congestion(x+dx,y+dy) > 1) return true;
@@ -3166,7 +3176,7 @@ function buildStepCost(){
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     const i=idx(x,y), t=map[y][x].t;
     if (!ROADTYPE[t]){ stepCost[i]=Infinity; congSnap[i]=0; continue; }
-    const cg = traffic[i] / ROAD_CAP[t];
+    const cg = traffic[i] / roadCapAt(x,y);   // junctions get crossing-flow headroom (see roadCapAt)
     congSnap[i] = cg;
     const base = t==='avenue' ? AVE_BASE : 1;
     stepCost[i] = base * (1 + COST_K*Math.pow(cg,COST_P));
@@ -10585,8 +10595,8 @@ function showTip(x,y,force,light,dock){
     }
   }
   if (ROADTYPE[c.t]){
-    const cg=congestion(x,y);
-    html+=`<div class="row"><span>Load</span><span>${Math.round(traffic[i])} / ${ROAD_CAP[c.t]}</span></div>`;
+    const cg=congestion(x,y), eff=roadCapAt(x,y);
+    html+=`<div class="row"><span>Load</span><span>${Math.round(traffic[i])} / ${Math.round(eff)}${eff>ROAD_CAP[c.t]?' (junction)':''}</span></div>`;
     if (c.bus) html+=`<div class="row"><span>🚏 Bus stop</span><span>homes within 4 tiles drive 45% less</span></div>`;
     html+=`<div class="row"><span>Status</span><span style="color:${cg>1?'var(--red)':cg>.6?'var(--amber)':'var(--green)'}">${cg>1?'gridlock':cg>.6?'busy':'flowing'}</span></div>`;
   }
