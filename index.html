@@ -9347,10 +9347,22 @@ function render(now){
   for (let s=sLo; s<=sHi; s++){
     // ground is down (cache/snapshot) → paint this band's deferred buildings tallest/2×2-first so shorter
     // single-tile neighbours land on top. Skipped entirely under snapMode (the whole static scene is frozen).
-    if (!snapMode) drawStructBand(s, dLo, dHi);
     // flush every vehicle / pedestrian / train whose footprint ends on this diagonal (always live)
     const cb=carBands.get(s);
-    if (cb) for (const e of cb) drawVehicle(e.car, e.fx, e.fy);
+    // EVERY structure flushed this band shares the diagonal s, so a vehicle is occluded by ALL of them iff
+    // its lane point sits BEHIND that diagonal (vx+vy < s) and rides OVER them iff in front. Split the band's
+    // cars on that line — behind ones under the buildings, front ones on top — instead of dumping the whole
+    // band on top (the old "car climbs the wall" artifact came from the flush nudge promoting a behind-car
+    // into this band). Live path only; under snapMode the structures live in the frozen blit, nothing to
+    // interleave with, so keep the original single pass to preserve the cmpCar cluster order exactly.
+    if (cb && !snapMode){
+      for (const e of cb) if (e.vx+e.vy <  s) drawVehicle(e.car, e.fx, e.fy);
+      drawStructBand(s, dLo, dHi);
+      for (const e of cb) if (e.vx+e.vy >= s) drawVehicle(e.car, e.fx, e.fy);
+    } else {
+      if (!snapMode) drawStructBand(s, dLo, dHi);
+      if (cb) for (const e of cb) drawVehicle(e.car, e.fx, e.fy);
+    }
     const pbd=pedBands.get(s);
     if (pbd) for (const [p] of pbd) drawPed(p,now);
     const tbd=trainBands.get(s);
