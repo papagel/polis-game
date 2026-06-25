@@ -203,6 +203,9 @@
   #mstyles{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:4px 0 2px}
   .mstyle{background:#1a2636;border:1px solid var(--line);border-radius:7px;color:var(--dim);font-size:10.5px;padding:7px 2px;cursor:pointer;white-space:nowrap;font-family:'Chakra Petch'}
   .mstyle.on{background:#3a2f1a;border-color:var(--amber);color:var(--amber)}
+  .mstyle.playing{position:relative;color:var(--amber)}
+  .mstyle.playing::after{content:'';position:absolute;top:4px;right:4px;width:4px;height:4px;border-radius:50%;background:var(--amber);box-shadow:0 0 4px var(--amber);animation:nowplay 1.8s ease-in-out infinite}
+  @keyframes nowplay{0%,100%{opacity:.35}50%{opacity:1}}
   #sndList{margin-top:4px;border-top:1px solid var(--line);padding-top:5px}
   .srow{display:flex;align-items:center;gap:7px;margin:3px 0;font-size:11px}
   .srow span{flex:1;color:var(--ink)}
@@ -849,6 +852,9 @@
     <button class="mstyle" data-st="vangelis">Vangelis</button>
     <button class="mstyle" data-st="funk">Funk</button>
     <button class="mstyle" data-st="bossa">Bossa</button>
+    <button class="mstyle" data-st="reggae">Reggae</button>
+    <button class="mstyle" data-st="disco">Disco</button>
+    <button class="mstyle" data-st="tango">Tango</button>
   </div>
   <div class="arow"><span>Music volume</span><input type="range" id="musVol" min="0" max="100" value="55"></div>
   <div class="arow" style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px"><span>City sounds</span><button class="atgl on" id="ambTgl">ON</button></div>
@@ -11312,6 +11318,171 @@ function bossaBar(){
   }
   return BAR*1000;
 }
+/* — style 14: REGGAE (one-drop: fat dub sub, warm off-beat 'bubble' skank, rim+kick on the 3, breathy melodica) — */
+const PROG_RG=[[0,3,7],[0,3,7],[5,8,12],[7,10,14]];        // i i IV V minor lilt (rel. A=220)
+const RBASS=[0,null,3,0, null,0,null,7, 0,null,3,0, 7,null,5,null];
+function reggaeBar(){
+  const C=AU.ctx, t=C.currentTime, BAR=60/72*4, ST=BAR/16;
+  const ch=PROG_RG[bar%PROG_RG.length], root=ch[0];
+  const lively = S.started && S.speed ? Math.min(1, S.pop/750) : 0.4;
+  // round dub bass: fat sine sub with a soft triangle body, lazy and prominent — it carries the tune
+  for (let i=0;i<16;i++){
+    const n=RBASS[i]; if (n===null) continue;
+    const at=t+i*ST, f=NOTE(root+n)/4;
+    const o=C.createOscillator(); o.type='sine'; o.frequency.value=f;
+    const o2=C.createOscillator(); o2.type='triangle'; o2.frequency.value=f*2;
+    const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=380;
+    const g=C.createGain(); g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(0.12,at+0.04);
+    g.gain.exponentialRampToValueAtTime(0.001,at+ST*2.3);
+    const g2=C.createGain(); g2.gain.value=0.25; o2.connect(g2);
+    o.connect(lp); g2.connect(lp); lp.connect(g); g.connect(AU.mus);
+    o.start(at); o2.start(at); o.stop(at+ST*2.5); o2.stop(at+ST*2.5);
+  }
+  // the 'bubble': warm filtered-saw organ chop on each off-beat, plus a softer ghost just after it
+  const skank=(at,vol)=>{
+    const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1500; lp.connect(AU.mus);
+    const g=C.createGain(); g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(vol,at+0.008);
+    g.gain.exponentialRampToValueAtTime(0.001,at+ST*0.7); g.connect(lp);
+    for (const semi of ch){ const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=NOTE(semi);
+      o.connect(g); o.start(at); o.stop(at+ST*0.8); }
+  };
+  for (let i=2;i<16;i+=4){
+    if (lively<0.2 && Math.random()<0.4) continue;
+    skank(t+i*ST, 0.016);                                 // main off-beat chop
+    skank(t+(i+1)*ST, 0.009);                             // softer 'bubble' ghost
+  }
+  // one-drop: a rim cross-stick + kick land together on beat 3 — the empty 'one' is the signature
+  const kick=(at,vol)=>{ const o=C.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(115,at); o.frequency.exponentialRampToValueAtTime(44,at+0.11);
+    const g=C.createGain(); g.gain.setValueAtTime(vol,at); g.gain.exponentialRampToValueAtTime(0.0001,at+0.17);
+    o.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+0.19); };
+  const rim=(at,vol)=>{ const o=C.createOscillator(); o.type='triangle'; o.frequency.value=1700;
+    const bp=C.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2400; bp.Q.value=4;
+    const g=C.createGain(); g.gain.setValueAtTime(vol,at); g.gain.exponentialRampToValueAtTime(0.0006,at+0.05);
+    o.connect(bp); bp.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+0.06); };
+  kick(t+8*ST,0.14); rim(t+8*ST,0.05);
+  // steady soft hats on the off-beats, a touch louder on beat 3
+  for (let i=1;i<16;i+=2){ if (lively<0.25 && Math.random()<0.4) continue;
+    const at=t+i*ST, src=C.createBufferSource(); src.buffer=makeNoiseBuf(C,0.02,false);
+    const hp=C.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=8500;
+    const g=C.createGain(); g.gain.value=(i===9)?0.012:0.007; src.connect(hp); hp.connect(g); g.connect(AU.mus); src.start(at);
+  }
+  // breathy melodica lead: a sweet, lazy phrase with gentle vibrato, floating over the bubble every couple of bars
+  if (lively>0.35 && bar%2===1 && Math.random()<0.7){
+    const seq=[ch[2],ch[1],ch[2],ch[2]+5,ch[1]];
+    let at=t+4*ST;
+    for (let i=0;i<seq.length;i++){ const dur=ST*2.2, f=NOTE(seq[i]+12);
+      const o=C.createOscillator(); o.type='triangle'; o.frequency.value=f;
+      const vib=C.createOscillator(); vib.frequency.value=5; const vd=C.createGain(); vd.gain.value=f*0.005;
+      vib.connect(vd); vd.connect(o.frequency);
+      const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2200;
+      const g=C.createGain(); g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(0.024,at+0.06);
+      g.gain.setValueAtTime(0.02,at+dur*0.6); g.gain.exponentialRampToValueAtTime(0.001,at+dur);
+      o.connect(lp); lp.connect(g); g.connect(AU.mus); o.start(at); vib.start(at); o.stop(at+dur+0.05); vib.stop(at+dur+0.05); at+=dur;
+    }
+  }
+  return BAR*1000;
+}
+/* — style 15: DISCO (four-on-the-floor kick, off-beat open hats, bouncing octave bass, string stabs) — */
+const PROG_DS=[[0,3,7],[5,8,12],[8,12,15],[7,10,14]];      // i IV VI V drive (rel. A=220)
+function discoBar(){
+  const C=AU.ctx, t=C.currentTime, BAR=60/120*4, ST=BAR/16;
+  const ch=PROG_DS[bar%PROG_DS.length], root=ch[0];
+  const lively = S.started && S.speed ? Math.min(1, S.pop/700) : 0.4;
+  // four-on-the-floor kick: the relentless disco pulse
+  for (let i=0;i<16;i+=4){ const at=t+i*ST;
+    const o=C.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(135,at); o.frequency.exponentialRampToValueAtTime(48,at+0.09);
+    const g=C.createGain(); g.gain.setValueAtTime(0.13,at); g.gain.exponentialRampToValueAtTime(0.0001,at+0.14);
+    o.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+0.16);
+  }
+  // open hi-hat sizzling on every off-beat 8th (the disco 'tss')
+  for (let i=2;i<16;i+=4){ const at=t+i*ST;
+    const src=C.createBufferSource(); src.buffer=makeNoiseBuf(C,0.10,false);
+    const hp=C.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=8500;
+    const g=C.createGain(); g.gain.setValueAtTime(0.02,at); g.gain.exponentialRampToValueAtTime(0.001,at+0.1);
+    src.connect(hp); hp.connect(g); g.connect(AU.mus); src.start(at);
+  }
+  // clap backbeat on 2 & 4
+  for (const i of [4,12]){ const at=t+i*ST;
+    const src=C.createBufferSource(); src.buffer=makeNoiseBuf(C,0.12,false);
+    const bp=C.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2200; bp.Q.value=0.6;
+    const g=C.createGain(); g.gain.setValueAtTime(0.05,at); g.gain.exponentialRampToValueAtTime(0.001,at+0.11);
+    src.connect(bp); bp.connect(g); g.connect(AU.mus); src.start(at);
+  }
+  // bouncing octave bass: root then octave-up on every 8th — the disco engine
+  for (let i=0;i<16;i+=2){ const at=t+i*ST, oct=(i%4===2)?12:0;
+    const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=NOTE(root+oct)/4;
+    const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=700; lp.Q.value=4;
+    const g=C.createGain(); g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(0.07,at+0.008);
+    g.gain.exponentialRampToValueAtTime(0.001,at+ST*1.5);
+    o.connect(lp); lp.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+ST*1.7);
+  }
+  // strummed string-stab chords on the off-beats once the floor is busy
+  if (lively>0.25) for (const i of [6,10,14]){ const at=t+i*ST;
+    for (const semi of ch){
+      const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=NOTE(semi+12);
+      const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=3000;
+      const g=C.createGain(); g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(0.012,at+0.01);
+      g.gain.exponentialRampToValueAtTime(0.001,at+ST*1.2);
+      o.connect(lp); lp.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+ST*1.3);
+    }
+  }
+  // soaring string-section swell every other bar for the lush disco sheen
+  if (lively>0.4 && bar%2===0) for (const semi of ch){ const f=NOTE(semi+12);
+    const g=C.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.012,t+BAR*0.4);
+    g.gain.setValueAtTime(0.012,t+BAR*0.7); g.gain.linearRampToValueAtTime(0.0001,t+BAR);
+    const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2600; lp.connect(g); g.connect(AU.mus);
+    for (const det of [0.996,1.004]){ const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=f*det;
+      o.connect(lp); o.start(t); o.stop(t+BAR+0.05); }
+  }
+  return BAR*1000;
+}
+/* — style 16: TANGO (marcato bass, reedy bandoneon stabs on the 3-3-2 habanera, sweeping vibrato violin) — */
+const PROG_TG=[[0,3,7],[-2,2,5],[-4,0,3],[-5,-1,2]];        // descending minor drama (rel. A=220)
+function tangoBar(){
+  const C=AU.ctx, t=C.currentTime, BAR=60/108*4, ST=BAR/16;
+  const ch=PROG_TG[bar%PROG_TG.length], root=ch[0];
+  const lively = S.started && S.speed ? Math.min(1, S.pop/800) : 0.5;
+  // marcato bass: heavy staccato roots on the four beats, driving the dance
+  const bass=(semi,at,vol,dur)=>{ const f=NOTE(semi)/4;
+    const o=C.createOscillator(); o.type='triangle'; o.frequency.value=f;
+    const o2=C.createOscillator(); o2.type='sine'; o2.frequency.value=f;
+    const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=600;
+    const g=C.createGain(); g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(vol,at+0.01);
+    g.gain.exponentialRampToValueAtTime(0.001,at+dur);
+    const g2=C.createGain(); g2.gain.value=0.5; o2.connect(g2);
+    o.connect(lp); g2.connect(lp); lp.connect(g); g.connect(AU.mus);
+    o.start(at); o2.start(at); o.stop(at+dur+0.05); o2.stop(at+dur+0.05); };
+  for (const i of [0,4,8,12]) bass(root, t+i*ST, 0.09, ST*1.6);
+  // bandoneon: reedy detuned-sawtooth chords stabbed on the 3-3-2 habanera, with a held sigh to close
+  for (const i of [0,3,6,8,11,14]){
+    if (lively<0.25 && Math.random()<0.3) continue;
+    const at=t+i*ST, held=(i===14), dur=held?ST*4:ST*1.1;
+    for (const semi of ch){
+      const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=NOTE(semi);
+      const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1700; lp.Q.value=0.6;
+      const g=C.createGain(); g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(held?0.016:0.022,at+0.012);
+      g.gain.exponentialRampToValueAtTime(0.001,at+dur);
+      o.connect(lp); lp.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+dur+0.05);
+    }
+  }
+  // sweeping violin: a dramatic legato line with vibrato, swelling every other bar
+  if (lively>0.3 && bar%2===0 && Math.random()<0.85){
+    const seq=[ch[2],ch[2]+2,ch[1],ch[2],ch[0]+12];
+    let at=t+2*ST;
+    for (let i=0;i<seq.length;i++){ const dur=ST*2.6, f=NOTE(seq[i]+12);
+      const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=f;
+      const vib=C.createOscillator(); vib.frequency.value=5.5; const vd=C.createGain(); vd.gain.value=f*0.006;
+      vib.connect(vd); vd.connect(o.frequency);
+      const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2800;
+      const g=C.createGain(); g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(0.024,at+0.12);
+      g.gain.setValueAtTime(0.02,at+dur*0.6); g.gain.linearRampToValueAtTime(0.0001,at+dur);
+      o.connect(lp); lp.connect(g); g.connect(AU.mus); o.start(at); vib.start(at); o.stop(at+dur+0.05); vib.stop(at+dur+0.05); at+=dur;
+    }
+  }
+  return BAR*1000;
+}
 function musicLoop(){
   if (!AU.ctx) return;
   let next=600;
@@ -11321,10 +11492,11 @@ function musicLoop(){
       // rotate between the styles every few minutes for variety
       const now=Date.now();
       if (now>AU.shufAt){
-        const pool=['classical','ambient','dynamic','lofi','chiptune','synthwave','aegean','jazz','techno','cinematic','vangelis','funk','bossa'].filter(x=>x!==AU.shufCur);
+        const pool=['classical','ambient','dynamic','lofi','chiptune','synthwave','aegean','jazz','techno','cinematic','vangelis','funk','bossa','reggae','disco','tango'].filter(x=>x!==AU.shufCur);
         AU.shufCur=pool[Math.random()*pool.length|0];
         AU.shufAt=now+(105+Math.random()*90)*1000;         // next change in 1.75–3.25 min
         bar=0;                                            // fresh phrase for the new style
+        updateNowPlaying();                               // mark the tune shuffle just picked
       }
       st=AU.shufCur;
     }
@@ -11341,6 +11513,9 @@ function musicLoop(){
     else if (st==='vangelis') next=vangelisBar();
     else if (st==='funk') next=funkBar();
     else if (st==='bossa') next=bossaBar();
+    else if (st==='reggae') next=reggaeBar();
+    else if (st==='disco') next=discoBar();
+    else if (st==='tango') next=tangoBar();
   }
   bar++;
   AU.musTimer=setTimeout(musicLoop, next);
@@ -11349,7 +11524,13 @@ function setMusicStyle(st){
   AU.musicStyle=st;
   if (st==='shuffle'){ AU.shufAt=0; }                      // pick a tune immediately
   document.querySelectorAll('#audioPanel .mstyle').forEach(b=>b.classList.toggle('on', b.dataset.st===st));
+  updateNowPlaying();
   if (AU.ctx){ clearTimeout(AU.musTimer); AU.musTimer=setTimeout(musicLoop, 120); }
+}
+/* subtle marker on the tune shuffle is currently spinning (only meaningful while shuffling) */
+function updateNowPlaying(){
+  const live = AU.on && AU.musicStyle==='shuffle' ? AU.shufCur : null;
+  document.querySelectorAll('#audioPanel .mstyle').forEach(b=>b.classList.toggle('playing', b.dataset.st===live));
 }
 function setAmb(on){
   AU.ambOn=on;
@@ -11365,6 +11546,7 @@ function setAudio(on){
   const sb=document.getElementById('sndBtn'); if (sb) sb.style.opacity = on?'1':'0.4';
   const b=document.getElementById('masterTgl'); if (b) b.textContent=on?'ON':'OFF', b.classList.toggle('on',on);
   if (AU.ctx) AU.master.gain.linearRampToValueAtTime(on?0.9:0, AU.ctx.currentTime+0.2);
+  updateNowPlaying();
 }
 /* snapshot & restore the whole audio + settings block for saves */
 function settingsSnapshot(){
@@ -13140,6 +13322,7 @@ const audioPanel=document.getElementById('audioPanel');
 document.getElementById('sndBtn').onclick=()=>{
   audioInit();
   audioPanel.classList.toggle('open');
+  if (audioPanel.classList.contains('open')) updateNowPlaying();
 };
 document.addEventListener('pointerdown', e=>{
   if (audioPanel.classList.contains('open') && !audioPanel.contains(e.target) && e.target.id!=='sndBtn')
