@@ -2639,6 +2639,28 @@ const CAP = {
   com:[0, 6, 16, 36, 160, 310, 560, 950],
   ind:[0, 9, 24, 42, 185, 300, 460, 460],   // lv5/6 = heavy-industry complexes (megaplants); lv7 unreached
 };
+/* labor-force participation: the share of residents who actually seek work.
+   Kids, students, retirees and non-working adults don't — so a city of N
+   people needs only ~N*LABOR jobs, not N. LABOR is the baseline/fallback; the
+   LIVE figure is S.labor, derived each tick from the working-age share (below)
+   and clamped to LABOR_BAND. Both the residential demand formula and the
+   happiness jobs-balance read S.labor (falling back to LABOR before tick 1). */
+const LABOR = 0.5;
+const LABOR_BAND = [0.42, 0.58];        // S.labor never escapes this — keeps the feedback loop bounded
+const PARTICIPATION = 0.8;              // share of working-age residents who actually hold a job
+/* age structure is derived from city conditions, not simulated per-citizen: a
+   base curve nudged by health (longevity → more seniors), education (smaller
+   families, more workers), opportunity (the young move to where the jobs are)
+   and mood (the mobile young leave a sour city, aging it). Eased slowly —
+   demographics shift over months, like S.edu. The working-age slice feeds
+   S.labor, so this curve now drives the workforce. (child+work+senior renorm to 1) */
+const AGE_BASE = { child:0.18, work:0.62, senior:0.20 };
+const AGE_SMOOTH = 0.02;
+function ageBreakdown(p){
+  const cf=(S.ageChild!=null)?S.ageChild:AGE_BASE.child, sf=(S.ageSenior!=null)?S.ageSenior:AGE_BASE.senior;
+  const child=Math.round(p*cf), senior=Math.round(p*sf);
+  return { child, senior, work:p-child-senior };   // work absorbs rounding so parts sum to p
+}
 /* education is a stock that converges toward school coverage each day — schooling
    raises the workforce over months and decays slowly, so schools are a long bet */
 const EDU_SMOOTH=0.02;
@@ -2841,7 +2863,7 @@ function simTick(){
   { const _km=DIFF[S.diff]&&DIFF[S.diff].km;
     if ((DISRND||_km) && !DIS && S.day%MONTH_DAYS===0 && typeof triggerDisaster==='function'
         && rnd() < 0.035*(_km?kmRamp().dis:1))
-      triggerDisaster(['quake','typhoon','flood','quake','typhoon','flood','monster','ufo','dragon'][rnd()*9|0]); }  let pop=0, comJ=0, indJ=0, unp=0, dry=0, congested=0, strandedPop=0, devLots=0, noWaste=0;
+      triggerDisaster(['quake','typhoon','flood','quake','typhoon','flood','monster','ufo','dragon'][rnd()*9|0]); }  let pop=0, comJ=0, indJ=0, unp=0, dry=0, congested=0, strandedPop=0, devLots=0, noWaste=0, jamRoad=0, jamAve=0;
   const D = S.demand;
   // traffic decays each day
   for (let i=0;i<traffic.length;i++) traffic[i]*=0.80;
@@ -2872,6 +2894,7 @@ function simTick(){
       }
       continue;
     }
+    if (ROADTYPE[c.t] && congestion(x,y)>1){ jamRoad++; if (c.t==='avenue') jamAve++; }   // who's actually maxed — feeds the right advice
     if (!ZONE[c.t]) continue;
     if (c.part) continue;                 // tower footprint cells are handled via their root
     if (c.bld>0) c.bld=Math.max(0, c.bld-0.07);   // construction progress
@@ -2998,13 +3021,15 @@ function simTick(){
   checkMilestones();
   weatherTick();
   S.congested = congested;
+  S.jamRoad = jamRoad; S.jamAve = jamAve;   // jammed road tiles, and how many are already avenues
 
   // demand
   const taxDrag = (S.tax - 9) * 0.025;   // trimmed — mood (below) now carries most of tax's bite
   const demK = (DIFF[S.diff] && DIFF[S.diff].dem) || 1;
   const scaleDem = v => v > 0 ? v * demK : v;   // harder difficulty cools hot demand; gluts stay as bad
   const mood = ((S.happy!=null?S.happy:60) - 50) * 0.010;   // A: a desirable city draws people; a sour one cools demand
-  D.r = clamp(scaleDem(( (S.jobs*1.15 - pop) / (40 + pop*0.35) ) + 0.35 - taxDrag + mood) + pfx.demR, -1, 1);
+  const lab = (S.labor!=null) ? S.labor : LABOR;   // live workforce share (demographics-driven); LABOR before tick 1
+  D.r = clamp(scaleDem(( (S.jobs - pop*lab) / (40 + pop*0.35) ) + 0.35 - taxDrag + mood) + pfx.demR, -1, 1);
   D.c = clamp(scaleDem(( (pop*0.40 - comJ) / (30 + pop*0.25) ) - taxDrag + mood*0.6) + pfx.demC, -1, 1);
   D.i = clamp(scaleDem(( (pop*0.55 - indJ) / (30 + pop*0.25) ) + 0.15 - taxDrag) + pfx.demI, -1, 1);
 
@@ -3013,7 +3038,7 @@ function simTick(){
   for (let y=0;y<G;y++) for (let x=0;x<G;x++)
     if (map[y][x].t==='res' && map[y][x].lv>0){ lvSum += landVal[idx(x,y)]; n++; }
   if (n) lvAvg = lvSum/n;
-  const jobBal = pop>0 ? clamp(S.jobs/Math.max(1,pop*.55),0,1.2) : 1;
+  const jobBal = pop>0 ? clamp(S.jobs/Math.max(1,pop*lab),0,1.2) : 1;
   const crimeDrag = Math.min(10, (S.crimeAvg||0)*0.45);
   const access = pop>0 ? clamp(strandedPop/pop,0,1) : 0;   // share of residents cut off from jobs by road
   S.strandedPop = strandedPop;
@@ -3027,6 +3052,24 @@ function simTick(){
   const happyTarget = clamp(30 + lvAvg*.5 + jobBal*18 - (S.tax-9)*2.2 - unp*1.5 - dry*0.8 - congested*0.7 - crimeDrag - access*12 + healthDrag - wasteDrag + eduMood + pfx.happy, 0, 100);
   S.happyF = (S.happyF==null) ? happyTarget : S.happyF + (happyTarget - S.happyF)*0.1;
   S.happy = Math.round(S.happyF);
+  // age structure (derived): nudge the base curve by the four drivers, clamp each
+  // bin to sane bounds, renormalize, then ease — migration is slow. The eased
+  // working-age slice drives S.labor, so the demand/happiness reads above pick it
+  // up on the NEXT tick (a one-tick lag that further damps the feedback loop).
+  {
+    const hN = clamp((((S.health!=null)?S.health:72) - 70)/30, -1, 1);   // health → longevity
+    const eN = clamp(((S.edu||0) - 0.5)/0.5, -1, 1);                     // schooling → fewer kids, more workers
+    const oN = clamp(D.r, -1, 1);                                        // job opportunity pulls the young in
+    const pN = clamp((S.happy - 55)/35, -1, 1);                          // a sour city loses the mobile young
+    let work   = clamp(AGE_BASE.work   + 0.07*eN + 0.06*oN + 0.05*pN, 0.45, 0.75);
+    let senior = clamp(AGE_BASE.senior + 0.06*hN - 0.03*oN,           0.08, 0.34);
+    let child  = clamp(1 - work - senior,                             0.08, 0.30);
+    const sum = work + senior + child; work/=sum; senior/=sum; child/=sum;
+    if (S.ageWork==null){ S.ageWork=work; S.ageSenior=senior; S.ageChild=child; }
+    else { S.ageWork+=(work-S.ageWork)*AGE_SMOOTH; S.ageSenior+=(senior-S.ageSenior)*AGE_SMOOTH; S.ageChild+=(child-S.ageChild)*AGE_SMOOTH; }
+    // only the working-age actually work — already smooth (S.ageWork is eased), just bound it
+    S.labor = clamp(S.ageWork * PARTICIPATION, LABOR_BAND[0], LABOR_BAND[1]);
+  }
   S.demParts = { pop, jobs:S.jobs, comJ, indJ, taxDrag };
   tickLandfills();
 
@@ -3035,7 +3078,13 @@ function simTick(){
     : '<b>Some streets go uncollected.</b> Outlying lots aren\'t linked to a sanitation site — extend a road to reach them, or drop a landfill nearby.');
   if (unp>3 && S.day%17===0) msg('<b>Blackouts.</b> Parts of the city have no power — extend roads from a plant or build another.');
   if (dry>5 && S.day%23===0) msg('<b>Water shortage.</b> Lots without water are stuck at level 1 — add a riverbank pump or a water tower.');
-  if (congested>6 && S.day%19===0) msg('<b>Gridlock.</b> Citizens are stuck in traffic and growth has stalled — upgrade busy streets to avenues or add parallel routes.');
+  // gridlock nag: scale the trigger with city size (a flat ">6" nags every metropolis with one
+  // hotspot forever) and re-point the advice when the jammed streets are already avenues — at the
+  // avenue ceiling "build more avenues" is useless, the real relief is getting trips off the road.
+  if (congested > Math.max(6, devLots*0.06) && S.day%19===0)
+    msg(jamRoad>0 && jamAve/jamRoad > 0.5
+      ? '<b>Gridlock.</b> Your avenues are already maxed out — get commuters off the road: add bus stops along the busy corridors, or run an elevated rail between districts.'
+      : '<b>Gridlock.</b> Citizens are stuck in traffic and growth has stalled — upgrade busy streets to avenues or add parallel routes.');
   if (access>0.15 && S.day%21===0) msg('<b>Stranded neighborhoods.</b> Some homes have no road route to any jobs — connect them to your commercial and industrial districts.');
 
   // early-game coach: a new mayor should never be left guessing why the city won't grow. While the
@@ -10362,9 +10411,10 @@ function upstreamCatch(tx,ty, field, isOrigin){
   const push=(c,i)=>{ let k=hn; hc[k]=c; hi[k]=i; hn++; while(k>0){ const p=(k-1)>>1; if(hc[p]<=hc[k])break; sw(p,k); k=p; } };
   const pop=()=>{ const ri=hi[0]; hn--; if(hn>0){ hc[0]=hc[hn]; hi[0]=hi[hn]; let k=0; for(;;){ let l=2*k+1,r=l+1,m=k; if(l<hn&&hc[l]<hc[m])m=l; if(r<hn&&hc[r]<hc[m])m=r; if(m===k)break; sw(m,k); k=m; } } return ri; };
   par[ti]=-1; push(field[ti], ti);
-  const found=new Map(); let guard=0;
+  const found=new Map(), basin=[]; let guard=0;
   while (hn>0 && guard++<20000){
     const i=pop(), x=i%G, y=(i/G)|0, fHere=field[i];
+    basin.push(i);                                 // every road tile that drains through the clicked tile
     for (const [dx,dy] of DIRS4){
       const nx=x+dx, ny=y+dy; if (!inB(nx,ny)) continue;
       const c=map[ny][nx];
@@ -10374,7 +10424,7 @@ function upstreamCatch(tx,ty, field, isOrigin){
   }
   // corridor from a flooded road tile back to the clicked tile: [road … tile], monotone-descending
   const tracePath=(from)=>{ const p=[]; let c=from, g=0; while (c>=0 && g++<500){ p.push(c); c=par[c]; } return p; };
-  return { found:[...found.values()], tracePath };
+  return { found:[...found.values()], tracePath, basin };
 }
 let _cmField=null;
 /* The modal road routes to surface when inspecting a BUILDING, as {path:[tileIdx…], kind}.
@@ -12978,7 +13028,7 @@ function adviseCity(){
     if (S.demand.r<=-0.5){
       const ratio=S.pop>0?(S.jobs/S.pop):0;
       out.push(['⚠️','Housing demand has collapsed',
-        `Your city has ${ratio.toFixed(2)} jobs per resident — healthy cities need ≈0.80. Nobody moves where there's no work, and existing homes slowly decay. Zone commercial and industrial near roads to restore the balance.`]);
+        `Your city has ${ratio.toFixed(2)} jobs per resident — healthy cities need ≈${((S.labor!=null)?S.labor:LABOR).toFixed(2)} (only working-age residents seek work). Nobody moves where there's no work, and existing homes slowly decay. Zone commercial and industrial near roads to restore the balance.`]);
     }
     if (S.demand.c<=-0.5) out.push(['⚠️','Commerce is oversupplied',
       'There are more shops than your population can support — they will decay until homes catch up. Zone residential, or wait.']);
@@ -13006,7 +13056,7 @@ function adviseCity(){
     else if (capped6>2) out.push(['🎓',`${capped6} highrises are capped by education`,
       `Megatowers demand a 92% educated workforce — you're at ${Math.round(edu*100)}%. Universities cover the widest area.`]);
   }
-  let plants=0, wsrc=0, zonesDev=0, dry=0, unp=0, lowLV=0, resLots=0, sumLV=0, indHi=0, fireSt=0, jam=0;
+  let plants=0, wsrc=0, zonesDev=0, dry=0, unp=0, lowLV=0, resLots=0, sumLV=0, indHi=0, fireSt=0, jam=0, jamAve=0;
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     const c=map[y][x];
     if (PLANT[c.t]) plants++;
@@ -13019,7 +13069,7 @@ function adviseCity(){
       if (c.t==='res'){ resLots++; sumLV+=landVal[idx(x,y)]; if (landVal[idx(x,y)]<55) lowLV++; }
       if (c.t==='ind' && c.lv>=2) indHi++;
     }
-    if (ROADTYPE[c.t] && congestion(x,y)>1) jam++;
+    if (ROADTYPE[c.t] && congestion(x,y)>1){ jam++; if (c.t==='avenue') jamAve++; }
   }
   if (!plants) out.push(['⚡','Build a power plant','Nothing grows without electricity. Coal is the cheap start; solar stays clean.']);
   else if (S.powerCap>0 && S.powerUse/S.powerCap>0.85) out.push(['⚡','Add power capacity',`The grid is at ${Math.round(S.powerUse/S.powerCap*100)}% (${Math.round(S.powerUse)}/${S.powerCap} MW). Brownouts hit the far districts first.`]);
@@ -13030,7 +13080,9 @@ function adviseCity(){
   if (S.demand.r>0.3) out.push(['⌂','Zone more residential','People want to move in — demand is high. Pair rows beside avenues become towers later.']);
   if (S.demand.c>0.3) out.push(['$','Zone more commercial','Shops are in demand. Commerce thrives near homes with good land value.']);
   if (S.demand.i>0.3) out.push(['⚙','Zone more industry','Jobs are scarce. Keep factories well away from homes — smog kills land value.']);
-  if (jam>3) out.push(['🚗',`${jam} road tiles are gridlocked`,'Upgrade busy stretches to avenues (3× capacity), or add parallel routes.']);
+  if (jam>3) out.push(['🚗',`${jam} road tiles are gridlocked`, jamAve/jam > 0.5
+    ? 'These are mostly avenues already — avenues are the widest road, so the fix now is fewer cars: bus stops (cut nearby car trips 45%) and elevated rail between districts.'
+    : 'Upgrade busy stretches to avenues (3× capacity), or add parallel routes.']);
   if (indHi>0 && !fireSt) out.push(['🔥','Build a fire station','Mature industry catches fire. One uncovered blaze can level a district.']);
   {
     let stops=0; for (let y=0;y<G;y++) for (let x=0;x<G;x++) if (map[y][x].bus) stops++;
@@ -13536,12 +13588,23 @@ bindStatTip(document.getElementById('rci'), ()=>{
   const pc=(v)=>Math.round(v*100);
   return `<h4>R·C·I — WHO WANTS TO MOVE IN</h4>`
     + `<div class="row"><span>Residential</span><span style="color:${d.r>0?'var(--green)':'var(--red)'}">${pc(d.r)}%</span></div>`
-    + `<div class="row"><span style="font-size:10px">jobs (${p.jobs}) vs residents (${p.pop}) — surplus jobs pull people in</span><span></span></div>`
+    + `<div class="row"><span style="font-size:10px">jobs (${p.jobs}) vs job-seekers (${Math.round(p.pop*((S.labor!=null)?S.labor:LABOR))}, ~${Math.round(((S.labor!=null)?S.labor:LABOR)*100)}% of ${p.pop}) — surplus jobs pull people in</span><span></span></div>`
     + `<div class="row"><span>Commercial</span><span style="color:${d.c>0?'var(--green)':'var(--red)'}">${pc(d.c)}%</span></div>`
     + `<div class="row"><span style="font-size:10px">shoppers needed: ~40% of residents (${p.comJ} shop jobs now)</span><span></span></div>`
     + `<div class="row"><span>Industrial</span><span style="color:${d.i>0?'var(--green)':'var(--red)'}">${pc(d.i)}%</span></div>`
     + `<div class="row"><span style="font-size:10px">factory demand: ~55% of residents (${p.indJ} jobs now)</span><span></span></div>`
     + (p.taxDrag>0.001?`<div class="row"><span style="color:var(--red);font-size:10px">high taxes drag all demand by ${Math.round(p.taxDrag*100)}%</span><span></span></div>`:'');
+});
+bindStatTip(document.getElementById('pop'), ()=>{
+  const a=ageBreakdown(S.pop), lab=(S.labor!=null)?S.labor:LABOR, seek=Math.round(S.pop*lab), gap=S.jobs-seek;
+  const pc=f=>Math.round(((f!=null)?f:0)*100);
+  return `<h4>POPULATION — BY AGE</h4>`
+    + `<div class="row"><span>Children</span><span>${a.child.toLocaleString()} · ${pc(S.ageChild!=null?S.ageChild:AGE_BASE.child)}%</span></div>`
+    + `<div class="row"><span>Working age</span><span>${a.work.toLocaleString()} · ${pc(S.ageWork!=null?S.ageWork:AGE_BASE.work)}%</span></div>`
+    + `<div class="row"><span>Seniors</span><span>${a.senior.toLocaleString()} · ${pc(S.ageSenior!=null?S.ageSenior:AGE_BASE.senior)}%</span></div>`
+    + `<div class="row" style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px"><span>Job-seekers (${pc(lab)}% of pop)</span><span>${seek.toLocaleString()}</span></div>`
+    + `<div class="row"><span>Jobs available</span><span>${S.jobs.toLocaleString()}</span></div>`
+    + `<div class="row"><span style="color:${gap>=0?'var(--green)':'var(--red)'};font-size:10px">${gap>=0?`${gap.toLocaleString()} surplus jobs`:`${(-gap).toLocaleString()} unemployed`}</span><span></span></div>`;
 });
 function makeDraggable(el, handle){
   if (!handle) return;
