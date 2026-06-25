@@ -366,6 +366,11 @@
   #saveModal button.primary{background:var(--amber);color:#1a1206;border-color:var(--amber);font-weight:700}
   #slotList{overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
   #slotList .slot{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;margin-bottom:7px;background:#0a121c}
+  #slotList .slot.load{cursor:pointer;transition:background .12s,border-color .12s}
+  #slotList .slot.load:hover{background:#0e1826;border-color:var(--amber)}
+  #slotList .slot.load:active{background:#12203044}
+  #slotList .slot .chev{flex:none;color:var(--dim);font-size:20px;padding:0 4px;line-height:1}
+  #slotList .slot.load:hover .chev{color:var(--amber)}
   #slotList .slot .nm{font-family:'Chakra Petch';font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .slot .thumb{width:46px;height:46px;border-radius:7px;flex:none;border:1px solid var(--line);image-rendering:pixelated;object-fit:cover;background:#13202f;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:18px}
 .slot .mid{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -532,6 +537,7 @@
   <p class="keys">You start in <b>Pan</b> mode — pick a tool to build, tap again or Esc to stop · Q / E or ⟲⟳ rotates the view · Drag previews, release builds · Pinch or scroll zooms · the speaker button toggles sound · Fullscreen lives in the ⋯ menu</p>
   <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
     <button id="continueBtn" style="display:none;background:var(--panel2);color:var(--ink);border:1px solid var(--amber)">CONTINUE</button>
+    <button id="loadBtn" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line)">LOAD CITY</button>
     <button id="exampleBtn" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line)">SCENARIOS</button>
     <button id="startBtn">START BUILDING</button>
   </div>
@@ -9318,7 +9324,7 @@ function render(now){
     // cost tag follows the drag end
     const [bx,by]=pend.b;
     const [tpx,tpy]=tileScreen(clamp(bx,0,G-1), clamp(by,0,G-1));
-    const text = valid===0 ? 'nothing to build here'
+    const text = valid===0 ? (S.tool==='bulldoze' ? 'nothing to clear here' : 'nothing to build here')
                : `${valid} tile${valid>1?'s':''} · ${fmt(cost)}`;
     cx.font="12px 'Chakra Petch'";
     const tw2=cx.measureText(text).width;
@@ -11942,18 +11948,28 @@ async function renderSlots(mode){
     mid.innerHTML='<span class="nm">'+(id==='auto'?'<b style="color:var(--amber)">AUTO</b> · ':'')+(m.cn||'Polis')+' · Year '+svYear(m.day)+'</span>'
       +'<span class="meta">'+(m.pop||0).toLocaleString()+' pop · §'+(m.money||0).toLocaleString()+(m.g?(' · '+m.g+'×'+m.g):'')+' · '+ago(m.ts||Date.now())+'</span>';
     row.appendChild(mid);
-    const lb=document.createElement('button'); lb.className='primary'; lb.textContent='Load';
-    lb.onclick=()=>{
+    const doLoad=()=>{
       try{
         loadSave(o.code); modal.classList.remove('open');
+        document.getElementById('intro').style.display='none';   // may be open if loading from the title screen
+        audioInit();   // idempotent; starts audio when loading from the title screen
         S.started=true; updateHUD(); applyCityName();
         msg('<b>City restored.</b> Welcome back, mayor.');
       }catch(err){ statusEl.textContent=err.message; }
     };
-    row.appendChild(lb);
+    // The whole row is the load target (bigger tap area, mobile-first). This modal is
+    // shared save/load, so rows load in both modes; the confirm guard below protects a
+    // live city from a stray tap discarding it.
+    row.classList.add('load');
+    row.onclick=()=>{
+      if (S.started) gameConfirm('Load this city?', (m.cn||'Polis')+' · Year '+svYear(m.day)+' — unsaved progress on your current city will be lost.', 'Load', doLoad);
+      else doLoad();
+    };
+    const chev=document.createElement('div'); chev.className='chev'; chev.textContent='›';
+    row.appendChild(chev);
     if (id!=='auto'){
       const db=document.createElement('button'); db.className='del'; db.textContent='✕';
-      db.onclick=()=>gameConfirm('Delete this save?', (m.cn||'Polis')+' · Year '+svYear(m.day)+' — this cannot be undone.', 'Delete', async()=>{ await svDelete(id); renderSlots(mode); });
+      db.onclick=e=>{ e.stopPropagation(); gameConfirm('Delete this save?', (m.cn||'Polis')+' · Year '+svYear(m.day)+' — this cannot be undone.', 'Delete', async()=>{ await svDelete(id); renderSlots(mode); }); };
       row.appendChild(db);
     }
     list.appendChild(row);
@@ -11987,6 +12003,9 @@ applyBtn.onclick=()=>{
   try{
     loadSave(codeBox.value);
     modal.classList.remove('open');
+    document.getElementById('intro').style.display='none';   // may be open if loading from the title screen
+    audioInit();   // idempotent; starts audio when loading from the title screen
+    S.started=true; updateHUD(); applyCityName();
     msg('<b>City restored.</b> Welcome back, mayor.');
   }catch(err){
     statusEl.style.color='var(--red)';
@@ -13262,6 +13281,10 @@ document.getElementById('startBtn').onclick=()=>{
 };
 document.getElementById('exampleBtn').onclick=()=>{
   document.getElementById('demoModal').classList.add('open');
+};
+// from the title screen: open the save/load modal so a saved slot or a shared code can be loaded before any game exists
+document.getElementById('loadBtn').onclick=()=>{
+  openModal('load');   // audio starts only once a city is actually loaded, not on opening the picker
 };
 function loadDemo(code, welcome){
   audioInit();
