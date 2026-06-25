@@ -74,6 +74,26 @@ test('the dragon strafes fire from the air', async ({ game }) => {
   expect(res.cleared).toBe(true);
 });
 
+// Regression: starting a new city / scenario while a disaster is mid-animation
+// used to leak it (a kaiju would keep stomping over the fresh map) because DIS
+// and the agent arrays were never cleared. resetTransients() — the single reset
+// every new/loaded-city entry point now funnels through — must zero all of it.
+test('a city reset clears the active disaster and all live agents', async ({ game }) => {
+  const res = await game.eval(inPage(`
+    ${fillCity}
+    triggerDisaster('monster');                    // a beast is mid-stomp
+    cars.push({}); peds.push({}); planes.push({}); trains.push({});  // and agents are live
+    const before = { dis: DIS && DIS.type, cars: cars.length, peds: peds.length };
+    resetTransients();                             // ← the new-city / scenario reset funnels through this
+    return { before, disCleared: DIS===null,
+             agentsCleared: cars.length===0 && peds.length===0 && planes.length===0 && trains.length===0 };
+  `));
+  expect(res.before.dis).toBe('monster');          // it really was running
+  expect(res.before.cars).toBeGreaterThan(0);
+  expect(res.disCleared).toBe(true);               // …and the reset wiped it — no carryover
+  expect(res.agentsCleared).toBe(true);
+});
+
 test('only one disaster runs at a time', async ({ game }) => {
   const res = await game.eval(inPage(`
     ${fillCity}

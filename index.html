@@ -1521,6 +1521,17 @@ function centerCamera(){
   S.ox = W/2;
   S.oy = H/2 - (G-1)*TH/2*S.zoom;
 }
+// One authoritative reset for every transient that holds live tile coords or
+// screen FX — agents, the active disaster (and its camera-shake transform), and
+// traffic. Every new/loaded-city entry point calls this so nothing leaks across
+// cities (e.g. a kaiju mid-stomp bleeding into a freshly started scenario).
+function resetTransients(){
+  cars.length=0; svc.length=0; peds.length=0; smoke.length=0; copters.length=0;
+  planes.length=0; trains.length=0; railComp=null; carPairOrd.clear();
+  if (DIS){ DIS=null; cv.style.transform=''; }
+  traffic.fill(0);
+  dirtyRoads=true; dirtyWalk=true;
+}
 // Grow the (square) world in place by adding a `pad`-tile ring on ALL four sides,
 // keeping every existing cell. Existing land shifts by `pad`, so tower roots (grp)
 // shift with it and tile-coord agents/disasters (which can't follow) are dropped —
@@ -2752,7 +2763,30 @@ function projectBudget(){
    machinery, a shop has kitchens and wiring, a home is the least likely to light up.
    Scaled by density (more to burn), fire-station coverage, rain and difficulty. */
 const FIRE_RISK = { res:0.00016, com:0.00032, ind:0.00078 };
-const FIRE_BURN = { res:12, com:15, ind:18 };
+// burn-down countdown in game-days. Long enough that a dispatched engine can
+// reach the blaze before a covered lot is lost — the truck navigates roads in
+// real time while this ticks once/day, so too short and the lot is always rubble
+// by the time it arrives. An uncovered lot still smoulders down to rubble.
+const FIRE_BURN = { res:30, com:36, ind:45 };
+const FIRE_SPREAD = 0.025;   // daily odds a burning lot jumps to a neighbour (was a runaway 0.06)
+/* Coverage radius (tiles) a service building projects — mirrors recomputeFields'
+   fr()/per-type multipliers exactly so the placement-preview ring matches the
+   splat the sim will actually paint (funding sliders scale both). 0 = not a
+   coverage building. */
+function svcCoverR(tool){
+  const fr=k=>Math.max(2, Math.round(10*Math.sqrt(S.fund[k]/100)));
+  switch(tool){
+    case 'police':     return fr('police');
+    case 'fire':       return fr('fire');
+    case 'school':     return Math.round(fr('school')*0.8);
+    case 'highschool': return fr('school');
+    case 'university':  return Math.round(fr('school')*1.4);
+    case 'clinic':     return Math.round(fr('health')*0.6);
+    case 'hospital':   return fr('health');
+    case 'medcenter':  return Math.round(fr('health')*1.3);
+    default: return 0;
+  }
+}
 function fireChance(c,x,y){
   const base=FIRE_RISK[c.t];
   if (!base || c.lv<1 || c.part || c.fire>0) return 0;
@@ -2803,10 +2837,10 @@ function simTick(){
     const c = map[y][x];
     if (c.fire>0){
       c.fire--;
-      if (rnd()<.06){ // spread
+      if (rnd()<FIRE_SPREAD){ // spread
         const [dx,dy]=[[1,0],[-1,0],[0,1],[0,-1]][rnd()*4|0];
         const n = inB(x+dx,y+dy) ? map[y+dy][x+dx] : null;
-        if (n && ZONE[n.t] && n.lv>0 && !n.fire) { n.fire = 14; msgAt('<b>The fire is spreading!</b>', x+dx, y+dy); }
+        if (n && ZONE[n.t] && n.lv>0 && !n.fire) { n.fire = FIRE_BURN[n.t]||30; msgAt('<b>The fire is spreading!</b>', x+dx, y+dy); }
       }
       if (c.fire===0){
         if (c.grp && !c.part) unmerge(c.grp[0], c.grp[1], 'rubble');
@@ -2921,7 +2955,7 @@ function simTick(){
     if (c.lv>0) emitTraffic(x,y,c.lv,c.t);
     // fire risk — odds and severity vary by what the building is (factory ≫ shop ≫ home)
     if (rnd() < fireChance(c,x,y)){
-      c.fire = FIRE_BURN[c.t]||14;
+      c.fire = FIRE_BURN[c.t]||30;
       const what = c.t==='ind'?'factory' : c.t==='com'?'shop' : 'home';
       const covd = cover.fire[idx(x,y)]>0.05;
       msgAt(`<b>Fire breaks out at a ${what}!</b> ${covd?'A station is nearby — trucks are rolling.':'No fire station covers it — it could spread.'}`, x, y);
@@ -9240,6 +9274,23 @@ function render(now){
     if (inB(hx,hy)){
       const [px,py]=tileScreen(hx,hy);
       const hc=map[hy][hx];
+      // coverage-radius ring: scout where a service building will reach before you
+      // commit, so gaps are visible while placing (matches the splat in recomputeFields).
+      const cvR=svcCoverR(S.tool);
+      if (cvR>0){
+        const z=S.zoom, rcol=(TOOLDEF[S.tool]&&TOOLDEF[S.tool].col)||'#9fb4c8';
+        cx.save();
+        cx.beginPath();
+        for (let k=0;k<=48;k++){
+          const a=k/48*Math.PI*2, [vdx,vdy]=rotD(cvR*Math.cos(a), cvR*Math.sin(a));
+          const X=px+(vdx-vdy)*(TW/2)*z, Y=py+(vdx+vdy)*(TH/2)*z;
+          if (k===0) cx.moveTo(X,Y); else cx.lineTo(X,Y);
+        }
+        cx.closePath();
+        cx.fillStyle=hexA(rcol,.10); cx.fill();
+        cx.setLineDash([6,5]); cx.lineWidth=1.5; cx.strokeStyle=hexA(rcol,.85); cx.stroke();
+        cx.restore();
+      }
       const ghostable = !['pan','inspect','bulldoze','raise','lower'].includes(S.tool);
       // can this tool actually land here?
       let ok;
@@ -11991,7 +12042,7 @@ function loadSave(code){
   S.edu=null;            // re-derive the education stock from this city's schools on the next tick
   document.getElementById('taxSlider').value=S.tax;
   document.getElementById('taxLbl').textContent=S.tax+'%';
-  traffic.fill(0); cars.length=0; svc.length=0; smoke.length=0; dirtyRoads=true;
+  resetTransients();
   // the mountain height factor drives the procedural elevation, which is re-derived (elevDirty) from
   // the water layout on every load — so restore it BEFORE that recompute. Water/trees are baked into
   // the cells, so they need no restore. Older saves predate the field and load at 1 (the default look).
@@ -13548,7 +13599,7 @@ function scenFresh(size,diff,seed,name){
   setWorldSize(size);
   terrainWater=0.12; terrainMtn=1; terrainTrees=0.18;   // scenarios author against the standard generator
   if (seed!=null) genMap(seed); else genMap();
-  traffic.fill(0); cars.length=0; svc.length=0; peds.length=0; smoke.length=0; dirtyRoads=true; dirtyWalk=true;
+  resetTransients();
   undoStack.length=0; redoStack.length=0; updateUndoUI();
   S.money=DIFF[S.diff].money;
   S.day=0; S.pop=0; S.jobs=0; S.tax=9;
@@ -13925,7 +13976,7 @@ document.getElementById('mapBegin').onclick=()=>{
   setWorldSize(pickSize);
   terrainWater=pickWaterF(); terrainMtn=pickMtnF(); terrainTrees=pickTreeF();
   if (chosenSeed!==null) genMap(chosenSeed); else genMap();
-  traffic.fill(0); cars.length=0; svc.length=0; peds.length=0; smoke.length=0; dirtyRoads=true; dirtyWalk=true;
+  resetTransients();
   undoStack.length=0; redoStack.length=0; updateUndoUI();
   S.money=DIFF[S.diff].money;
   S.day=0; S.pop=0; S.jobs=0; S.tax=9;
