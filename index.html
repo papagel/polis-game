@@ -277,6 +277,12 @@
   #tip h4{font-family:'Chakra Petch';font-size:13px;color:var(--amber);margin-bottom:2px}
   #tip .row{display:flex;justify-content:space-between;gap:14px}
   #tip .row span:last-child{font-family:'Chakra Petch'}
+  /* pinned inspect: dock the card as a right-hand sidebar so it never covers the commute lines */
+  #tip.dock{left:auto;top:calc(64px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));width:min(252px,82vw);max-width:none;max-height:calc(100vh - 150px);overflow-y:auto;pointer-events:auto;z-index:12;padding-top:30px}
+  #tip .tipX{position:absolute;top:8px;right:9px;width:22px;height:22px;border:1px solid var(--line);border-radius:7px;background:#1a2636;color:var(--dim);font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  #tip .tipX:hover{color:var(--ink)}
+  #tip .cmleg{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:11.5px;margin-top:3px}
+  #tip .cmleg .sw{width:16px;height:0;border-top:3px dashed currentColor;border-radius:2px;flex:0 0 auto;opacity:.95}
 
   /* zoom + budget */
   #corner{right:calc(10px + env(safe-area-inset-right));bottom:12px;display:flex;flex-direction:column;gap:6px}
@@ -623,9 +629,9 @@
   <button id="statXp" title="More stats"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
   <div class="spd">
     <button data-s="0" title="Pause"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></button>
-    <button data-s="1" class="on" title="Play"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg></button>
-    <button data-s="2" title="Fast"><svg viewBox="0 0 24 24" width="13" height="11" fill="currentColor"><path d="M3 4l9 8-9 8zM12 4l9 8-9 8z"/></svg></button>
-    <button data-s="3" title="Fastest"><svg viewBox="0 0 24 24" width="15" height="11" fill="currentColor"><path d="M1 4l7 8-7 8zM8.5 4l7 8-7 8zM16 4l7 8-7 8z"/></svg></button>
+    <button data-s="1" title="Relaxed"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg></button>
+    <button data-s="2" class="on" title="Play"><svg viewBox="0 0 24 24" width="13" height="11" fill="currentColor"><path d="M3 4l9 8-9 8zM12 4l9 8-9 8z"/></svg></button>
+    <button data-s="3" title="Fast"><svg viewBox="0 0 24 24" width="15" height="11" fill="currentColor"><path d="M1 4l7 8-7 8zM8.5 4l7 8-7 8zM16 4l7 8-7 8z"/></svg></button>
   </div>
 </div>
 <div id="menuRow">
@@ -2465,7 +2471,7 @@ function place(x, y, quiet){
   actionNote(x,y);
   if (!inB(x,y)) return false;
   const c = map[y][x], t = S.tool;
-  if (t==='inspect'){ showTip(x,y,true); return false; }
+  if (t==='inspect'){ toggleInspect(x,y); return false; }
   if (t==='pan') return false;
   const def = TOOLDEF[t];
   if (t==='busstop'){
@@ -2768,7 +2774,15 @@ const FIRE_RISK = { res:0.00016, com:0.00032, ind:0.00078 };
 // real time while this ticks once/day, so too short and the lot is always rubble
 // by the time it arrives. An uncovered lot still smoulders down to rubble.
 const FIRE_BURN = { res:30, com:36, ind:45 };
-const FIRE_SPREAD = 0.025;   // daily odds a burning lot jumps to a neighbour (was a runaway 0.06)
+const FIRE_SPREAD = 0.025;   // commercial-baseline daily odds a blaze catches in a neighbour (scaled by FIRE_FLAM)
+// fire catches faster in a more-flammable neighbour: the per-day spread chance is
+// FIRE_SPREAD weighted by that neighbour's relative ignition risk (commercial = 1×),
+// so an industrial block races (~4.9× a home) and a residential one crawls.
+const FIRE_FLAM = { res: FIRE_RISK.res/FIRE_RISK.com, com: 1, ind: FIRE_RISK.ind/FIRE_RISK.com };
+// per-day probability that a burning tile ignites neighbour `n`, 0 if it can't catch.
+function fireSpreadChance(n){
+  return (n && ZONE[n.t] && n.lv>0 && !n.fire) ? FIRE_SPREAD*(FIRE_FLAM[n.t]||1) : 0;
+}
 /* Coverage radius (tiles) a service building projects — mirrors recomputeFields'
    fr()/per-type multipliers exactly so the placement-preview ring matches the
    splat the sim will actually paint (funding sliders scale both). 0 = not a
@@ -2837,10 +2851,10 @@ function simTick(){
     const c = map[y][x];
     if (c.fire>0){
       c.fire--;
-      if (rnd()<FIRE_SPREAD){ // spread
+      { // spread: one random neighbour rolls to catch, weighted by how flammable IT is
         const [dx,dy]=[[1,0],[-1,0],[0,1],[0,-1]][rnd()*4|0];
         const n = inB(x+dx,y+dy) ? map[y+dy][x+dx] : null;
-        if (n && ZONE[n.t] && n.lv>0 && !n.fire) { n.fire = FIRE_BURN[n.t]||30; msgAt('<b>The fire is spreading!</b>', x+dx, y+dy); }
+        if (rnd() < fireSpreadChance(n)) { n.fire = FIRE_BURN[n.t]||30; msgAt('<b>The fire is spreading!</b>', x+dx, y+dy); }
       }
       if (c.fire===0){
         if (c.grp && !c.part) unmerge(c.grp[0], c.grp[1], 'rubble');
@@ -3112,21 +3126,23 @@ function buildStepCost(){
 /* multi-source Dijkstra over the road graph from the frontage of every cell where isSrc(cell) is
    true (a developed lot OR any footprint cell of a tower/venue — parts keep their type but lv=0,
    and a 2x2's frontage often touches only a part). Uses a binary min-heap. Returns seed count. */
-function commuteCostField(out, isSrc){
+// reach = how many tiles a lot may sit from a road and still seed onto it. Default 1 (direct
+// frontage) is what the sim runs on; the inspect overlay passes 2 to match commuteSearch's ±2
+// frontage window, so a building set back from the road routes on roads like every other one
+// (no more straight-line fallback for set-back lots).
+function commuteCostField(out, isSrc, reach){
   out.fill(Infinity);
+  reach = reach||1;
   const hc=[], hi=[]; let hn=0;
   const sw=(a,b)=>{ const c=hc[a];hc[a]=hc[b];hc[b]=c; const i=hi[a];hi[a]=hi[b];hi[b]=i; };
   const push=(c,i)=>{ let k=hn; hc[k]=c; hi[k]=i; hn++; while(k>0){ const p=(k-1)>>1; if(hc[p]<=hc[k])break; sw(p,k); k=p; } };
   const pop=()=>{ const ri=hi[0]; hn--; if(hn>0){ hc[0]=hc[hn]; hi[0]=hi[hn]; let k=0; for(;;){ let l=2*k+1,r=l+1,m=k; if(l<hn&&hc[l]<hc[m])m=l; if(r<hn&&hc[r]<hc[m])m=r; if(m===k)break; sw(m,k); k=m; } } return ri; };
   let seeds=0;
+  const seedAt=(nx,ny)=>{ if (!isRoad(nx,ny)) return; const i=idx(nx,ny), c=stepCost[i]; if (c<out[i]){ out[i]=c; push(c,i); seeds++; } };
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     if (!isSrc(map[y][x])) continue;
-    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-      const nx=x+dx, ny=y+dy;
-      if (!isRoad(nx,ny)) continue;
-      const i=idx(nx,ny), c=stepCost[i];
-      if (c<out[i]){ out[i]=c; push(c,i); seeds++; }
-    }
+    if (reach<=1){ for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) seedAt(x+dx,y+dy); }
+    else { for (let dy=-reach;dy<=reach;dy++) for (let dx=-reach;dx<=reach;dx++){ if (dx||dy) seedAt(x+dx,y+dy); } }
   }
   while (hn>0){
     const i=pop(); const cu=out[i];
@@ -3342,7 +3358,7 @@ function stepCars(dt){
       // opposite directions pass in their own lanes — no interaction
     }
     if (patience>12) follow=Math.max(follow, 0.30);                // creep through whatever blocks us
-    car.t += dt * car.sp * slow * follow * (S.speed||0);
+    car.t += dt * car.sp * slow * follow * speedMul();
     if (S.speed>0){
       // LEAKY patience: queues oscillate (the head creeps, gaps ripple back), so the timer
       // must accumulate through stop-and-go and only drain in genuine free flow — a hard
@@ -3387,7 +3403,7 @@ function stepPeds(dt){
   }
   while (peds.length > want) peds.pop();
   for (const p of peds){
-    p.t += dt * 0.35 * (S.speed||0);
+    p.t += dt * 0.35 * speedMul();
     if (p.t >= 1){
       p.t = 0; p.px=p.x; p.py=p.y;
       const opts=[];
@@ -3755,6 +3771,9 @@ function svcSpawn(svcKind, vehKind, home, road, field, tgt){
     sp: vehKind==='firetruck'?1.5 : vehKind==='garbage'?1.05 : 1.7, lx:undefined, _oid:++carOid };
   svc.push(v); return v;
 }
+// a station "covers" a tile when its fire-coverage field clears the same threshold the ignition
+// warning uses (>0.05). gates both dispatch and the on-scene chase so response tracks coverage.
+function fireCovered(x,y){ return cover.fire[idx(x,y)]>0.05; }
 let svcScan=0;
 function svcSpawnTick(){
   if (((svcScan=(svcScan+1)%10)!==0)) return;          // a few times a second is plenty
@@ -3766,11 +3785,15 @@ function svcSpawnTick(){
     else if (c.t==='police') policeSt.push([x,y]);
     else if (WSTSRC[c.t] && !c.part) wasteFac.push([x,y]);
   }
-  // FIRE: dispatch one engine per blaze from the nearest road-connected station
+  // FIRE: dispatch one engine per blaze from the nearest road-connected station — but only
+  // to blazes a station actually covers. an uncovered fire is left to spread, exactly as the
+  // ignition warning ("No fire station covers it — it could spread.") promises; coverage is
+  // the whole point of placing stations, so trucks don't teleport-respond across the map.
   const fireV=svc.filter(v=>v.svc==='fire');
   const served=new Set(fireV.map(v=>v.tgt[0]+','+v.tgt[1]));
   for (const [fx,fy] of fires){
     if (served.has(fx+','+fy)) continue;
+    if (!fireCovered(fx,fy)) continue;
     if (svc.filter(v=>v.svc==='fire').length>=6 || !fireSt.length) break;
     const field=svcField(svcRoadsAround(fx,fy));
     let bestSt=null, bestRoad=null, bestD=Infinity;
@@ -3794,9 +3817,29 @@ function svcMaintain(svcKind, vehKind, stations, cap){
     svcRetarget(v); return;                            // at most one new engine per scan
   }
 }
+/* an engine that just finished a blaze rolls straight to the nearest remaining fire rather
+   than driving home empty — so a block of fires is cleared by the engines already on scene
+   instead of waiting for a fresh truck to crawl out from the station for each lot. */
+function fireRetarget(v){
+  const taken=new Set();                               // fires another engine is already on/heading to
+  for (const o of svc){ if (o!==v && o.svc==='fire' && o.tgt) taken.add(o.tgt[0]+','+o.tgt[1]); }
+  let best=null, bestD=Infinity;
+  for (let y=0;y<G;y++) for (let x=0;x<G;x++){
+    const c=map[y][x];
+    if (c.fire>0 && ZONE[c.t] && fireCovered(x,y) && !taken.has(x+','+y)){
+      const d=Math.abs(x-v.x)+Math.abs(y-v.y);         // nearest by tiles; reachability checked below
+      if (d<bestD){ bestD=d; best=[x,y]; }
+    }
+  }
+  if (best && bestD<=18){
+    const f=svcField(svcRoadsAround(best[0],best[1]));
+    if (f[idx(v.x,v.y)]!==Infinity){ v.tgt=best; v.field=f; v.state='go'; v.lx=undefined; return true; }
+  }
+  return false;
+}
 function stepSvc(dt){
   svcSpawnTick();
-  const spd=S.speed||1;
+  const spd=speedMul();
   for (let i=svc.length-1;i>=0;i--){
     const v=svc[i];
     v.fx=v.px+(v.x-v.px)*v.t; v.fy=v.py+(v.y-v.py)*v.t;
@@ -3811,7 +3854,9 @@ function stepSvc(dt){
         if (v.mop===undefined) v.mop=1.8;
         v.mop -= dt; dirty=true;
         if (v.mop>0) v.spray=true;
-        else { v.spray=false; v.mop=undefined; v.state='return'; v.field=svcField(svcRoadsAround(v.home[0],v.home[1])); v.lx=undefined; }
+        else { v.spray=false; v.mop=undefined;
+          // chase the next nearby blaze first; only roll home when none are left in reach
+          if (!fireRetarget(v)){ v.state='return'; v.field=svcField(svcRoadsAround(v.home[0],v.home[1])); v.lx=undefined; } }
       }
       continue;                                        // engines don't roll while pumping
     }
@@ -4259,12 +4304,18 @@ function flameTongue(bx,by,w,h,lean){
   cx.quadraticCurveTo(bx,by+h*0.16, bx-w,by);              // rounded base
   cx.closePath(); cx.fill();
 }
+// single-lot silhouette heights (px) for the fire flare. merged 2×2 towers (c.grp) rise to
+// towerHeight, but a lone house/shop is far shorter — using towerHeight there pinned the roofline
+// flare ~46px up, floating it off the roof onto a neighbouring road tile. these track the real
+// box()/vol() heights in drawRes/drawCom/drawInd so the flare stays seated within the tile.
+const FIRE_LOT_H = { res:[0,11,18,28], com:[0,14,20,30], ind:[0,12,18,24] };
 function drawFireFX(c,x,y,sx,sy,now){
   // layered flickering tongues + hot glow + rising embers. each tile flickers on its own
   // phase (seed) so a block of fire churns instead of pulsing in unison. a tall burning
   // building also flares along its roofline so the whole structure reads as ablaze.
   const z=S.zoom, seed=x*7.13+y*3.7, intensity=Math.min(1,c.fire/10), cyp=sy+TH/2*z, fb=sy+TH*.40*z;
-  const bh=(ZONE[c.t]&&c.lv>0&&!c.part)?towerHeight(c.t,c.lv)*z*0.9:0;   // height of the thing burning
+  const lotH = FIRE_LOT_H[c.t] ? FIRE_LOT_H[c.t][Math.min(c.lv,3)] : 16;
+  const bh=(ZONE[c.t]&&c.lv>0&&!c.part)?(c.grp?towerHeight(c.t,c.lv):lotH)*z*0.9:0;   // height of the thing burning
   const cluster=(cxp,cyb,scale)=>{
     for (let t=0;t<3;t++){
       const ph=now/95+seed+t*2.3+cyb*0.01, lean=Math.sin(ph)*2.0*z*scale;
@@ -9253,18 +9304,101 @@ function render(now){
     cx.fillStyle = p.fire? `rgba(60,55,50,${.5*(1-t)})` : `rgba(225,228,232,${.42*(1-t)})`;
     cx.beginPath(); cx.arc(psx + Math.sin(p.age*3)*3*S.zoom, psy+TH/2*S.zoom-rise, (2.5+t*6)*S.zoom, 0, 7); cx.fill();
   }
-  // commute lines while inspecting a home
+  // commute viz while inspecting a building
   if (commuteViz){
-    const [fx2,fy2]=rotC(commuteViz.from[0], commuteViz.from[1]);
-    const [hx2,hy2]=toScreen(fx2-.5, fy2-.5);
-    cx.setLineDash([5,5]); cx.lineDashOffset = -(now/40)%10;
-    for (const w of commuteViz.to){
-      const [wx2,wy2]=rotC(w.x+(map[w.y][w.x].grp?1:0.5), w.y+(map[w.y][w.x].grp?1:0.5));
-      const [tx3,ty3]=toScreen(wx2-.5, wy2-.5);
-      cx.strokeStyle='rgba(255,196,90,.85)'; cx.lineWidth=Math.max(1.4, 1.8*S.zoom);
-      cx.beginPath(); cx.moveTo(hx2, hy2+TH/2*S.zoom-3); cx.lineTo(tx3, ty3+TH/2*S.zoom-3); cx.stroke();
-      cx.fillStyle='rgba(255,196,90,.95)';
-      cx.beginPath(); cx.arc(tx3, ty3+TH/2*S.zoom-3, 3.2, 0, 7); cx.fill();
+    const z=S.zoom;
+    // a road tile's centre on screen (overlay rides the base plane; bridges/elevation ignored)
+    const tileCtr=(ti)=>{ const tx=ti%G, ty=(ti/G)|0; const [vx,vy]=rotC(tx+.5, ty+.5); const [sx0,sy0]=toScreen(vx-.5, vy-.5); return [sx0, sy0+TH/2*z]; };
+    cx.setLineDash([6,5]); cx.lineDashOffset = -(now/45)%11;
+    if (commuteViz.routes && commuteViz.routes.length){
+      // trace the actual ROADS each commute rides, coloured by purpose
+      const KCOL={work:'rgba(255,196,90,.95)', shop:'rgba(110,190,255,.95)', leis:'rgba(120,225,150,.95)', home:'rgba(255,196,90,.95)'};
+      // a grid centre (already-offset coords like the from-anchor) on screen
+      const centerOf=(gx,gy)=>{ const [vx,vy]=rotC(gx,gy); const [sx0,sy0]=toScreen(vx-.5,vy-.5); return [sx0, sy0+TH/2*z]; };
+      const bldgCenter=(gx,gy)=>{ const c=map[gy][gx], off=c.grp?1:0.5; return centerOf(gx+off, gy+off); };
+      if (commuteViz.road){
+        // a clicked road tile: each route is a full corridor source-building → this tile → destination
+        // building, coloured by trip purpose, dotted at BOTH building ends; the jammed tile pinned red.
+        cx.save(); cx.lineCap='round'; cx.lineJoin='round';
+        const Tc=centerOf(commuteViz.from[0], commuteViz.from[1]);
+        for (const r of commuteViz.routes){
+          const col=KCOL[r.kind]||KCOL.work, pts=[];
+          if (r.src) pts.push(bldgCenter(r.src[0], r.src[1]));
+          for (const ti of r.path) pts.push(tileCtr(ti));
+          if (r.dest) pts.push(bldgCenter(r.dest[0], r.dest[1]));
+          if (pts.length<2) continue;
+          cx.beginPath(); pts.forEach((p,k)=>k?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));
+          cx.setLineDash([]); cx.strokeStyle='rgba(8,12,18,.55)'; cx.lineWidth=Math.max(4.2,5.4*z); cx.stroke();
+          cx.setLineDash([6,5]); cx.strokeStyle=col; cx.lineWidth=Math.max(2.2,3*z); cx.stroke();
+          cx.setLineDash([]);
+          for (const e of [pts[0], pts[pts.length-1]]){ const rad=Math.max(2.6,3.2*z);
+            cx.fillStyle='rgba(8,12,18,.55)'; cx.beginPath(); cx.arc(e[0],e[1],rad+1.4,0,7); cx.fill();
+            cx.fillStyle=col; cx.beginPath(); cx.arc(e[0],e[1],rad,0,7); cx.fill(); }
+        }
+        cx.setLineDash([]);
+        cx.fillStyle='rgba(8,12,18,.6)'; cx.beginPath(); cx.arc(Tc[0],Tc[1], Math.max(5.2,6.4*z), 0, 7); cx.fill();
+        cx.fillStyle='#ff5a5a'; cx.beginPath(); cx.arc(Tc[0],Tc[1], Math.max(3.4,4.2*z), 0, 7); cx.fill();
+        cx.fillStyle='#fff';    cx.beginPath(); cx.arc(Tc[0],Tc[1], Math.max(1.5,1.9*z), 0, 7); cx.fill();
+        cx.restore();
+        cx.setLineDash([]); cx.lineDashOffset=0;
+      } else {
+      // when anchored (a clicked building) every line shares one origin: the building's centre. Lines
+      // then FAN apart with distance (offset 0 at the origin, growing to the destination) so routes
+      // heading the same way — e.g. work + shopping to the same commercial block — read as distinct
+      // strands instead of one over-painting the other.
+      const Oc = commuteViz.anchored ? centerOf(commuteViz.from[0], commuteViz.from[1]) : null;
+      const routes=commuteViz.routes, N=routes.length, gap=Math.max(3.5, 4.6*z);
+      cx.save(); cx.lineCap='round'; cx.lineJoin='round';
+      routes.forEach((r,ri)=>{
+        const col=KCOL[r.kind]||KCOL.work;
+        const base=[];
+        if (Oc) base.push(Oc);
+        for (let k=r.path.length-1;k>=0;k--) base.push(tileCtr(r.path[k]));   // building end → destination end
+        if (r.dest){ const dc=map[r.dest[1]][r.dest[0]], off=dc.grp?1:0.5; base.push(centerOf(r.dest[0]+off, r.dest[1]+off)); }
+        // lateral fan: unit perpendicular to the origin→destination chord, scaled by progress·lane
+        const A=base[0], B=base[base.length-1];
+        const dxp=B[0]-A[0], dyp=B[1]-A[1], L=Math.hypot(dxp,dyp)||1, nxp=-dyp/L, nyp=dxp/L;
+        const lane=(ri-(N-1)/2)*gap, M=base.length-1;
+        const pts=base.map((p,k)=>{ const t=M>0?k/M:0; return [p[0]+nxp*lane*t, p[1]+nyp*lane*t]; });
+        cx.beginPath();
+        for (let k=0;k<pts.length;k++){ if (k===0) cx.moveTo(pts[k][0],pts[k][1]); else cx.lineTo(pts[k][0],pts[k][1]); }
+        // solid dark casing first so the dashed colour stays legible over roads, grass and water alike
+        cx.setLineDash([]); cx.strokeStyle='rgba(8,12,18,.55)'; cx.lineWidth=Math.max(4.2, 5.4*z); cx.stroke();
+        cx.setLineDash([6,5]); cx.strokeStyle=col; cx.lineWidth=Math.max(2.2, 3*z); cx.stroke();
+        // dot the DESTINATION end (last point), with a dark halo so it pops
+        const [ex,ey]=pts[pts.length-1], rad=Math.max(2.6, 3.2*z);
+        cx.setLineDash([]);
+        cx.fillStyle='rgba(8,12,18,.55)'; cx.beginPath(); cx.arc(ex, ey, rad+1.4, 0, 7); cx.fill();
+        cx.fillStyle=col; cx.beginPath(); cx.arc(ex, ey, rad, 0, 7); cx.fill();
+      });
+      // a single bright marker at the shared origin so it's obvious where every trip begins
+      if (Oc){
+        cx.setLineDash([]);
+        cx.fillStyle='rgba(8,12,18,.6)'; cx.beginPath(); cx.arc(Oc[0],Oc[1], Math.max(4.4,5.4*z), 0, 7); cx.fill();
+        cx.fillStyle='#fff'; cx.beginPath(); cx.arc(Oc[0],Oc[1], Math.max(3,3.8*z), 0, 7); cx.fill();
+      } else if (commuteViz.from){
+        // road inspect: pin the clicked (jammed) tile in red so the fanning lines clearly read as
+        // "these are the sources feeding traffic INTO here", their dots sitting at the source lots
+        const Tc=centerOf(commuteViz.from[0], commuteViz.from[1]);
+        cx.setLineDash([]);
+        cx.fillStyle='rgba(8,12,18,.6)'; cx.beginPath(); cx.arc(Tc[0],Tc[1], Math.max(5.2,6.4*z), 0, 7); cx.fill();
+        cx.fillStyle='#ff5a5a'; cx.beginPath(); cx.arc(Tc[0],Tc[1], Math.max(3.4,4.2*z), 0, 7); cx.fill();
+        cx.fillStyle='#fff';    cx.beginPath(); cx.arc(Tc[0],Tc[1], Math.max(1.5,1.9*z), 0, 7); cx.fill();
+      }
+      cx.restore();
+      }
+    } else {
+      // fallback (e.g. realistic commutes off): straight lines to destinations
+      const [fx2,fy2]=rotC(commuteViz.from[0], commuteViz.from[1]);
+      const [hx2,hy2]=toScreen(fx2-.5, fy2-.5);
+      for (const w of commuteViz.to){
+        const [wx2,wy2]=rotC(w.x+(map[w.y][w.x].grp?1:0.5), w.y+(map[w.y][w.x].grp?1:0.5));
+        const [tx3,ty3]=toScreen(wx2-.5, wy2-.5);
+        cx.strokeStyle='rgba(255,196,90,.85)'; cx.lineWidth=Math.max(1.4, 1.8*z);
+        cx.beginPath(); cx.moveTo(hx2, hy2+TH/2*z-3); cx.lineTo(tx3, ty3+TH/2*z-3); cx.stroke();
+        cx.fillStyle='rgba(255,196,90,.95)';
+        cx.beginPath(); cx.arc(tx3, ty3+TH/2*z-3, 3.2, 0, 7); cx.fill();
+      }
     }
     cx.setLineDash([]); cx.lineDashOffset=0;
   }
@@ -9421,7 +9555,7 @@ function render(now){
     cx.fillStyle=`rgba(10,18,34,${dk*0.32})`;
     cx.fillRect(0,0,W,H);
   }
-  drawDisasterFX(now, dk);
+  drawDisasterFX(disClk, dk);
   // data overlay (traffic / land value / pollution / utilities)
   if (S.overlay && S.overlay!=='none'){
     for (let y=0;y<G;y++) for (let x=0;x<G;x++){
@@ -9919,7 +10053,7 @@ cv.addEventListener('pointermove', e=>{
   if (painting && tapPend){ tapPend=[gx,gy]; return; }   // deferred touch tap tracks the finger
   if (e.pointerType!=='mouse' || painting) return;
   const [tx,ty]=pickTile(px,py);                                 // height-aware: point at the structure you see, not the lot behind it
-  if (S.tool==='inspect'){ showTip(tx,ty,false); return; }       // inspect is immediate
+  if (S.tool==='inspect'){ if (!inspectSel) showTip(tx,ty,false); return; }   // immediate hover preview, unless a building is pinned
   if (moved){
     hideTip();
     tipTimer=setTimeout(()=>{                                    // others show after a dwell
@@ -9929,8 +10063,24 @@ cv.addEventListener('pointermove', e=>{
 });
 let tipTimer=0;
 const TIP_DWELL_MS=2000;
+let inspectSel=null;   // [rootX,rootY] of the pinned building, or null — owns the docked card + its routes
+// inspect is a toggle: click a building to pin its info to the right sidebar (with commute lines),
+// click the same building again (or close/switch tools) to unpin and return to the floating card.
+function toggleInspect(x,y){
+  if (!inB(x,y)){ closeInspect(); return; }
+  const c=map[y][x], rx=c.grp?c.grp[0]:x, ry=c.grp?c.grp[1]:y;
+  if (inspectSel && inspectSel[0]===rx && inspectSel[1]===ry){ closeInspect(); return; }
+  inspectSel=[rx,ry];
+  showTip(rx,ry,true,false,true);   // force (full info + routes), docked
+}
+function closeInspect(){
+  if (!inspectSel) return;
+  inspectSel=null; commuteViz=null;
+  tipEl.classList.remove('dock'); tipEl.style.display='none';
+}
 function hideTip(){
   clearTimeout(tipTimer);
+  if (inspectSel) return;   // a pinned inspection keeps the docked panel + its routes through pan/zoom
   tipEl.style.display='none';
   commuteViz=null;
 }
@@ -10019,7 +10169,7 @@ window.addEventListener('keydown', e=>{
     return;
   }
   if (typing) return;                   // never hijack keys while typing in a field
-  if (e.code==='Space'){ e.preventDefault(); setSpeed(S.speed?0:1); }
+  if (e.code==='Space'){ e.preventDefault(); setSpeed(S.speed?0:2); }
   if (!e.ctrlKey && !e.metaKey && !e.altKey && S.started){
     const KEYTOOL={ r:'res', c:'com', i:'ind', t:'road', x:'bulldoze', p:'police', f:'fire', g:'park', h:'hospital', u:'busstop', n:'inspect' };
     const k=e.key.toLowerCase();
@@ -10149,7 +10299,7 @@ function findResidents(jx,jy){ return commuteSearch(jx,jy,isHomeCell); }
 /* the primary (steepest-descent) route a lot takes down a cost field to its destination, as a
    list of road-tile indices. Mirrors emitCommute's driveway pick, then always takes the cheapest
    next tile — the modal path the bulk of that lot's trips follow. */
-function modalRoute(sx,sy, field, isDest){
+function modalRoute(sx,sy, field, isDest, cap){
   const root=map[sy][sx], cells=root.grp?grpCells(root):[[sx,sy]];
   let cx=-1, cy=-1, best=Infinity;
   for (const [ax,ay] of cells) for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
@@ -10157,8 +10307,9 @@ function modalRoute(sx,sy, field, isDest){
     if (isRoad(nx,ny) && field[idx(nx,ny)]<best){ best=field[idx(nx,ny)]; cx=nx; cy=ny; }
   }
   if (cx<0 || best===Infinity) return null;
+  const lim=cap||MAX_TRIP;                 // inspector traces longer than a sim trip (long arterials)
   const path=[]; let lx=-9, ly=-9;
-  for (let s=0;s<MAX_TRIP;s++){
+  for (let s=0;s<lim;s++){
     path.push(idx(cx,cy));
     if (adjToDest(cx,cy,isDest)) break;
     const fHere=field[idx(cx,cy)];
@@ -10174,35 +10325,165 @@ function modalRoute(sx,sy, field, isDest){
   }
   return path;
 }
-/* which origin lots feed traffic THROUGH a given road tile: flood upstream (toward higher cost,
-   away from the destination) to gather candidate origins, then keep only those whose modal route
-   actually crosses the tile. Returns up to `lim`, nearest-along-the-route first. */
-function feedersThrough(tx,ty, field, isOrigin, isDest, lim){
-  const ti=idx(tx,ty);
-  if (!isRoad(tx,ty) || field[ti]===Infinity) return [];
-  const seen=new Set([ti]); const stack=[[tx,ty]];
-  const roots=new Set(), cands=[]; let guard=0;
-  while (stack.length && guard++<1500){
-    const [x,y]=stack.pop(); const fHere=field[idx(x,y)];
-    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+const DIRS4=[[1,0],[-1,0],[0,1],[0,-1]];
+/* steepest descent from a road tile down `field` to the destination frontage it feeds — the SHARED
+   downstream leg of every trip passing the tile (once you're on the tile, the rest of the trip only
+   depends on the tile, so all through-trips of this purpose converge on the same nearest dest). */
+function descendFrom(tx,ty, field, isDest){
+  let cx=tx, cy=ty; const start=idx(cx,cy); const path=[start]; const seen=new Set([start]);
+  for (let s=0;s<240;s++){
+    if (adjToDest(cx,cy,isDest)) break;
+    const fHere=field[idx(cx,cy)];
+    // prefer a strictly-downhill step; the reach-2 seeding leaves a flat cost PLATEAU around the
+    // destination, so once on it allow an equal-cost lateral step (favouring one that fronts the
+    // destination) to actually reach the frontage instead of stalling a tile short.
+    let down=null, dF=Infinity, flat=null, flatDest=null;
+    for (const [dx,dy] of DIRS4){ const nx=cx+dx, ny=cy+dy; if (!isRoad(nx,ny)) continue;
+      const j=idx(nx,ny); if (seen.has(j)) continue; const fn=field[j];
+      if (fn<fHere-COST_EPS){ if (fn<dF){ dF=fn; down=[nx,ny]; } }
+      else if (fn<=fHere+COST_EPS){ if (adjToDest(nx,ny,isDest)) flatDest=[nx,ny]; else if (!flat) flat=[nx,ny]; }
+    }
+    const step = down || flatDest || flat;
+    if (!step) break;
+    cx=step[0]; cy=step[1]; seen.add(idx(cx,cy)); path.push(idx(cx,cy));
+  }
+  return { path, end:[cx,cy] };
+}
+/* the UPSTREAM catchment of a road tile: Dijkstra outward by ASCENDING `field` (every step climbs,
+   the reverse of a trip's descent), so each visited road carries a parent pointer back to the tile
+   along a monotone corridor. Any origin lot the flood passes therefore provably feeds traffic THROUGH
+   the tile in the sim's biased-descent model — no single-route filter needed (that filter is exactly
+   what dropped real contributors when the sim fans a trip one lane wide of the steepest path). */
+function upstreamCatch(tx,ty, field, isOrigin){
+  const ti=idx(tx,ty), n=G*G;
+  const par=new Int32Array(n).fill(-2);          // -2 unseen, -1 = the clicked tile (root)
+  const hc=[], hi=[]; let hn=0;
+  const sw=(a,b)=>{ const c=hc[a];hc[a]=hc[b];hc[b]=c; const i=hi[a];hi[a]=hi[b];hi[b]=i; };
+  const push=(c,i)=>{ let k=hn; hc[k]=c; hi[k]=i; hn++; while(k>0){ const p=(k-1)>>1; if(hc[p]<=hc[k])break; sw(p,k); k=p; } };
+  const pop=()=>{ const ri=hi[0]; hn--; if(hn>0){ hc[0]=hc[hn]; hi[0]=hi[hn]; let k=0; for(;;){ let l=2*k+1,r=l+1,m=k; if(l<hn&&hc[l]<hc[m])m=l; if(r<hn&&hc[r]<hc[m])m=r; if(m===k)break; sw(m,k); k=m; } } return ri; };
+  par[ti]=-1; push(field[ti], ti);
+  const found=new Map(); let guard=0;
+  while (hn>0 && guard++<20000){
+    const i=pop(), x=i%G, y=(i/G)|0, fHere=field[i];
+    for (const [dx,dy] of DIRS4){
       const nx=x+dx, ny=y+dy; if (!inB(nx,ny)) continue;
-      const n=map[ny][nx];
-      if (isOrigin(n)){ const r=n.grp?n.grp:[nx,ny], k=r[0]+','+r[1]; if (!roots.has(k)){ roots.add(k); cands.push(r); } }
-      if (isRoad(nx,ny) && !seen.has(idx(nx,ny)) && field[idx(nx,ny)]>fHere){ seen.add(idx(nx,ny)); stack.push([nx,ny]); }
+      const c=map[ny][nx];
+      if (isOrigin(c)){ const r=c.grp?c.grp:[nx,ny], k=r[0]+','+r[1]; if (!found.has(k)) found.set(k,{root:r, road:i}); }
+      if (isRoad(nx,ny)){ const j=idx(nx,ny); if (par[j]===-2 && field[j]>fHere-COST_EPS){ par[j]=i; push(field[j], j); } }
     }
   }
-  const found=[];
-  for (const [rx,ry] of cands){
-    const path=modalRoute(rx,ry, field, isDest);
-    if (!path) continue;
-    const d=path.indexOf(ti);
-    if (d<0) continue;                    // this lot's main route doesn't actually pass here
-    const rc=map[ry][rx]; found.push({x:rx, y:ry, d, name:bizName(rc)||NAMES[rc.t]});
-  }
-  found.sort((a,b)=>a.d-b.d);
-  return found.slice(0, lim||4);
+  // corridor from a flooded road tile back to the clicked tile: [road … tile], monotone-descending
+  const tracePath=(from)=>{ const p=[]; let c=from, g=0; while (c>=0 && g++<500){ p.push(c); c=par[c]; } return p; };
+  return { found:[...found.values()], tracePath };
 }
-function showTip(x,y,force,light){
+let _cmField=null;
+/* The modal road routes to surface when inspecting a BUILDING, as {path:[tileIdx…], kind}.
+   Seed a cost field FROM the clicked building's own frontage, then walk each counterpart the card
+   lists (its jobs / shops / homes…) down that field back to the building. Every returned path
+   therefore provably starts at one of the destinations shown and ends ON the building you clicked
+   — fixing the old bug where workplace/venue routes ran between two *other* lots entirely.
+   groups: [{list:[{x,y}…], kind}]. Independent of S.commuteRoute (it builds its own field). */
+function routesFromBuilding(c, rx, ry, groups){
+  const root=c.grp?c.grp:[rx,ry], rc0=map[root[1]][root[0]];
+  if (!_cmField || _cmField.length!==G*G) _cmField=new Float32Array(G*G);
+  const isSel = cell => cell===rc0 || (cell.grp && cell.grp[0]===root[0] && cell.grp[1]===root[1]);
+  // reach 2 = the same frontage window commuteSearch uses, so set-back lots route on roads too
+  if (!commuteCostField(_cmField, isSel, 2)) return [];   // no road within reach → caller falls back
+  const out=[];
+  for (const g of groups){ if (!g.list) continue;
+    for (const d of g.list){
+      const p=modalRoute(d.x, d.y, _cmField, isSel);     // counterpart → clicked building, along roads
+      if (p && p.length>1) out.push({path:p, kind:g.kind, dest:[d.x,d.y]});   // dest = building to dot at the far end
+    }
+  }
+  return out;
+}
+/* A building's TRUE inbound catchment for one trip purpose: nearby origin homes whose modal trip
+   down `field` (to its nearest isDestType) actually TERMINATES at this building — i.e. this lot is
+   their nearest shop / job / venue. Returns the real home→here routes (the exact reverse of what
+   each home shows), so a shop's shopper lines (shopCost) and worker lines (jobCost) reach the homes
+   that genuinely use IT — generally different houses, never the overlapping pairs of before. */
+function inflowRoutes(c, rx, ry, field, isDestType, kind, lim){
+  const root=c.grp?c.grp:[rx,ry], rc0=map[root[1]][root[0]];
+  const isSelf = cell => cell===rc0 || (cell.grp && cell.grp[0]===root[0] && cell.grp[1]===root[1]);
+  const out=[];
+  for (const h of commuteSearch(rx,ry, isHomeCell, lim||8)){
+    const p=modalRoute(h.x, h.y, field, isDestType);       // the home's modal trip to its nearest dest of this type
+    if (!p || p.length<2) continue;
+    const end=p[p.length-1], ex=end%G, ey=(end/G)|0;       // road tile fronting that nearest dest
+    const lands=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{ const nx=ex+dx,ny=ey+dy; return inB(nx,ny) && isSelf(map[ny][nx]); });
+    if (lands) out.push({path:p, kind, dest:[h.x,h.y]});   // …and it really lands HERE → a genuine inbound trip
+  }
+  return out;
+}
+/* a road tile, faithfully. Traffic here is the superposition of the biased-random descents emitCommute
+   lays each tick — there is no discrete saved route to read back. What IS recoverable, exactly, is the
+   CATCHMENT: per trip purpose, descend once from the tile to the destination it feeds (the shared
+   downstream leg) and flood the upstream basin for the heaviest source lots, stitching a monotone
+   corridor source → tile → destination that provably passes the clicked tile. So the lines answer
+   "where does the traffic through here start and end" as a band of real buildings, honest about the
+   spread instead of pretending in hairline routes. Built on a congestion-FREE distance field (so the
+   corridors pass THROUGH the jam you clicked, not detour around it). Inspector-only; sim untouched. */
+let _flatStep=null, _rtf=null;
+function routesThroughRoad(x,y){
+  const n=G*G;
+  if (!isRoad(x,y)) return {routes:[], summary:{count:0,homes:0,jobs:0,dests:0}};
+  if (!_flatStep || _flatStep.length!==n) _flatStep=new Float32Array(n);
+  for (let i=0;i<n;i++){ const t=map[(i/G)|0][i%G].t; _flatStep[i]=ROADTYPE[t]?(t==='avenue'?AVE_BASE:1):Infinity; }
+  if (!_rtf || _rtf.work.length!==n) _rtf={work:new Float32Array(n),home:new Float32Array(n),shop:new Float32Array(n),leis:new Float32Array(n)};
+  const save=stepCost; stepCost=_flatStep;            // borrow commuteCostField's Dijkstra on a flat graph
+  commuteCostField(_rtf.work, isJobCell, 2);
+  commuteCostField(_rtf.home, isHomeCell, 2);
+  commuteCostField(_rtf.shop, isShopCell, 2);
+  commuteCostField(_rtf.leis, isLeisCell, 2);
+  stepCost=save;
+  const ti=idx(x,y);
+  const legs=[
+    [_rtf.work, isHomeCell, isJobCell,  'work'],       // homes → work
+    [_rtf.shop, isHomeCell, isShopCell, 'shop'],       // homes → shops
+    [_rtf.leis, isHomeCell, isLeisCell, 'leis'],       // homes → leisure
+    [_rtf.home, isJobCell,  isHomeCell, 'home'],        // workplaces → home
+  ];
+  const scored=[]; let homes=0, jobs=0; const destKinds=new Set();
+  for (const [field, isOrigin, isDest, kind] of legs){
+    if (field[ti]===Infinity) continue;                          // this purpose can't route here at all
+    const down=descendFrom(x,y, field, isDest);                  // tile → the dest this leg feeds
+    if (!adjToDest(down.end[0],down.end[1], isDest)) continue;    // no real destination downstream
+    let destRoot=null;
+    for (const [dx,dy] of DIRS4){ const nx=down.end[0]+dx, ny=down.end[1]+dy; if (inB(nx,ny)&&isDest(map[ny][nx])){ const dc=map[ny][nx]; destRoot=dc.grp?dc.grp:[nx,ny]; break; } }
+    const up=upstreamCatch(x,y, field, isOrigin);
+    if (destRoot) destKinds.add(kind);
+    for (const o of up.found){
+      const sc=map[o.root[1]][o.root[0]], cap=(CAP[sc.t]&&CAP[sc.t][sc.lv])||1;
+      const w=(TRIP_W[kind==='home'?'work':kind]||0.5)*cap;
+      const upPath=up.tracePath(o.road);                         // [sourceRoad … tile]
+      if (!upPath.length) continue;
+      const path=upPath.concat(down.path.slice(1));              // sourceRoad … tile … destFrontage
+      scored.push({w, kind, src:o.root, dest:destRoot, path, home:sc.t==='res'});
+    }
+  }
+  scored.sort((a,b)=>b.w-a.w);
+  // one corridor per distinct SOURCE lot (a home feeds work+shop+leis — keep its heaviest purpose),
+  // heaviest first, capped for legibility.
+  const seenSrc=new Set(), routes=[];
+  for (const r of scored){ const k=r.src[0]+','+r.src[1]; if (seenSrc.has(k)) continue; seenSrc.add(k);
+    if (r.home) homes++; else jobs++;
+    routes.push({path:r.path, kind:r.kind, src:r.src, dest:r.dest});
+    if (routes.length>=7) break;
+  }
+  return {routes, summary:{count:routes.length, homes, jobs, dests:destKinds.size}};
+}
+// legend for the commute overlay: a swatch per trip kind actually on screen, so the colours are
+// self-explanatory. work + home share amber (both are commute legs), shop is blue, leisure green.
+const CMLEG={work:['#ffc45a','To work'], home:['#ffc45a','Heading home'], shop:['#6ebeff','Shopping'], leis:['#78e196','Leisure']};
+function commuteLegend(viz){
+  const kinds = viz.routes && viz.routes.length ? [...new Set(viz.routes.map(r=>r.kind))] : ['work'];
+  let h=`<div class="row" style="border-top:1px solid var(--line);margin-top:5px;padding-top:5px"><span><b>Commute lines</b></span><span></span></div>`;
+  for (const k of kinds){ const [col,lab]=CMLEG[k]||CMLEG.work; h+=`<div class="cmleg"><span class="sw" style="color:${col}"></span>${lab}</div>`; }
+  if (!(viz.routes && viz.routes.length)) h+=`<div class="cmleg" style="color:var(--dim)">straight line · no road route found</div>`;
+  return h;
+}
+function showTip(x,y,force,light,dock){
   if (!inB(x,y)){ tipEl.style.display='none'; return; }
   if (S.zoom<TIP_MINZ){ tipEl.style.display='none'; commuteViz=null; return; }   // surveying zoomed right out: buildings are tiny, so don't blanket them with the info card
   let c=map[y][x];
@@ -10222,6 +10503,12 @@ function showTip(x,y,force,light){
   if (ZONE[c.t]){
     const cap=CAP[c.t][c.lv];
     html+=`<div class="row"><span>${c.t==='res'?'Residents':'Jobs'}</span><span>${cap}</span></div>`;
+    if (c.t==='res' && c.lv>0){
+      // plain-language wealth read, bucketed straight off land value — a rich/poor tag, not an invented income figure
+      const lv=landVal[i];
+      const wl = lv>=75?['affluent','var(--green)'] : lv>=55?['comfortable',''] : lv>=40?['modest','var(--dim)'] : ['struggling','var(--amber)'];
+      html+=`<div class="row"><span>Wealth</span><span${wl[1]?` style="color:${wl[1]}"`:''}>${wl[0]}</span></div>`;
+    }
     html+=`<div class="row"><span>Power</span><span>${c.pw?'✓ on':'✗ none'}</span></div>`;
     html+=`<div class="row"><span>Water</span><span>${c.wt?'✓ on':'✗ none'}</span></div>`;
     const acc = tower ? (blockStat(c.grp[0],c.grp[1]).road?'direct':'none')
@@ -10267,52 +10554,74 @@ function showTip(x,y,force,light){
     html+=`<div class="row"><span>Maintenance</span><span>${fmt(Math.round(8.0*DIFF[S.diff].up))} / month</span></div>`;
   }
   commuteViz=null;
-  const cmHdr=(label)=>{ html+=`<div class="row" style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px"><span>${label}</span><span></span></div>`; };
-  const cmDest=(arr)=>{ for(const w of arr) html+=`<div class="row"><span style="color:var(--ink)">${w.name}</span><span>${w.d} tiles</span></div>`; };
-  const cmHomes=(arr)=>{ for(const h of arr){ const res=CAP.res[map[h.y][h.x].lv]||0; html+=`<div class="row"><span style="color:var(--ink)">≈${res} residents</span><span>${h.d} tiles</span></div>`; } };
+  // The coloured lines + legend now carry the commute story, so the card stays lean — only a
+  // warning when there's NOTHING to draw (so the player knows why), never a where/how-far list.
   if (force && c.t==='res' && c.lv>0){
-    // a household: where it travels for work, shopping and leisure
+    // a household: the lines lead to where it works, shops and plays
     const hX=c.grp?c.grp[0]:x, hY=c.grp?c.grp[1]:y;
     // jobs split into two pools so a distant factory shows up even when shops are next door
     const offices=commuteSearch(hX,hY,isComJob,2), factories=commuteSearch(hX,hY,isIndJob,2);
     const jobs=offices.concat(factories).sort((a,b)=>a.d-b.d);
     const shops=commuteSearch(hX,hY,isShopCell), fun=commuteSearch(hX,hY,isLeisCell);
-    if (jobs.length){ cmHdr('Work'); cmDest(jobs); }
-    else { const roaded = tower ? blockStat(c.grp[0],c.grp[1]).road : hasFrontage(x,y);
+    if (!jobs.length){ const roaded = tower ? blockStat(c.grp[0],c.grp[1]).road : hasFrontage(x,y);
       html+=`<div class="row"><span>Work</span><span style="color:var(--${roaded?'amber':'red'})">${roaded?'no jobs within reach':'connect a road first'}</span></div>`; }
-    if (shops.length){ cmHdr('Shopping'); cmDest(shops); }
-    if (fun.length){ cmHdr('Leisure'); cmDest(fun); }
     const to=jobs.concat(shops, fun);
-    if (to.length) commuteViz={from:[hX+(c.grp?1:0.5), hY+(c.grp?1:0.5)], to};
+    if (to.length) commuteViz={from:[hX+(c.grp?1:0.5), hY+(c.grp?1:0.5)], to, anchored:true,
+      routes:routesFromBuilding(c,hX,hY,[{list:jobs,kind:'work'},{list:shops,kind:'shop'},{list:fun,kind:'leis'}])};
   } else if (force && (c.t==='com'||c.t==='ind') && c.lv>0){
-    // a workplace/shop: its catchment — the nearest homes by road (every active place has some)
+    // a workplace: the homes whose modal WORK trip lands here (amber). Commerce is also a shop, so
+    // a com adds the homes whose modal SHOPPING trip lands here (blue) — its real customer base,
+    // generally different homes than its workers. A factory is a workplace only.
     const jX=c.grp?c.grp[0]:x, jY=c.grp?c.grp[1]:y;
-    const homes=commuteSearch(jX,jY,isHomeCell,4);
-    if (homes.length){
-      cmHdr(c.t==='com'?'Workers & customers from':'Workers from'); cmHomes(homes);
-      commuteViz={from:[jX+(c.grp?1:0.5), jY+(c.grp?1:0.5)], to:homes};
+    let routes=[];
+    if (S.commuteRoute){
+      routes = inflowRoutes(c,jX,jY, jobCost, isJobCell, 'work', 8);
+      if (c.t==='com') routes = routes.concat(inflowRoutes(c,jX,jY, shopCost, isShopCell, 'shop', 8));
+    } else {                                          // realistic commutes off: approximate with nearest homes
+      const homes=commuteSearch(jX,jY,isHomeCell,4);
+      routes = routesFromBuilding(c,jX,jY,[{list:homes,kind:'work'}]);
+    }
+    if (routes.length){
+      commuteViz={from:[jX+(c.grp?1:0.5), jY+(c.grp?1:0.5)], to:[], anchored:true, routes};
     } else {
-      html+=`<div class="row"><span>${c.t==='com'?'Workers & customers':'Workforce'}</span><span style="color:var(--red)">no homes within reach</span></div>`;
+      // distinguish "truly cut off" from "homes exist but their nearest job/shop is a closer lot"
+      const lbl = c.t==='com'?'Workers & customers':'Workforce';
+      if (commuteSearch(jX,jY,isHomeCell,1).length)
+        html+=`<div class="row"><span>${lbl}</span><span style="color:var(--amber)">nearby homes commute to closer lots</span></div>`;
+      else
+        html+=`<div class="row"><span>${lbl}</span><span style="color:var(--red)">no homes within reach</span></div>`;
     }
   } else if (force && LEIS[c.t] && !c.part){
-    // a park/venue: its catchment — the nearest homes by road
+    // a park/venue: the homes whose modal LEISURE trip lands here (green) — its real visitor base
     const vX=c.grp?c.grp[0]:x, vY=c.grp?c.grp[1]:y;
-    const vis=commuteSearch(vX,vY,isHomeCell,4);
-    if (vis.length){
-      cmHdr('Visitors from'); cmHomes(vis);
-      commuteViz={from:[vX+(c.grp?1:0.5), vY+(c.grp?1:0.5)], to:vis};
+    let routes=[];
+    if (S.commuteRoute) routes = inflowRoutes(c,vX,vY, leisureCost, isLeisCell, 'leis', 8);
+    else { const vis=commuteSearch(vX,vY,isHomeCell,4); routes = routesFromBuilding(c,vX,vY,[{list:vis,kind:'leis'}]); }
+    if (routes.length){
+      commuteViz={from:[vX+(c.grp?1:0.5), vY+(c.grp?1:0.5)], to:[], anchored:true, routes};
     } else {
-      html+=`<div class="row"><span>Visitors</span><span style="color:var(--dim)">no homes visit here</span></div>`;
+      const closer = commuteSearch(vX,vY,isHomeCell,1).length;   // homes exist but a nearer venue wins them
+      html+=`<div class="row"><span>Visitors</span><span style="color:var(--dim)">${closer?'nearer venues draw the locals':'no homes visit here'}</span></div>`;
     }
   } else if (force && ROADTYPE[c.t] && !c.bridge && S.commuteRoute){
-    // a road: trace who routes THROUGH this tile — homes heading out, workers heading home
-    const out=feedersThrough(x,y, jobCost, isHomeCell, isJobCell);   // homes → work
-    const back=feedersThrough(x,y, homeCost, isJobCell, isHomeCell); // workplaces → home
-    if (out.length){ cmHdr('Commuters to work'); cmHomes(out); }
-    if (back.length){ cmHdr('Heading home from'); cmDest(back); }
-    if (!out.length && !back.length) html+=`<div class="row"><span>Through traffic</span><span style="color:var(--dim)">no commute routes here</span></div>`;
-    const to=out.concat(back);
-    if (to.length) commuteViz={from:[x+0.5, y+0.5], to};
+    // a road: the lines are the corridors that LOAD this tile — every trip purpose, traced
+    // congestion-free so they pass through the jam you clicked instead of detouring around it
+    const tr=routesThroughRoad(x,y);
+    if (!tr.routes.length){
+      // don't contradict the Load above: a jammed tile carries spillback / long-haul through-traffic
+      // that no single modal corridor traces. Speak to the actual load, not "no commute".
+      const cg=congestion(x,y), ld=traffic[i]||0;
+      const txt = cg>1 ? 'spillover &amp; through-traffic' : cg>0.6 ? 'through-traffic' : ld>=1 ? 'light scattered trips' : 'no commute routes here';
+      const col = cg>1 ? 'var(--red)' : cg>0.6 ? 'var(--amber)' : 'var(--dim)';
+      html+=`<div class="row"><span>Through traffic</span><span style="color:${col}">${txt}</span></div>`;
+    } else {
+      commuteViz={from:[x+0.5, y+0.5], road:true, routes:tr.routes};
+      const s=tr.summary, parts=[];
+      if (s.homes) parts.push(`${s.homes} home${s.homes===1?'':'s'}`);
+      if (s.jobs)  parts.push(`${s.jobs} workplace${s.jobs===1?'':'s'}`);
+      html+=`<div class="row"><span>Through traffic</span><span>${parts.join(' · ')||`${s.count} source${s.count===1?'':'s'}`}</span></div>`;
+      html+=`<div class="row"><span style="color:var(--dim);font-size:11px">trips passing here, traced source → here → destination</span></div>`;
+    }
   }
   if (PLANT[c.t]||WSRC[c.t]){
     if (PLANT[c.t]) html+=`<div class="row"><span>Output</span><span>${PLANT[c.t].cap} MW (city: ${Math.round(S.powerUse)}/${S.powerCap})</span></div>`;
@@ -10361,10 +10670,29 @@ function showTip(x,y,force,light){
     }
     if (pollution[i]>4 && !force) html+=`<div class="row"><span>Pollution</span><span>${Math.round(pollution[i])}</span></div>`;
   }
+  if (commuteViz) html += commuteLegend(commuteViz);
+  if (dock){
+    // pinned inspection: dock to the right sidebar, never reposition over the map / its lines
+    tipEl.classList.add('dock');
+    tipEl.style.left=''; tipEl.style.top='';
+    tipEl.innerHTML = `<button class="tipX" title="Close — or click the building again">✕</button>` + html;
+    const xb=tipEl.querySelector('.tipX'); if (xb) xb.onclick=closeInspect;
+    tipEl.style.display='block';
+    return;
+  }
+  tipEl.classList.remove('dock');
   tipEl.innerHTML=html;
   tipEl.style.display='block';
   const [px,py]=tileScreen(x,y);
-  tipEl.style.left=Math.min(window.innerWidth-240, px+24)+'px';
+  const cardW=240;
+  let left=px+24;                                   // default: card sits to the right of the selection
+  // if the commute lines mostly fan out to the right, flip the card left so it doesn't bury them
+  if (commuteViz && commuteViz.routes && commuteViz.routes.length){
+    let sdx=0, n=0;
+    for (const r of commuteViz.routes) for (const ti of r.path){ sdx += tileScreen(ti%G,(ti/G)|0)[0]-px; n++; }
+    if (n && sdx/n > 0) left = px - cardW - 24;
+  }
+  tipEl.style.left=Math.max(8, Math.min(window.innerWidth-cardW, left))+'px';
   tipEl.style.top=Math.max(60, py-30)+'px';
 }
 
@@ -11771,6 +12099,7 @@ function setTool(id){
   }
   if (S.tool!==id) cancelPending();
   const prev=S.tool;
+  if (prev!==id) closeInspect();   // leaving inspect (Esc → Pan, or any tool switch) drops the pinned card
   S.tool=id;
   rememberSub(id);
   document.querySelectorAll('.tool').forEach(b=>b.classList.toggle('on', b.dataset.id===id || (b.dataset.sub||'').split(',').includes(id)));
@@ -11782,7 +12111,7 @@ function setTool(id){
 setTool('pan');
 
 document.querySelectorAll('.spd button').forEach(b=>b.onclick=()=>setSpeed(+b.dataset.s));
-let _lastSpd=1;
+let _lastSpd=2;
 function setSpeed(s){
   if (S.speed>0) _lastSpd=S.speed;
   S.speed=s;
@@ -11790,7 +12119,7 @@ function setSpeed(s){
   const pl=document.getElementById('spdTglPlay'), pa=document.getElementById('spdTglPause');
   if (pl && pa){ pl.style.display = s===0 ? '' : 'none'; pa.style.display = s===0 ? 'none' : ''; }
 }
-document.getElementById('spdTgl').onclick=()=>setSpeed(S.speed===0 ? (_lastSpd||1) : 0);
+document.getElementById('spdTgl').onclick=()=>setSpeed(S.speed===0 ? (_lastSpd||2) : 0);
 document.getElementById('undoBtn').onclick=()=>doUndo();
 document.getElementById('redoBtn').onclick=()=>doRedo();
 document.getElementById('zin').onclick=()=>zoomAt(cv.width/DPR/2, cv.height/DPR/2, 1.2);
@@ -12580,13 +12909,24 @@ recomputeFields();
 if (window.innerWidth<760) S.zoom=.7;
 centerCamera();              // after zoom is chosen, so the vertical offset matches
 
-let acc=0, last=performance.now(), smokeAcc=0, lastR=0, carAcc=0;
-const TICK_MS=[Infinity, 560, 280, 130];
+let acc=0, last=performance.now(), smokeAcc=0, lastR=0, carAcc=0, disClk=0;
+// ms per game-day, by speed index: pause · relaxed · normal · fast-forward.
+const TICK_MS=[Infinity, 900, 560, 150];
+// Every motion subsystem (agents AND disasters) scales off the DAY CLOCK, not the
+// raw speed index, so the relationship between them is FIXED at every speed — a
+// firetruck covers the same ground per game-day at relaxed or fast-forward, so a
+// blaze is equally fightable, and a disaster lasts the same number of game-days.
+// TICK_REF is the day length the agent speeds were historically tuned against;
+// anchoring to it keeps their per-game-day reach identical to the long-standing
+// default (560) while making all speeds agree. Returns 0 when paused.
+const TICK_REF=560;
+function speedMul(){ return S.speed>0 ? TICK_REF/TICK_MS[S.speed] : 0; }
 function loop(now){
   requestAnimationFrame(loop);
   const dt=Math.min(.1,(now-last)/1000); last=now;
   if (S.started && S.speed>0){
     acc += dt*1000;
+    disClk += dt*1000*speedMul();   // disaster game-clock: scales with speed, frozen when paused
     const step=TICK_MS[S.speed];
     let guard=0;
     while (acc>=step && guard++<4){ acc-=step; simTick(); }
@@ -12610,10 +12950,9 @@ function loop(now){
     return;
   }
   lastR=now;
-  if (S.started && S.speed>0){ stepCars(carAcc); stepSvc(carAcc); stepPlanes(carAcc*(S.speed||1)); stepCopters(carAcc*(S.speed||1)); stepRockets(carAcc*(S.speed||1)); stepTrains(carAcc*(S.speed||1)); stepShips(carAcc*(S.speed||1)); }
+  if (S.started && S.speed>0){ const sm=speedMul(); stepCars(carAcc); stepSvc(carAcc); stepPlanes(carAcc*sm); stepCopters(carAcc*sm); stepRockets(carAcc*sm); stepTrains(carAcc*sm); stepShips(carAcc*sm); stepDisaster(disClk); }
   carAcc=0;
   if (S.msgT && now-S.msgT>9000){ const tk=document.getElementById('ticker'); tk.style.opacity=0; tk.style.display='none'; S.msgT=0; if (document.body.classList.contains('mob')) bbarMeasure(); }
-  if (S.started) stepDisaster(now);
   // idle skip: when paused, the last frame stays on the canvas — only repaint if something
   // actually changed (`dirty`, set by every mutation) or is still animating on its own.
   // Running (speed>0) and interaction always fall through, so live play is untouched.
@@ -13613,7 +13952,7 @@ function scenFresh(size,diff,seed,name){
   SEAS._init=false; updateSeason();
   S.cityName=name||'Polis';
   recomputeNets(); recomputeFields(); dirty=true;
-  setSpeed(1); refreshLocks(); S.started=true; updateHUD(); applyCityName();
+  setSpeed(2); refreshLocks(); S.started=true; updateHUD(); applyCityName();
 }
 function startScenario(id){
   const d=SCEN[id]; if (!d) return;
@@ -13992,7 +14331,7 @@ document.getElementById('mapBegin').onclick=()=>{
   document.getElementById('taxLbl').textContent='9%';
   document.querySelectorAll('.fslider').forEach(sl=>{ sl.value=100; const el=document.getElementById('fv_'+sl.dataset.k); if(el) el.textContent='100%'; });
   recomputeNets(); recomputeFields(); dirty=true;
-  setSpeed(1);
+  setSpeed(2);
   refreshLocks();
   S.started=true;
   updateHUD();
@@ -14131,14 +14470,14 @@ function triggerDisaster(type){
       if (horiz){ fx++; fy+=Math.random()<0.34?(Math.random()<0.5?1:-1):0; fy=Math.max(0,Math.min(G-1,fy)); }
       else      { fy++; fx+=Math.random()<0.34?(Math.random()<0.5?1:-1):0; fx=Math.max(0,Math.min(G-1,fx)); }
     }
-    DIS={type, t0:performance.now(), dur:7000, fault, prog:0, stats, dust:[]};
+    DIS={type, t0:disClk, dur:7000, fault, prog:0, stats, dust:[]};
     msg('<b>Earthquake!</b> The ground tears open across the city.');
   } else if (type==='typhoon'){
     // the eye tracks across the map through the centre-ish
     const a=Math.random()*Math.PI*2;
     const ex=G/2+Math.cos(a)*G*0.75, ey=G/2+Math.sin(a)*G*0.75;
     const tx=G/2-Math.cos(a)*G*0.75+(Math.random()*10-5), ty=G/2-Math.sin(a)*G*0.75+(Math.random()*10-5);
-    DIS={type, t0:performance.now(), dur:22000, ex,ey,tx,ty, R:6.5, done:new Uint8Array(G*G), stats, leaves:[]};
+    DIS={type, t0:disClk, dur:22000, ex,ey,tx,ty, R:6.5, done:new Uint8Array(G*G), stats, leaves:[]};
     msg('<b>Typhoon warning!</b> A storm eye is bearing down on the city \u2014 brace for the wind.');
   } else if (type==='flood'){
     // distance-from-river field; water then rises ring by ring
@@ -14156,7 +14495,7 @@ function triggerDisaster(type){
         distW[idx(nx,ny)]=d+1; q.push([nx,ny]);
       }
     }
-    DIS={type, t0:performance.now(), dur:26000, distW, maxR:3, done:new Uint8Array(G*G), lastR:0, stats};
+    DIS={type, t0:disClk, dur:26000, distW, maxR:3, done:new Uint8Array(G*G), lastR:0, stats};
     msg('<b>Flood!</b> The river is bursting its banks \u2014 low ground goes under first.');
   } else if (type==='monster'){
     // a kaiju lumbers across the map, flattening a swath wherever it treads. it moves at a slow,
@@ -14164,18 +14503,18 @@ function triggerDisaster(type){
     // you keep playing through (zone, bulldoze, douse fires) while it grinds across.
     const path=disCrossPath();
     const cross=Math.round(path.length*770);     // ms to walk the whole path, foot by foot
-    DIS={type, t0:performance.now(), dur:cross+3000, cross, path, prog:0, stats, dust:[], breath:false};
+    DIS={type, t0:disClk, dur:cross+3000, cross, path, prog:0, stats, dust:[], breath:false};
     msg('<b>The Gozilla rises!</b> A colossal beast begins a slow rampage through the city \u2014 brace yourself.');
   } else if (type==='ufo'){
     // a saucer drifts over town, firing energy beams that vaporise buildings
-    DIS={type, t0:performance.now(), dur:20000, x:G/2+(Math.random()*8-4), y:G/2+(Math.random()*8-4),
+    DIS={type, t0:disClk, dur:20000, x:G/2+(Math.random()*8-4), y:G/2+(Math.random()*8-4),
          tx:G/2, ty:G/2, beams:[], sparks:[], nextBeam:700, stats};
     msg('<b>Alien invasion!</b> A UFO hovers over the city, blasting buildings from the sky.');
   } else if (type==='dragon'){
     // a winged beast enters from a random edge and wheels over the city, strafing fire from the air
     const sx=Math.random()<0.5?2:G-3, sy=2+Math.random()*(G-4);
     let hx=G/2-sx, hy=G/2-sy; const hl=Math.hypot(hx,hy)||1; hx/=hl; hy/=hl;
-    DIS={type, t0:performance.now(), dur:22000, x:sx, y:sy, tx:G/2, ty:G/2, hx, hy,
+    DIS={type, t0:disClk, dur:22000, x:sx, y:sy, tx:G/2, ty:G/2, hx, hy,
          breaths:[], embers:[], nextBreath:1200, stats};
     msg('<b>A dragon descends!</b> A great winged beast wheels over the city, raining fire from above.');
   } else return false;
