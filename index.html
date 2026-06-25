@@ -3272,7 +3272,13 @@ function emitCommute(x,y,lv,field,w,isDest){
       if (fn===Infinity) continue;                            // that road can't reach the destination
       const dd = fHere - fn;                                  // >0 ⇒ cheaper (toward destination)
       const dir = dd>COST_EPS ? 3 : dd>-COST_EPS ? 1 : 0.25;  // forward ≫ lateral > back
-      const wgt = dir * (map[ny][nx].t==='avenue' ? 1.6 : 1);
+      // capacity-aware spreading: shy away from loaded tiles (same BPR shape as the cost field).
+      // congestion is load/CAPACITY, so an avenue stays attractive at 3× the load a road would be —
+      // this is what actually pushes overflow onto the higher-capacity street instead of letting a
+      // parallel road jam beside a half-empty avenue. The avenue's flat draw fades as it fills.
+      const flow = 1/(1 + COST_K*Math.pow(Math.max(0,congSnap[idx(nx,ny)]),COST_P));
+      const ave  = map[ny][nx].t==='avenue' ? 1 + 0.6*flow : 1;
+      const wgt = dir * flow * ave;
       opts.push([nx,ny,wgt]); tot+=wgt;
     }
     if (!opts.length) break;
