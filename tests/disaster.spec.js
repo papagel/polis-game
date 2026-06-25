@@ -50,6 +50,30 @@ test('the UFO vaporises buildings with its beams', async ({ game }) => {
   expect(res.cleared).toBe(true);
 });
 
+test('the dragon strafes fire from the air', async ({ game }) => {
+  const res = await game.eval(inPage(`
+    ${fillCity}
+    const ok = triggerDisaster('dragon');
+    const type = DIS && DIS.type, t0 = DIS.t0, dur = DIS.dur;
+    let sawBreath = false, moved = false;
+    const x0 = DIS.x, y0 = DIS.y;
+    for (let t=60; t < dur*0.7; t += 140){         // step like real play so it flies & breathes
+      stepDisaster(t0 + t);
+      if (DIS && DIS.breaths.length) sawBreath = true;
+      if (DIS && (DIS.x!==x0 || DIS.y!==y0)) moved = true;
+    }
+    const fires = DIS && DIS.stats.fires;
+    stepDisaster(t0 + dur + 200);
+    return { ok, type, sawBreath, moved, fires, cleared: DIS===null };
+  `));
+  expect(res.ok).toBe(true);
+  expect(res.type).toBe('dragon');
+  expect(res.moved).toBe(true);                   // it flies across the city
+  expect(res.sawBreath).toBe(true);               // it emits fire breaths
+  expect(res.fires).toBeGreaterThan(0);           // which set buildings ablaze
+  expect(res.cleared).toBe(true);
+});
+
 test('only one disaster runs at a time', async ({ game }) => {
   const res = await game.eval(inPage(`
     ${fillCity}
