@@ -994,6 +994,7 @@ let GP=0;   // ground pass: 0=full (default/catalog), 1=flat ground only, 2=stru
 let gndCache=null, gndKey='', gndVer=0;   // screen-space cache of the flat ground; gndVer bumps on any map change
 let gndGeom='', gndBZ=0, gndBOx=0, gndBOy=0;   // bake's geometry-id + camera, so a pan/zoom can re-project the cache instead of repainting live
 let SCENE_SNAP=null, snapKey='', snapGeom='', snapBZ=0, snapBOx=0, snapBOy=0;   // full static scene (ground+buildings) frozen for camera gestures; same re-projection trick as the ground cache, one layer up
+let snapCSSW=0, snapCSSH=0, snapWorld=false;   // far-zoom: the snapshot spans the WHOLE world (not just the screen), so a pan over the survey view re-projects for free — no per-pan re-bake. CSS dims of that offscreen + a flag distinguishing it from the screen-sized heavy-map bake
 const SNAP_BUDGET=22;   // ms. Above this measured frame cost, a camera gesture freezes the static scene and re-projects it (smooth but slightly soft until you let go); below it the gesture redraws live and stays crisp. So small/normal maps and zoomed-in play stay sharp while only genuinely heavy views fall back to the soft path.
 let RCOST=0, SNAP_HEAVY=false, snapUsed=false;   // EWMA of the live render cost → whether the scene is heavy enough to warrant the cache
 try{ if (localStorage.getItem('tlv_saver')==='0') PERF.saver=false; }catch(_){}
@@ -5681,43 +5682,65 @@ function civic(sx,sy,col,roof,night,label){
 /* ---------- 2x2 tower rendering ---------- */
 function drawTowerTile(c,x,y,sx,sy,night,now){
   const z=S.zoom;
-  // shared plaza ground for all 4 footprint tiles
-  if (GP!==2){
-    diamond(sx,sy); cx.fillStyle=shade('#a8adb5', .94+c.vary*.07); cx.fill();
-    cx.strokeStyle='rgba(70,80,92,.25)'; cx.lineWidth=1; diamond(sx,sy,.98); cx.stroke();
+  const [bx,by]=c.grp;
+  const root=map[by][bx];
+  // The body is drawn ~1.5× wider than its 2×2 lot, so a single dispatch from the front tile lets the
+  // base overrun the single-tile neighbours sitting one diagonal in front of it. Instead split the body
+  // down its vertical centre line and dispatch each half from the matching SIDE tile — those two tiles
+  // sit one diagonal band *behind* the front tile, exactly where the overrun neighbours live, so the
+  // tower-first band ordering then lets each such neighbour land on top of the half it abuts. The flatten
+  // stand-in and crane stay single-dispatched from the front tile.
+  let fX=-1,fY=-1,fB=-9, kX=-1,kY=-1,kB=Infinity, lX=-1,lY=-1,lMin=Infinity, rX=-1,rY=-1,rMax=-Infinity;
+  for (const [qx,qy] of blockCells(bx,by)){
+    const [vqx,vqy]=g2v(qx,qy), s=vqx+vqy, ix=vqx-vqy;
+    if (s>fB){ fB=s; fX=qx; fY=qy; }
+    if (s<kB){ kB=s; kX=qx; kY=qy; }
+    if (ix<lMin){ lMin=ix; lX=qx; lY=qy; }
+    if (ix>rMax){ rMax=ix; rX=qx; rY=qy; }
+  }
+  // Lay the whole 2×2 plaza from the back-most (earliest-band) tile, so the slab is fully down before any
+  // tower half is dispatched. Otherwise, in the live GP=0 path the front footprint tile's plaza (a later
+  // band) would paint over a half we dispatched from an earlier band — a divergence the cached GP=2 path
+  // (which bakes all ground first) wouldn't have.
+  if (GP!==2 && x===kX && y===kY){
+    for (const [qx,qy] of blockCells(bx,by)){
+      const [vqx,vqy]=g2v(qx,qy); const [psx,psy]=toScreen(vqx,vqy);
+      diamond(psx,psy); cx.fillStyle=shade('#a8adb5', .94+map[qy][qx].vary*.07); cx.fill();
+      cx.strokeStyle='rgba(70,80,92,.25)'; cx.lineWidth=1; diamond(psx,psy,.98); cx.stroke();
+    }
   }
   if (GP===1) return;                 // plaza only in the ground pass; the tower is a struct
-  const [bx,by]=c.grp;
-  // the view-space bottom tile of the block draws the building so iso layering stays correct under rotation
-  let lastX=-1,lastY=-1,best=-1;
-  for (const [qx,qy] of blockCells(bx,by)){
-    const [vqx,vqy]=g2v(qx,qy);
-    if (vqx+vqy>best){ best=vqx+vqy; lastX=qx; lastY=qy; }
-  }
-  if (x===lastX && y===lastY){
-    const root=map[by][bx];
-    const hf = root.bld>0 ? 0.18+0.82*(1-root.bld) : 1;
-    const h = towerHeight(root.t, root.lv)*hf;
-    if (S.flatten){
+  const hf = root.bld>0 ? 0.18+0.82*(1-root.bld) : 1;
+  const h = towerHeight(root.t, root.lv)*hf;
+  if (S.flatten){
+    if (x===fX && y===fY) queueStruct(true, h, ()=>{
       // low-rise stand-in: a short plinth in the zone's colour with the level badge
-      queueStruct(true, h, ()=>{
-        const [vcx2,vcy2]=rotC(bx+1,by+1);
-        const [fsx,fsy]=toScreen(vcx2-.5,vcy2-.5);
-        const colF = c.t==='res' ? '#79c694' : c.t==='com' ? '#7fb3ff' : '#ffd23f';
-        const f=vol(fsx,fsy,0,0,.72,.72,4, shade(colF,.85), {roof:shade(colF,1.05)});
-        cx.fillStyle='rgba(10,16,28,.75)';
-        cx.font=`${Math.max(8,8.5*z)}px 'Chakra Petch'`; cx.textAlign='center';
-        cx.fillText('L'+root.lv, f.cx, f.cy-f.H*0.5+3*z);
-      });
-      return;
-    }
-    queueStruct(true, h, ()=>{
-      const [vcx,vcy]=rotC(bx+1,by+1);
-      const [msx,msy]=toScreen(vcx-.5,vcy-.5);
-      if (PERF.spr && !PICKING && STRUCT_Q!==null && root.bld===0) blitTower(root.t, root.lv, root.vary, msx, msy, night);
-      else { drawBigBuilding(root.t, msx, msy, hf, night, root.lv, root.vary); if (root.bld>0) drawCrane(msx, msy, h, now); }
+      const [vcx2,vcy2]=rotC(bx+1,by+1);
+      const [fsx,fsy]=toScreen(vcx2-.5,vcy2-.5);
+      const colF = c.t==='res' ? '#79c694' : c.t==='com' ? '#7fb3ff' : '#ffd23f';
+      const f=vol(fsx,fsy,0,0,.72,.72,4, shade(colF,.85), {roof:shade(colF,1.05)});
+      cx.fillStyle='rgba(10,16,28,.75)';
+      cx.font=`${Math.max(8,8.5*z)}px 'Chakra Petch'`; cx.textAlign='center';
+      cx.fillText('L'+root.lv, f.cx, f.cy-f.H*0.5+3*z);
     });
+    return;
   }
+  const drawHalf = (left)=>{
+    const [vcx,vcy]=rotC(bx+1,by+1);
+    const [msx,msy]=toScreen(vcx-.5,vcy-.5);
+    const cut=Math.round(msx), BIG=1e5;   // integer seam so the two halves abut pixel-exactly — no AA / double-paint seam
+    cx.save();
+    cx.beginPath(); cx.rect(left?cut-BIG:cut, -BIG, BIG, 2*BIG); cx.clip();   // body half on this tile's side of centre
+    if (PERF.spr && !PICKING && STRUCT_Q!==null && root.bld===0) blitTower(root.t, root.lv, root.vary, msx, msy, night);
+    else drawBigBuilding(root.t, msx, msy, hf, night, root.lv, root.vary);
+    cx.restore();
+  };
+  if (x===lX && y===lY) queueStruct(true, h, ()=>drawHalf(true));
+  if (x===rX && y===rY) queueStruct(true, h, ()=>drawHalf(false));
+  if (root.bld>0 && x===fX && y===fY) queueStruct(true, h, ()=>{   // construction crane, once, over the whole lot
+    const [vcx,vcy]=rotC(bx+1,by+1); const [msx,msy]=toScreen(vcx-.5,vcy-.5);
+    drawCrane(msx, msy, h, now);
+  });
 }
 /* grand 2×2 leisure venues — anchored at the block's center point, u = pixel unit */
 function drawVenue(t, mx, my, u, night, now, vary){
@@ -8817,6 +8840,10 @@ function drawInd(c,sx,sy,cyp,hf,night,z,pk,now){
 function render(now){
   BLD_TINT=null;   // safety: never carry a tower tint across frames
   const W=cv.width/DPR, H=cv.height/DPR;
+  // cull window for the shared ground/structure passes. Equals the screen (W,H) for every live draw and
+  // every screen-sized bake; the far-zoom WORLD bake temporarily widens it to the offscreen's size so the
+  // whole map — not just the on-screen slice — lands in the snapshot, which is what lets panning be free.
+  let cw=W, ch=H;
   if (shoreDirty){ recomputeShore(); recomputeBridges(); }
   if (elevDirty) recomputeElev();
   updateSeason();
@@ -8956,8 +8983,8 @@ function render(now){
     const sv=cx; cx=ctx; GP=1;
     const z=S.zoom, th2=TH/2*z, tw2=TW/2*z;
     const gsLo=Math.max(0, Math.floor((-200*z - S.oy)/th2));
-    const gsHi=Math.min(2*(G-1), Math.ceil((H + TH*2*z - S.oy)/th2));
-    const gdLo=(-TW*z - S.ox)/tw2, gdHi=(W + TW*z - S.ox)/tw2;
+    const gsHi=Math.min(2*(G-1), Math.ceil((ch + TH*2*z - S.oy)/th2));
+    const gdLo=(-TW*z - S.ox)/tw2, gdHi=(cw + TW*z - S.ox)/tw2;
     for (let s=gsLo; s<=gsHi; s++){
       const vxA=Math.max(0, s-G+1, Math.ceil((s+gdLo)/2)-1);
       const vxB=Math.min(G-1, s,   Math.floor((s+gdHi)/2)+1);
@@ -8965,7 +8992,7 @@ function render(now){
         const vy=s-vx;
         const [x,y]=v2g(vx,vy);
         const [px,py]=toScreen(vx,vy);
-        if (px<-TW*z||px>W+TW*z||py<-200*z||py>H+TH*2*z) continue;
+        if (px<-TW*z||px>cw+TW*z||py<-200*z||py>ch+TH*2*z) continue;
         drawCell(x,y,now);
         if (map[y][x].rail && !railAdjStation(x,y)) drawRail(x,y);   // tracks are flat ground — except where they meet a station (drawn live, by depth, in the struct pass)
       }
@@ -8986,8 +9013,23 @@ function render(now){
   // which mutates the map, nor a rotation, which is non-affine) ONLY when the live frame is too heavy to
   // keep up (SNAP_HEAVY) — otherwise the gesture redraws live and stays crisp, so normal maps never go
   // faint while panning. Always on when SETTLED in the far-zoom regime (a cached full-detail blit beats redrawing).
-  const snapMode = PERF.snap && !ROTA && !painting && !pend && (farZoom || (SPR_INTERACT && SNAP_HEAVY));
-  snapUsed = snapMode;
+  const canSnap = PERF.snap && !ROTA && !painting && !pend;
+  // WHOLE-WORLD snapshot ("survey view"): bake the entire map ONCE and pan/zoom over it for free. This is the
+  // general fix for "the map lags when I drag it zoomed out" — it is NOT specific to BOUNDLESS. A dense smaller
+  // map (e.g. a 64² scenario city) zoomed out is just as heavy to re-walk per frame, and the old screen-sized
+  // gesture bake re-baked every ~⅓ screen of pan, which is the stutter. Conditions:
+  //  · worldSnapFits — the map's screen footprint stays inside a bounded offscreen (far-zoom always qualifies;
+  //    otherwise cap the footprint so the bake/memory can't blow up when you're really zoomed IN).
+  //  · heavy — far-zoom is heavy by definition; otherwise trust the measured EWMA (a light map draws live & crisp).
+  //  · not actively GROWING-while-idle on a non-far map — a settled map under live sim mutates constantly, and a
+  //    per-change whole-map re-bake would stutter worse than drawing live; so off-far we require a camera gesture
+  //    or a paused/idle scene. (A pan during live sim still wins: it only re-bakes when the map actually changed,
+  //    never on the pan itself.)
+  const worldSnapFits = farZoom || (G*TW*S.zoom < 2048);
+  const heavy = farZoom || SNAP_HEAVY;
+  const farSnap = canSnap && worldSnapFits && heavy && (farZoom || SPR_INTERACT || S.speed===0);
+  const heavySnap = canSnap && !farSnap && SPR_INTERACT && SNAP_HEAVY;
+  snapUsed = farSnap || heavySnap;
   // one diagonal band's structures (buildings/props/elevated relief/rail/bus) into the current cx —
   // shared by the live band loop and the snapshot bake so the two can never diverge. GP decides whether
   // flat ground is folded in (GP=0) or assumed already laid (GP=2).
@@ -8998,7 +9040,7 @@ function render(now){
       const vy=s-vx;
       const [x,y]=v2g(vx,vy);
       const [px,py]=toScreen(vx,vy);
-      if (px<-TW*S.zoom||px>W+TW*S.zoom||py<-200*S.zoom||py>H+TH*2*S.zoom) continue;
+      if (px<-TW*S.zoom||px>cw+TW*S.zoom||py<-200*S.zoom||py>ch+TH*2*S.zoom) continue;
       drawCell(x,y,now);
       if (map[y][x].bus) drawBusStop(px,py);
       // GP===2: rail is baked in the ground pass — EXCEPT station-adjacent tiles, which were
@@ -9034,27 +9076,61 @@ function render(now){
     const dl=(-TW*S.zoom - S.ox)/(TW/2*S.zoom), dh=(W + TW*S.zoom - S.ox)/(TW/2*S.zoom);
     for (let s=sl; s<=sh; s++) drawStructBand(s, dl, dh);
     STRUCT_Q=null; cx=svCx;
+    snapWorld=false;
     snapKey = crisp ? ('S'+oox+'|'+ooy+'|'+oz+'|'+geom) : 'snap';
-    snapGeom=geom; snapBZ=bz; snapBOx=S.ox; snapBOy=S.oy;
+    snapGeom=geom; snapBZ=bz; snapBOx=S.ox; snapBOy=S.oy; snapCSSW=W; snapCSSH=H;
     S.zoom=oz; S.ox=oox; S.oy=ooy;
   };
-  if (snapMode){
-    if (SPR_INTERACT){
-      // mid-gesture: re-project whatever snapshot we already have — the crisp settled one OR a prior gesture
-      // bake — as long as it still covers the screen. So zooming IN from a settled far view shows the REAL
-      // (softening) city for free, never blocks. Only re-bake (with headroom) when coverage is actually lost.
-      if (!(snapGeom===geom && snapBZ>0 && coversSnap())) bakeScene(false);
-      const k=S.zoom/snapBZ;
-      cx.save();
-      cx.transform(k,0,0,k, S.ox-snapBOx*k, S.oy-snapBOy*k);
-      cx.drawImage(SCENE_SNAP, 0,0,cv.width,cv.height, 0,0,W,H);
-      cx.restore();
-    } else {
-      // settled far-zoom: one crisp full-detail bake keyed to the exact camera, then a 1:1 blit each frame
-      const key='S'+S.ox+'|'+S.oy+'|'+S.zoom+'|'+geom;
-      if (snapKey!==key) bakeScene(true);
-      cx.drawImage(SCENE_SNAP, 0,0,cv.width,cv.height, 0,0,W,H);
+  // Bake the ENTIRE world (ground + buildings) into an offscreen sized to the whole map's screen footprint,
+  // at the live zoom. Panning the survey view then re-projects a sub-rect of it for free AND crisp (k=1) — no
+  // more re-bake every third of a screen. A pinch just rescales the blit (soft) and re-sharpens with one fresh
+  // bake on settle. Heavy (~one full-map walk) but rare: only on settle, a zoom step, or a scene change (geom).
+  const bakeWorld=()=>{
+    const m=160, top=240;                                  // edge margin + headroom above the back row for the tallest megatowers
+    const oz=S.zoom; let bz=oz;
+    // device-pixel budget: on very high-DPR screens bake a touch more zoomed-out (mild upscale on blit) to cap memory
+    const need=Math.max((G*TW*oz+2*m)*DPR, (G*TH*oz+top+2*m)*DPR), CAP=4096;
+    if (need>CAP) bz=oz*(CAP/need);
+    const cwpx=Math.ceil(G*TW*bz)+2*m, chpx=Math.ceil(G*TH*bz)+top+2*m;
+    if (!SCENE_SNAP || SCENE_SNAP._cw!==cwpx || SCENE_SNAP._ch!==chpx){
+      SCENE_SNAP=document.createElement('canvas');
+      SCENE_SNAP.width=Math.ceil(cwpx*DPR); SCENE_SNAP.height=Math.ceil(chpx*DPR);
+      SCENE_SNAP._cw=cwpx; SCENE_SNAP._ch=chpx;
     }
+    const oox=S.ox, ooy=S.oy;
+    S.zoom=bz; S.ox=m+G*TW/2*bz; S.oy=m+top;               // place the whole map inside [m..]×[m+top..] of the offscreen
+    const sc=SCENE_SNAP.getContext('2d');
+    sc.setTransform(DPR,0,0,DPR,0,0); sc.clearRect(0,0,cwpx,chpx);
+    const svCx=cx, svcw=cw, svch=ch; cx=sc; cw=cwpx; ch=chpx;
+    paintGround(sc);
+    GP=2; STRUCT_Q=[];
+    const dl=(-TW*bz - S.ox)/(TW/2*bz), dh=(cwpx + TW*bz - S.ox)/(TW/2*bz);
+    for (let s=0; s<=2*(G-1); s++) drawStructBand(s, dl, dh);
+    STRUCT_Q=null; cx=svCx; cw=svcw; ch=svch;
+    snapWorld=true; snapKey='W'+oz+'|'+geom; snapGeom=geom;
+    snapBZ=bz; snapBOx=S.ox; snapBOy=S.oy; snapCSSW=cwpx; snapCSSH=chpx;
+    S.zoom=oz; S.ox=oox; S.oy=ooy;
+  };
+  if (farSnap){
+    // (re)bake only when there's no usable world snapshot, or — once SETTLED — the zoom changed (re-sharpen).
+    // Mid-gesture a zoom delta is absorbed by rescaling the existing blit; a PAN never changes the key, so it
+    // never re-bakes — which is the whole point: the survey view pans instantly.
+    const wkey='W'+S.zoom+'|'+geom;
+    if (!(snapWorld && snapGeom===geom && snapBZ>0) || (!SPR_INTERACT && snapKey!==wkey)) bakeWorld();
+    const k=S.zoom/snapBZ;
+    cx.save();
+    cx.transform(k,0,0,k, S.ox-snapBOx*k, S.oy-snapBOy*k);
+    cx.drawImage(SCENE_SNAP, 0,0,SCENE_SNAP.width,SCENE_SNAP.height, 0,0,snapCSSW,snapCSSH);
+    cx.restore();
+    GP=0;
+  } else if (heavySnap){
+    // heavy non-far map mid-gesture: re-project the screen-sized headroom bake; re-bake only on coverage loss.
+    if (!(!snapWorld && snapGeom===geom && snapBZ>0 && coversSnap())) bakeScene(false);
+    const k=S.zoom/snapBZ;
+    cx.save();
+    cx.transform(k,0,0,k, S.ox-snapBOx*k, S.oy-snapBOy*k);
+    cx.drawImage(SCENE_SNAP, 0,0,cv.width,cv.height, 0,0,W,H);
+    cx.restore();
     GP=0;
   } else if (PERF.gnd){
     if (!gndCache || gndCache.width!==cv.width || gndCache.height!==cv.height){
@@ -9104,6 +9180,7 @@ function render(now){
     }
     GP=2;   // main loop below now runs the structure + agent pass
   }
+  const snapMode = farSnap || heavySnap;
   STRUCT_Q = snapMode ? null : [];   // snapMode: structures already in the frozen scene blit — only agents stay live
   for (let s=sLo; s<=sHi; s++){
     // ground is down (cache/snapshot) → paint this band's deferred buildings tallest/2×2-first so shorter
