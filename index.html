@@ -9981,6 +9981,8 @@ const HOLD_DRAW_MS=140;     // press-and-hold before a paint tool arms drawing (
 let touchIntent=null;       // {sx,sy, gx,gy, paint, armed} for an undecided one-finger build gesture
 let holdTimer=0;            // setTimeout id that arms paint-drawing after the hold
 function clearTouchIntent(){ clearTimeout(holdTimer); holdTimer=0; touchIntent=null; }
+// pattern (ms, or [on,off,on…]) → device vibration, mobile only and best-effort
+function haptic(p){ if (navigator.vibrate && document.body.classList.contains('mob')){ try{ navigator.vibrate(p); }catch(_){} } }
 /* ---------- drag-preview (marquee) ---------- */
 const PAINTABLE={road:1,avenue:1,path:1,rail:1,res:1,com:1,ind:1,park:1,garden:1,playground:1,plaza:1,bulldoze:1,landfill:1,incinerator:1,recycling:1,tree:1,water:1,grass:1,raise:1,lower:1};
 let pend=null; // {a:[x,y], b:[x,y]} anchor → current while dragging a paintable tool
@@ -10298,7 +10300,7 @@ cv.addEventListener('pointerdown', e=>{
         touchIntent.armed=true;                       // hold held → begin drawing from here
         pend={a:[touchIntent.gx,touchIntent.gy], b:[touchIntent.gx,touchIntent.gy]};
         painting=true; dirty=true;
-        if (navigator.vibrate && document.body.classList.contains('mob')){ try{ navigator.vibrate(8); }catch(_){} }
+        haptic([10, 30, 20]);                         // distinct two-pulse "draw mode engaged" cue
       }, HOLD_DRAW_MS);
       return;
     }
@@ -10356,7 +10358,10 @@ cv.addEventListener('pointermove', e=>{
     if (!touchIntent.paint) tapPend=[gx,gy];               // single tool: keep the deferred target under the finger
     return;                                                // paint not armed yet → no preview until the hold fires
   }
-  if (painting && pend){ pend.b=[gx,gy]; return; }
+  if (painting && pend){
+    if (touchIntent && touchIntent.armed && (pend.b[0]!==gx || pend.b[1]!==gy)) haptic(4);   // light tick per tile as the draw grows
+    pend.b=[gx,gy]; return;
+  }
   if (painting && tapPend){ tapPend=[gx,gy]; return; }   // deferred touch tap tracks the finger
   if (e.pointerType!=='mouse' || painting) return;
   if (S.tool!=='pan'){ hideTip(); return; }   // the info card is part of Pan view only — building tools stay uncluttered
