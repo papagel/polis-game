@@ -70,14 +70,15 @@ test('inspecting a workplace anchors every route to that workplace', async ({ ga
   expect(res.okFar).toBe(true);       // and every route ends at the CLICKED factory, not a nearer one
 });
 
-// Inspect is a toggle that pins the info into the docked right sidebar (with commute lines), and a
-// second click on the same building unpins it and clears the routes. Drive toggleInspect() directly
-// and assert the pinned state, the docked card, the legend, then a clean teardown on re-click.
-test('clicking a building pins the docked inspect panel, clicking again clears it', async ({ game }) => {
+// Touch model (no right button): a tap just SELECTS — it pins the lean card and is idempotent on the
+// current element (no hidden "tap again to advance / tap again and it vanishes"). Depth and close come
+// from the card's own ▸/▴ and ✕ controls; tapping empty ground dismisses. Drive the 'select' path
+// (inspectClick) + setInspectLevel and assert each of those, plus that a stray hover never disturbs it.
+test('touch: a tap selects the basic card and is idempotent; depth/close via card controls', async ({ game }) => {
   const res = await game.eval(inPage(`
     resetGrid();
     S.commuteRoute = true;
-    S.tool = 'inspect';
+    S.tool = 'pan';
     if (S.zoom < TIP_MINZ) S.zoom = TIP_MINZ + 0.1;   // the panel hides when zoomed right out
     const ry = 10;
     hroad(ry, 4, 18);
@@ -85,33 +86,99 @@ test('clicking a building pins the docked inspect panel, clicking again clears i
     const job  = set(16, ry+1, 'ind'); job.lv  = 1; job.dev  = 200;
     recomputeNets(); recomputeFields(); recomputeCommute();
 
-    toggleInspect(16, ry+1);                            // pin the factory
-    const pinned   = !!inspectSel && inspectSel[0]===16 && inspectSel[1]===(ry+1);
-    const docked   = tipEl.classList.contains('dock');
-    const shown    = tipEl.style.display === 'block';
-    const hasLines = !!commuteViz && commuteViz.routes.length > 0;
-    const hasLegend= tipEl.innerHTML.includes('Commute lines');
-    const hasClose = !!tipEl.querySelector('.tipX');
+    inspectClick(16, ry+1);                            // tap → pin the factory at basic depth
+    const pinned     = !!inspectSel && inspectSel[0]===16 && inspectSel[1]===(ry+1);
+    const basicLevel = inspectLevel === 'basic';
+    const docked     = tipEl.classList.contains('dock');
+    const shown      = tipEl.style.display === 'block';
+    const basicNoLines = !commuteViz;                  // basic draws no routes
+    const hasClose   = !!tipEl.querySelector('.tipX');
+    const hasToggle  = !!tipEl.querySelector('.tipToggle');   // the ▸ depth control is present
+
+    inspectClick(16, ry+1);                            // tap the SAME again → idempotent: no escalate, no close
+    const idempotent = !!inspectSel && inspectLevel==='basic' && tipEl.style.display==='block' && !commuteViz;
+
+    setInspectLevel('full');                           // the card's ▸ control → advanced (touch's path to detail)
+    const fullLevel  = inspectLevel === 'full';
+    const hasLines   = !!commuteViz && commuteViz.routes.length > 0;
+    const hasLegend  = tipEl.innerHTML.includes('Commute lines');
+
+    inspectClick(16, ry+1);                            // tap same while advanced → still idempotent, stays advanced
+    const stillAdvanced = inspectLevel==='full' && !!inspectSel;
 
     // a hover elsewhere must NOT disturb the pinned panel
     hideTip();
     const survives = !!inspectSel && tipEl.style.display === 'block';
 
-    toggleInspect(16, ry+1);                            // click again → unpin
+    inspectClick(3, 3);                                // tap empty ground → clear
     const cleared  = inspectSel === null && commuteViz === null
                    && !tipEl.classList.contains('dock') && tipEl.style.display === 'none';
 
-    return { pinned, docked, shown, hasLines, hasLegend, hasClose, survives, cleared };
+    return { pinned, basicLevel, docked, shown, basicNoLines, hasClose, hasToggle, idempotent, fullLevel, hasLines, hasLegend, stillAdvanced, survives, cleared };
   `));
 
   expect(res.pinned).toBe(true);
+  expect(res.basicLevel).toBe(true);    // a tap is the lean readout…
   expect(res.docked).toBe(true);
   expect(res.shown).toBe(true);
-  expect(res.hasLines).toBe(true);
-  expect(res.hasLegend).toBe(true);
+  expect(res.basicNoLines).toBe(true);  // …with no commute overlay…
   expect(res.hasClose).toBe(true);
-  expect(res.survives).toBe(true);   // pan/zoom/hover keep the pinned card alive
-  expect(res.cleared).toBe(true);    // re-click tears everything down
+  expect(res.hasToggle).toBe(true);     // …and the ▸ control to reach detail
+  expect(res.idempotent).toBe(true);    // tapping the same item again changes nothing
+  expect(res.fullLevel).toBe(true);     // the in-card control deepens to the full inspect…
+  expect(res.hasLines).toBe(true);      // …which draws the routes…
+  expect(res.hasLegend).toBe(true);     // …and their legend
+  expect(res.stillAdvanced).toBe(true); // tapping the item again doesn't drop back out of advanced
+  expect(res.survives).toBe(true);      // pan/zoom/hover keep the pinned card alive
+  expect(res.cleared).toBe(true);       // tapping empty ground tears everything down
+});
+
+// Pan view's two-button model: LEFT-click pins the basic card (no commute overlay), RIGHT-click pins the
+// advanced one (commute lines + legend), switching button switches depth in place, and clicking the SAME
+// depth again toggles it off. The in-card ▸/▴ control (setInspectLevel) changes depth without a map click —
+// the path touch relies on, since it has no right button.
+test('left=basic, right=advanced, in-card toggle switches depth, repeat-depth closes', async ({ game }) => {
+  const res = await game.eval(inPage(`
+    resetGrid();
+    S.commuteRoute = true;
+    S.tool = 'pan';
+    if (S.zoom < TIP_MINZ) S.zoom = TIP_MINZ + 0.1;
+    const ry = 10;
+    hroad(ry, 4, 18);
+    const home = set(5,  ry+1, 'res'); home.lv = 2; home.dev = 200;
+    const job  = set(16, ry+1, 'ind'); job.lv  = 1; job.dev  = 200;
+    recomputeNets(); recomputeFields(); recomputeCommute();
+
+    inspectAt(16, ry+1, 'basic');                          // LEFT-click → basic, no lines
+    const basicPinned = !!inspectSel && inspectLevel==='basic' && !commuteViz && tipEl.style.display==='block';
+
+    inspectAt(16, ry+1, 'full');                           // RIGHT-click same → advanced in place
+    const advanced = inspectLevel==='full' && !!commuteViz && commuteViz.routes.length>0
+                   && tipEl.innerHTML.includes('Commute lines');
+
+    setInspectLevel('basic');                              // in-card ▴ → back to basic (touch's path to depth)
+    const backToBasic = inspectLevel==='basic' && !commuteViz;
+
+    inspectAt(16, ry+1, 'full');                           // RIGHT again → advanced…
+    const reAdvanced = inspectLevel==='full' && !!commuteViz;
+    inspectAt(16, ry+1, 'full');                           // …RIGHT once more on the same depth → close
+    const closedByRight = inspectSel===null && commuteViz===null && tipEl.style.display==='none';
+
+    inspectAt(5, ry+1, 'basic');                           // LEFT a fresh item → basic
+    const basic2 = !!inspectSel && inspectLevel==='basic' && inspectSel[0]===5;
+    inspectAt(5, ry+1, 'basic');                           // LEFT same depth again → close
+    const closedByLeft = inspectSel===null;
+
+    return { basicPinned, advanced, backToBasic, reAdvanced, closedByRight, basic2, closedByLeft };
+  `));
+
+  expect(res.basicPinned).toBe(true);   // left-click is the lean card…
+  expect(res.advanced).toBe(true);      // …right-click jumps straight to the full inspect…
+  expect(res.backToBasic).toBe(true);   // …the in-card toggle drops back down…
+  expect(res.reAdvanced).toBe(true);
+  expect(res.closedByRight).toBe(true); // …repeating the same depth on the same element closes it…
+  expect(res.basic2).toBe(true);
+  expect(res.closedByLeft).toBe(true);  // …for either button
 });
 
 // Same engine for every building: a lot set BACK from the road (not directly fronting it, but within
@@ -154,8 +221,9 @@ test('a shop shows real shoppers, a factory real workers — distinct catchments
   const res = await game.eval(inPage(`
     resetGrid();
     S.commuteRoute = true;
-    S.tool = 'inspect';
+    S.tool = 'pan';
     if (S.zoom < TIP_MINZ) S.zoom = TIP_MINZ + 0.1;
+    const full = (x,y)=>inspectAt(x,y,'full');    // pin the advanced card directly (routes only appear at full depth)
     const ry = 10;
     hroad(ry, 3, 16);
     const home = set(5,  ry+1, 'res'); home.lv = 2; home.dev = 200;
@@ -163,12 +231,12 @@ test('a shop shows real shoppers, a factory real workers — distinct catchments
     const shop = set(12, ry+1, 'com'); shop.lv  = 1; shop.dev  = 200; // the home's NEAREST (only) shop
     recomputeNets(); recomputeFields(); recomputeCommute();
 
-    toggleInspect(12, ry+1);                                          // the shop
+    full(12, ry+1);                                                   // the shop
     const shopKinds = (commuteViz.routes||[]).map(r=>r.kind);
     const shopDotsHome = (commuteViz.routes||[]).some(r=>r.kind==='shop' && r.dest[0]===5 && r.dest[1]===ry+1);
     closeInspect();
 
-    toggleInspect(7, ry+1);                                           // the factory
+    full(7, ry+1);                                                    // the factory
     const facKinds = (commuteViz.routes||[]).map(r=>r.kind);
     closeInspect();
 

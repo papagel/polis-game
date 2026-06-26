@@ -279,8 +279,13 @@
   #tip .row span:last-child{font-family:'Chakra Petch'}
   /* pinned inspect: dock the card as a right-hand sidebar so it never covers the commute lines */
   #tip.dock{left:auto;top:calc(64px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));width:min(252px,82vw);max-width:none;max-height:calc(100vh - 150px);overflow-y:auto;pointer-events:auto;z-index:12;padding-top:30px}
+  /* transient hover preview: same right-hand slot, but no close button and click-through so the mouse keeps updating */
+  #tip.dock.peek{padding-top:9px;pointer-events:none;opacity:.94}
   #tip .tipX{position:absolute;top:8px;right:9px;width:22px;height:22px;border:1px solid var(--line);border-radius:7px;background:#1a2636;color:var(--dim);font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer}
   #tip .tipX:hover{color:var(--ink)}
+  #tip .tipMore{margin-top:7px;padding-top:6px;border-top:1px solid var(--line);color:var(--dim);font-size:11px;letter-spacing:.02em}
+  #tip .tipToggle{display:block;width:100%;margin-top:9px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);font-family:'Chakra Petch';font-size:11px;letter-spacing:.04em;cursor:pointer;text-align:center}
+  #tip .tipToggle:hover{border-color:var(--amber);color:var(--amber)}
   #tip .cmleg{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:11.5px;margin-top:3px}
   #tip .cmleg .sw{width:16px;height:0;border-top:3px dashed currentColor;border-radius:2px;flex:0 0 auto;opacity:.95}
 
@@ -543,7 +548,7 @@
 <div id="intro">
   <h1>P<span class="lo">O</span>LIS</h1>
   <p>A pocket city builder. Lay roads, zone districts, keep the lights on and the taps running. Watch the streets — commuters jam narrow roads and gridlock stalls growth, so upgrade busy stretches to avenues. Your city autosaves as you play.</p>
-  <p class="keys">You start in <b>Pan</b> mode — pick a tool to build, tap again or Esc to stop · Q / E or ⟲⟳ rotates the view · Drag previews, release builds · Pinch or scroll zooms · the speaker button toggles sound · Fullscreen lives in the ⋯ menu</p>
+  <p class="keys">You start in <b>Pan</b> mode — left-click any building, road or park for its info, right-click for the advanced view (or tap the ▸ in the card) · pick a tool to build, tap again or Esc to stop · Q / E or ⟲⟳ rotates the view · Drag previews, release builds · Pinch or scroll zooms · the speaker button toggles sound · Fullscreen lives in the ⋯ menu</p>
   <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
     <button id="continueBtn" style="display:none;background:var(--panel2);color:var(--ink);border:1px solid var(--amber)">CONTINUE</button>
     <button id="loadBtn" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line)">LOAD CITY</button>
@@ -800,12 +805,14 @@
   <div class="row" id="bAdminRow" style="display:none"><span>Administration</span><span id="bAdmin">§0</span></div>
   <div class="row" id="bEmitRow" style="display:none"><span>Emissions levy</span><span id="bEmit">§0</span></div>
   <div class="row" id="bTourRow" style="display:none"><span>Tourism (airport)</span><span id="bTour" style="color:var(--good,#5fe08a)">§0</span></div>
+  <div class="row" id="bTradeRow" style="display:none"><span id="bTradeLbl">Trade (exports)</span><span id="bTrade" style="color:var(--good,#5fe08a)">§0</span></div>
   <div class="row" id="bLoanRow" style="display:none"><span>Loan payment</span><span id="bLoan">§0</span></div>
   <div class="row" id="bPolRow" style="display:none"><span>Ordinances</span><span id="bPol">§0</span></div>
   <div class="row" style="border-top:1px solid var(--line);margin-top:4px;padding-top:6px"><span>Net / month</span><span id="bNet">§0</span></div>
   <button id="whyBtn" style="background:none;border:none;color:#6d8096;font-size:11px;cursor:pointer;padding:4px 0;text-align:left;font-family:'Inter'">How is this calculated? ▾</button>
   <div id="budgetWhy" style="display:none;font-size:11px;line-height:1.55;color:#aeb8c2;background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:2px 0 6px"></div>
-  <div class="row" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><span>⚡ Power</span><span id="bPower">0 / 0 MW</span></div>
+  <div class="row" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><span>📈 GDP / yr</span><span id="bGdp">§0</span></div>
+  <div class="row"><span>⚡ Power</span><span id="bPower">0 / 0 MW</span></div>
   <div class="row"><span>💧 Water</span><span id="bWater">0 / 0 kL</span></div>
   <div class="row"><span>🗑 Sanitation</span><span id="bWaste">0 / 0</span></div>
   <div class="row"><span>🎓 Educated workforce</span><span id="bEdu">0%</span></div>
@@ -887,7 +894,7 @@
         <div class="hrow"><kbd>T</kbd><span>Road (hover the button for avenue &amp; footpath)</span></div>
         <div class="hrow"><kbd>U</kbd><span>Bus stop — place on roads, homes nearby drive less</span></div>
         <div class="hrow"><kbd>P</kbd><kbd>F</kbd><kbd>H</kbd><kbd>G</kbd><span>Police · fire · hospital · park</span></div>
-        <div class="hrow"><kbd>X</kbd><kbd>N</kbd><span>Bulldoze · inspect</span></div>
+        <div class="hrow"><kbd>X</kbd><kbd>V</kbd><span>Bulldoze · pan view (click any item for its info)</span></div>
         <div class="hrow"><kbd>Q</kbd><kbd>E</kbd><span>Rotate the view</span></div>
         <div class="hrow"><kbd>Ctrl</kbd>+<kbd>Z</kbd><span>Undo &nbsp;·&nbsp; <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redo</span></div>
         <div class="hrow"><kbd>Esc</kbd><span>Close menus · cancel drag · back to Pan</span></div>
@@ -1153,7 +1160,6 @@ const TOOLS = [
       { id:'raise', n:'Raise land',   c:6,  ic:'⛰',  col:'#7a8a5a', d:'sculpt hills on open land — drag to raise the ground', br:1 },
       { id:'lower', n:'Lower land',   c:6,  ic:'⤓',  col:'#6a7a8a', d:'sink the ground back down — drag to lower it' } ] },
   { g:'Other' },
-  { id:'inspect',  n:'Inspect',     c:0,   ic:'?', col:'#a9b6c6' },
   { id:'pan',      n:'Pan view',    c:0,   ic:'✥', col:'#a9b6c6' },
 ];
 const IC=(body)=>`<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="#0d1420" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -1244,19 +1250,26 @@ const ICONS={
   water: IC(`<path d="M3 8c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0M3 13c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0M3 18c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0" stroke-width="1.8"/>`),
   grass: IC(`<path d="M3 19h18" stroke-width="2.2"/><path d="M6 19c0-3 1-5 2.5-6M10.5 19c1-4 .5-6-.5-9M15 19c0-3 1-5 2.5-6" stroke-width="1.6"/>`),
 };
-/* monthly city history for the stats charts — decimates beyond 240 points to keep saves small */
+/* monthly city history for the stats charts — decimates beyond 240 points to keep saves small.
+   The row layout is self-describing (packHist stores its width), so growing it stays
+   back-compatible: older saves are padded to HIST_COLS on load and missing columns read 0. */
+const HIST_COLS=11;   // [day, pop, money, happy, demR, demC, demI, jobs, edu, crime, gdp]
 let hist=[], histStep=30;
 function recordHist(){
-  hist.push([S.day, S.pop, Math.round(S.money), S.happy, Math.round(S.demand.r*100), Math.round(S.demand.c*100), Math.round(S.demand.i*100), S.jobs, Math.round((S.edu||0)*100), Math.round((S.crimeAvg||0)*10)/10]);
+  hist.push([S.day, S.pop, Math.round(S.money), S.happy, Math.round(S.demand.r*100), Math.round(S.demand.c*100), Math.round(S.demand.i*100), S.jobs, Math.round((S.edu||0)*100), Math.round((S.crimeAvg||0)*10)/10, Math.round(S.gdp||0)]);
   if (hist.length>240){ hist=hist.filter((_,i)=>i%2===0); histStep*=2; }
 }
-function packHist(){ return { s:histStep, w:hist.length?hist[0].length:10, d:hist.flat() }; }
+function packHist(){ return { s:histStep, w:HIST_COLS, d:hist.flat() }; }
 function unpackHist(hs){
   hist=[]; histStep=30;
   if (!hs || !hs.d) return;
   histStep=hs.s||30;
-  const stride = hs.w||8;
-  for (let i=0;i+stride<=hs.d.length; i+=stride) hist.push(hs.d.slice(i,i+stride));
+  const stride = hs.w||8;   // an older save may be narrower — pad each row out to HIST_COLS
+  for (let i=0;i+stride<=hs.d.length; i+=stride){
+    const row=hs.d.slice(i,i+stride);
+    while (row.length<HIST_COLS) row.push(0);
+    hist.push(row);
+  }
 }
 const MILESTONES=[
   { pop:0,    name:'Settlement'  },
@@ -2503,7 +2516,6 @@ function place(x, y, quiet){
   actionNote(x,y);
   if (!inB(x,y)) return false;
   const c = map[y][x], t = S.tool;
-  if (t==='inspect'){ toggleInspect(x,y); return false; }
   if (t==='pan') return false;
   const def = TOOLDEF[t];
   if (t==='busstop'){
@@ -2767,17 +2779,50 @@ function unmerge(bx,by,mode){
    Reads the same 12+lv*6 term the pollution field uses, after the Recycling
    ordinance (indPolMul), so cleaning up also shrinks the bill. */
 const EMIT_RATE=0.45;
-/* civic overhead: residents below ADMIN_FREE are governed "for free"; every head above
-   pays ADMIN_RATE §/month for administration + infrastructure renewal. tuned so a mature
-   city clears a modest, roughly size-independent margin instead of compounding to millions
-   — the negative-feedback term that cancels the linear-income runaway. scaled by d.up so
-   Easy barely notices it and Hard feels the diseconomy more. */
-const ADMIN_FREE=2000, ADMIN_RATE=2.4;
+/* civic overhead: the first ADMIN_FREE residents (the bootstrap town) are governed "for
+   free"; every head above pays ADMIN_RATE §/month for administration + infrastructure
+   renewal. tuned so a city of ANY size clears a modest, roughly size-independent margin
+   (~45% small → ~22% large) instead of every town printing an ~80%-margin surplus — the
+   negative-feedback term that cancels the linear-income runaway. scaled by d.up so Easy
+   barely notices it and Hard feels the diseconomy more. */
+const ADMIN_FREE=500, ADMIN_RATE=2.4;
+/* ---------- goods & trade ----------
+   Industry manufactures goods; homes and shops consume them. A net SURPLUS is
+   exported for income, a net DEFICIT must be imported at a cost — but only as
+   fast as the city's trade gateways (seaports, airports) can move freight, with
+   a small overland baseline. This finally gives the seaport an economic role
+   beyond land value, and rewards pairing industry with a port. Kept deliberately
+   shallow: a single net-goods balance valued at a price, throughput-gated by
+   gateways — no per-commodity simulation, no save-shape change.
+   Calibration (RCI equilibrium ~ indJ≈0.55·pop, comJ≈0.40·pop): production
+   ≈0.55·pop, use ≈0.45·pop → a balanced city is a mild EXPORTER, so building out
+   industry+ports pays, while a service-heavy city runs a trade deficit. */
+const GOODS_IND=1.0;          // goods made per industrial job
+const GOODS_RES=0.35;         // goods a resident consumes
+const GOODS_COM=0.25;         // goods a shop job moves/consumes
+const BORDER_TRADE=60;        // overland freight always possible without a gateway
+const PORT_TRADE=380;         // extra freight throughput per connected, powered seaport
+const AIR_TRADE=140;          // air freight per connected airport — lower volume, pricier role
+const EXPORT_PRICE=0.7;       // § earned per unit exported (income side, scaled by d.inc·km.inc)
+const IMPORT_BULK=0.45;       // § per unit imported via a gateway (bulk freight — cheap)
+const IMPORT_SPOT=0.9;        // § per unit imported overland past capacity (spot premium — expensive)
+const TRADE_INCOME_CAP=2400;  // citywide export-income ceiling — mirrors the tourism cap's anti-runaway role
+/* GDP: a derived headline metric (annualised value added), NOT part of the budget
+   feedback loop — pure display, so it can't destabilise the hand-tuned economy.
+   Anchored to the SAME taxable base the tax slider operates on: resTax = pop·tax·0.26
+   means each resident has §26/mo of taxable activity, jobTax's 0.36 means each job has
+   §36/mo. So GDP/yr = (pop·26 + jobs·36 + tourism)·12, which makes tax income a believable
+   fraction of GDP (≈ tax% of it) instead of an arbitrary weighted sum that read smaller
+   than the very tax it generates. Exports aren't added separately (industrial output is
+   already in the job base; imports are foreign production). */
+const GDP_RES=26;   // §/resident/month of taxable value — the base resTax is levied on
+const GDP_JOB=36;   // §/job/month of taxable value — the base jobTax is levied on (com & ind alike)
 /* the whole monthly budget, computable at any moment — simTick applies it at
    month end, and the sliders use it to preview changes immediately */
 function computeBudget(){
   const pop=S.pop, jobs=S.jobs, d=DIFF[S.diff];
   let roads=0, aves=0, paths=0, busStops=0, rails=0, rstations=0, svcBase=0, indEmit=0;
+  let comJ=0, indJ=0;   // job counts re-derived here so the trade/GDP figures stay live on slider previews too
   const svcRows=[];
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     const t=map[y][x].t;
@@ -2787,6 +2832,8 @@ function computeBudget(){
     if (map[y][x].bus) busStops++;
     if (map[y][x].rail) rails++;
     if (t==='rstation') rstations++;
+    if (t==='com') comJ += CAP.com[map[y][x].lv]||0;
+    if (t==='ind') indJ += CAP.ind[map[y][x].lv]||0;
     if (t==='ind' && map[y][x].lv>0) indEmit += 12 + map[y][x].lv*6;
     if (UPKEEP[t] && !map[y][x].part){
       const fk = (t==='police')?'police' : (t==='fire')?'fire'
@@ -2806,26 +2853,49 @@ function computeBudget(){
   const km = kmRamp();
   tourism *= d.inc * km.inc;
   const income = ((resTax + jobTax) * d.inc + tourism) * km.inc;
+  // ---- goods & trade: factories export their surplus, a service-heavy city imports the shortfall ----
+  let tradePorts=0;
+  for (const [px,py] of portRoots()){ const st=blockStat(px,py); if (st.pw && st.road) tradePorts++; }
+  const goodsProd = indJ * GOODS_IND;
+  const goodsUse  = pop*GOODS_RES + comJ*GOODS_COM;
+  const goodsNet  = goodsProd - goodsUse;                                  // + surplus to export / − deficit to import
+  const tradeCap  = BORDER_TRADE + tradePorts*PORT_TRADE + airports*AIR_TRADE;   // freight a city can actually move
+  let exportUnits=0, importUnits=0, exportInc=0, importCost=0;
+  if (goodsNet >= 0){
+    exportUnits = Math.min(goodsNet, tradeCap);                            // unexportable surplus is simply wasted
+    exportInc = Math.min(TRADE_INCOME_CAP, exportUnits*EXPORT_PRICE) * d.inc * km.inc;
+  } else {
+    importUnits = -goodsNet;                                              // the whole deficit must be imported
+    const bulk = Math.min(importUnits, tradeCap), spot = importUnits - bulk;
+    importCost = (bulk*IMPORT_BULK + spot*IMPORT_SPOT) * d.up * km.up;     // gateways carry bulk cheaply; the rest pays a spot premium
+  }
+  const tradeNet = exportInc - importCost;                                // one signed line in the budget, like ordinances
+  // GDP — derived headline only (annualised value added), anchored to the taxable base; never fed back into the budget
+  const gdp = (pop*GDP_RES + (comJ+indJ)*GDP_JOB + tourism) * 12;
   const roadCost = (roads*0.95 + aves*2.4 + paths*0.18 + busStops*3.0 + rails*0.55 + rstations*8.0) * d.up * km.up;
   const svcCost = svcBase * 2.6 * d.up * km.up;
   const emit = indEmit * polFx().indPolMul * indCleanMul();
   const emitCost = emit * EMIT_RATE * d.up * km.up;
-  // diseconomy of scale: income is linear in pop while road/service upkeep is per-footprint
-  // and flat, so a densifying city's margin widens without bound (the late-game runaway).
-  // a per-capita administration/renewal overhead supplies the missing negative feedback —
-  // soft threshold keeps towns paying ~nothing, so only a real metropolis feels the drag.
+  // income is linear in pop while road/service upkeep is per-footprint and flat (~5% of a
+  // dense city's income), so without this every city — town or metropolis — runs an ~80%
+  // margin and the treasury just compounds. a per-capita administration/renewal overhead
+  // is the missing negative feedback: it claws back ~half of each resident's tax so the net
+  // margin stays roughly size-independent. the small free floor only spares the opening
+  // minutes (a pop<500 startup that hasn't wired up income yet).
   const adminCost = Math.max(0, pop - ADMIN_FREE) * ADMIN_RATE * d.up * km.up;
   const polNet = polBudget();
   return { income, tourism, roadCost, svcCost, emitCost, emit, adminCost, polNet,
-           pop, jobs, tax:S.tax, resTax, jobTax, dInc:d.inc, dUp:d.up, dName:d.n,
+           tradeNet, exportInc, importCost, exportUnits, importUnits, goodsNet, goodsProd, goodsUse, tradeCap, tradePorts, gdp,
+           pop, jobs, comJ, indJ, tax:S.tax, resTax, jobTax, dInc:d.inc, dUp:d.up, dName:d.n,
            roads, aves, paths, busStops, airports, svcBase };
 }
 function projectBudget(){
   if (!S.started) return;
   const B=computeBudget();
   S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.adminCost=B.adminCost; S.polNet=B.polNet;
+  S.tradeNet=B.tradeNet; S.gdp=B.gdp;
   S.budgetParts=B;
-  S.net = S.income - S.roadCost - S.svcCost - S.emitCost - S.adminCost + S.polNet - (S.loan?S.loan.pay:0);
+  S.net = S.income - S.roadCost - S.svcCost - S.emitCost - S.adminCost + S.polNet + S.tradeNet - (S.loan?S.loan.pay:0);
   updateHUD();
   fillBudgetWhy();
 }
@@ -3164,6 +3234,7 @@ function simTick(){
     // a mature, well-run city should clear a modest margin — not print money
     const B=computeBudget();
     S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.adminCost=B.adminCost; S.polNet=B.polNet;
+    S.tradeNet=B.tradeNet; S.gdp=B.gdp;
     S.budgetParts=B;
     // loan servicing: fixed amortized payment each month until the balance clears
     S.loanPay=0;
@@ -3179,7 +3250,7 @@ function simTick(){
         refreshLoanBox();
       }
     }
-    S.net = S.income - S.roadCost - S.svcCost - (S.emitCost||0) - (S.adminCost||0) + (S.polNet||0) - S.loanPay;
+    S.net = S.income - S.roadCost - S.svcCost - (S.emitCost||0) - (S.adminCost||0) + (S.polNet||0) + (S.tradeNet||0) - S.loanPay;
     S.money += S.net;
     if (S.money < 0) msg('<b>The treasury is in the red.</b> Raise taxes, trim services'+(S.loan?'':' or take a loan')+' before the city defaults.');
     recordHist();
@@ -3820,6 +3891,20 @@ function walkList(){ const out=[]; for (let y=0;y<G;y++) for (let x=0;x<G;x++) i
 const SD4=[[1,0],[-1,0],[0,1],[0,-1]];
 const SVC_EXT=8;             // litres/sec a firetruck knocks off a blaze (lower = a longer, showier soak)
 function svcRoadsAround(x,y){ const r=[]; for (const [dx,dy] of SD4){ const nx=x+dx,ny=y+dy; if (isRoad(nx,ny)) r.push([nx,ny]); } return r; }
+// Road tiles an engine can fight a blaze from. Normally that's the streets fronting the lot,
+// but a lot can develop without a road directly beside it (hasFrontage's shallow-interior
+// allowance, or only diagonal road contact) — without a fallback such a lot is undispatchable
+// and burns forever. So when nothing fronts it, park on the nearest road within 2 tiles
+// (matching hasFrontage's reach) and reach in to spray.
+function fireRoadsNear(x,y){
+  const r=svcRoadsAround(x,y);
+  if (r.length) return r;                                 // the common case: a street fronts the lot
+  for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++){
+    if (!dx&&!dy) continue;
+    if (isRoad(x+dx,y+dy)) r.push([x+dx,y+dy]);
+  }
+  return r;
+}
 /* BFS distance over the road network from a set of seed road tiles (0 at the seeds) */
 function svcField(seeds){
   const dist=new Float64Array(G*G); dist.fill(Infinity);
@@ -3888,17 +3973,30 @@ function svcSpawnTick(){
   // ignition warning ("No fire station covers it — it could spread.") promises; coverage is
   // the whole point of placing stations, so trucks don't teleport-respond across the map.
   const fireV=svc.filter(v=>v.svc==='fire');
-  const served=new Set(fireV.map(v=>v.tgt[0]+','+v.tgt[1]));
+  // only engines actively heading to / fighting a blaze claim it; a truck rolling
+  // home (state 'return') is free to be re-tasked, so don't count its stale target.
+  const served=new Set(fireV.filter(v=>v.tgt && v.state!=='return').map(v=>v.tgt[0]+','+v.tgt[1]));
+  const idle=fireV.filter(v=>v.state==='return');   // on the streets, free to divert
+  let nFire=fireV.length;
   for (const [fx,fy] of fires){
     if (served.has(fx+','+fy)) continue;
     if (!fireCovered(fx,fy)) continue;
-    if (svc.filter(v=>v.svc==='fire').length>=6 || !fireSt.length) break;
-    const field=svcField(svcRoadsAround(fx,fy));
+    const field=svcField(fireRoadsNear(fx,fy));
+    // an engine already out and rolling home reaches a fresh nearby blaze sooner than a
+    // fresh truck crawling out of the station — re-task the closest idle one when it's at
+    // least as near as the nearest station, so trucks don't abandon a still-burning block.
+    let eng=null, engD=Infinity;
+    for (const v of idle){ const d=field[idx(v.x,v.y)]; if (d<engD){ engD=d; eng=v; } }
     let bestSt=null, bestRoad=null, bestD=Infinity;
-    for (const [sx,sy] of fireSt) for (const [rx,ry] of svcRoadsAround(sx,sy)){
+    if (fireSt.length) for (const [sx,sy] of fireSt) for (const [rx,ry] of svcRoadsAround(sx,sy)){
       const d=field[idx(rx,ry)]; if (d<bestD){ bestD=d; bestSt=[sx,sy]; bestRoad=[rx,ry]; }
     }
-    if (bestSt && bestD!==Infinity){ svcSpawn('fire','firetruck',bestSt,bestRoad,field,[fx,fy]); served.add(fx+','+fy); }
+    if (eng && engD!==Infinity && engD<=bestD){
+      eng.tgt=[fx,fy]; eng.field=field; eng.state='go'; eng.lx=undefined;
+      served.add(fx+','+fy); idle.splice(idle.indexOf(eng),1);
+    } else if (nFire<6 && bestSt && bestD!==Infinity){
+      svcSpawn('fire','firetruck',bestSt,bestRoad,field,[fx,fy]); served.add(fx+','+fy); nFire++;
+    }
   }
   // POLICE & GARBAGE: keep a small ambient fleet, one engine per depot
   svcMaintain('police','police',policeSt,4);
@@ -3919,18 +4017,21 @@ function svcMaintain(svcKind, vehKind, stations, cap){
    than driving home empty — so a block of fires is cleared by the engines already on scene
    instead of waiting for a fresh truck to crawl out from the station for each lot. */
 function fireRetarget(v){
-  const taken=new Set();                               // fires another engine is already on/heading to
-  for (const o of svc){ if (o!==v && o.svc==='fire' && o.tgt) taken.add(o.tgt[0]+','+o.tgt[1]); }
+  const taken=new Set();                               // fires another engine is actively on/heading to
+  for (const o of svc){ if (o!==v && o.svc==='fire' && o.tgt && o.state!=='return') taken.add(o.tgt[0]+','+o.tgt[1]); }
   let best=null, bestD=Infinity;
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     const c=map[y][x];
-    if (c.fire>0 && ZONE[c.t] && fireCovered(x,y) && !taken.has(x+','+y)){
+    if (c.fire>0 && ZONE[c.t] && fireCovered(x,y)){
       const d=Math.abs(x-v.x)+Math.abs(y-v.y);         // nearest by tiles; reachability checked below
+      // skip a blaze another engine owns — UNLESS it's right next door, where the engine
+      // already on scene should just put it out rather than roll away and leave it burning.
+      if (taken.has(x+','+y) && d>4) continue;
       if (d<bestD){ bestD=d; best=[x,y]; }
     }
   }
   if (best && bestD<=18){
-    const f=svcField(svcRoadsAround(best[0],best[1]));
+    const f=svcField(fireRoadsNear(best[0],best[1]));
     if (f[idx(v.x,v.y)]!==Infinity){ v.tgt=best; v.field=f; v.state='go'; v.lx=undefined; return true; }
   }
   return false;
@@ -3944,8 +4045,14 @@ function stepSvc(dt){
     let hx=v.x-v.px, hy=v.y-v.py; const hl=Math.hypot(hx,hy)||1; v.hx=hx/hl; v.hy=hy/hl;
     // firetruck parked at the blaze: spray until it's out, then drive home
     if (v.svc==='fire' && v.state==='work'){
-      let fc=null;
-      for (const [dx,dy] of SD4){ const nx=v.x+dx,ny=v.y+dy; if (inB(nx,ny)&&map[ny][nx].fire>0){ fc=map[ny][nx]; v.sdx=dx; v.sdy=dy; break; } }
+      // spray the nearest blaze within reach — usually the lot fronting the truck, but also a
+      // lot set a tile or two back (which has no road of its own to park beside). Aim at it.
+      let fc=null, fbd=99;
+      for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++){
+        const nx=v.x+dx, ny=v.y+dy; if (!inB(nx,ny)||!map[ny][nx].fire) continue;
+        const d=Math.max(Math.abs(dx),Math.abs(dy));
+        if (d<fbd){ fbd=d; fc=map[ny][nx]; v.sdx=dx; v.sdy=dy; }
+      }
       if (fc){ v.spray=true; v.mop=undefined; fc.fire=Math.max(0, fc.fire - dt*SVC_EXT*spd); if (fc.fire<=0){ fc.fire=0; dirty=true; } }
       else {
         // the blaze is out — keep soaking the embers for a dramatic beat before rolling home
@@ -9512,6 +9619,22 @@ function render(now){
     }
     cx.setLineDash([]); cx.lineDashOffset=0;
   }
+  // inspect selection: a plain static yellow border around the pinned footprint — no animation
+  if (inspectSel && S.zoom>=TIP_MINZ){
+    const [rx,ry]=inspectSel;
+    if (inB(rx,ry)){
+      const rc=map[ry][rx], fw=rc.fw||(rc.grp?2:1), fh=rc.fh||(rc.grp?2:1), z=S.zoom;
+      const lift=isElevCell(rx,ry)?terrainH(rx,ry)*z:0;   // buildings sit on flattened ground, so one root lift fits the whole slab
+      // the footprint's OUTER perimeter (4 grid corners), not per-tile diamonds — no internal grid lines on towers
+      const corner=(cgx,cgy)=>{ const [sx,sy]=tileScreen(cgx,cgy); return [sx, sy-lift]; };
+      const A=corner(rx,ry), B=corner(rx+fw,ry), C=corner(rx+fw,ry+fh), D=corner(rx,ry+fh);
+      cx.save();
+      cx.beginPath(); cx.moveTo(A[0],A[1]); cx.lineTo(B[0],B[1]); cx.lineTo(C[0],C[1]); cx.lineTo(D[0],D[1]); cx.closePath();
+      cx.strokeStyle='rgba(8,12,18,.5)'; cx.lineWidth=Math.max(3,3.4*z); cx.stroke();   // thin dark casing so the yellow reads over any tile
+      cx.strokeStyle='#ffd23f'; cx.lineWidth=Math.max(1.6,2*z); cx.stroke();
+      cx.restore();
+    }
+  }
   // hover highlight + ghost of what you're about to place
   if (S.hover && S.tool!=='pan' && !pend){
     const [hx,hy]=S.hover;
@@ -9527,7 +9650,7 @@ function render(now){
         cx.beginPath();
         for (let k=0;k<=48;k++){
           const a=k/48*Math.PI*2, [vdx,vdy]=rotD(cvR*Math.cos(a), cvR*Math.sin(a));
-          const X=px+(vdx-vdy)*(TW/2)*z, Y=py+(vdx+vdy)*(TH/2)*z;
+          const X=px+(vdx-vdy)*(TW/2)*z, Y=py+TH/2*z+(vdx+vdy)*(TH/2)*z;   // centre on the tile (where the splat sits), not the diamond's top vertex
           if (k===0) cx.moveTo(X,Y); else cx.lineTo(X,Y);
         }
         cx.closePath();
@@ -9733,7 +9856,7 @@ function render(now){
         const lw=Math.max(1.2,(1.3+1.7*em)*S.zoom);
         cx.strokeStyle=colr; cx.lineWidth=hot?lw*1.7:lw; cx.setLineDash(hot?[]:[6,5]);
         if (hot){ cx.shadowColor=colr; cx.shadowBlur=14; }
-        cx.beginPath(); cx.ellipse(px, cyc, r*TW/2*S.zoom, r*TH/2*S.zoom, 0, 0, 7); cx.stroke();
+        cx.beginPath(); cx.ellipse(px, cyc, r*TW/2*S.zoom*Math.SQRT2, r*TH/2*S.zoom*Math.SQRT2, 0, 0, 7); cx.stroke();   // SQRT2: a Euclidean grid disk of radius r projects to this ellipse — match the real splat (and the placement ring), not the √2-too-small inscribed diamond
         cx.shadowBlur=0; cx.setLineDash([]);
       }
       cx.fillStyle=colr;
@@ -9816,6 +9939,8 @@ function render(now){
    INPUT
    ============================================================ */
 let dragging=false, painting=false, lastP=null, pinch=null, tapPend=null, lastTap=null;
+let downP=null;   // screen pos where a pan press began — lets pointerup tell a tap (→ inspect) from a drag
+let downBtn=0;    // which pointer button started that press (0 left → basic, 2 right → advanced)
 /* ---------- drag-preview (marquee) ---------- */
 const PAINTABLE={road:1,avenue:1,path:1,rail:1,res:1,com:1,ind:1,park:1,garden:1,playground:1,plaza:1,bulldoze:1,landfill:1,incinerator:1,recycling:1,tree:1,water:1,grass:1,raise:1,lower:1};
 let pend=null; // {a:[x,y], b:[x,y]} anchor → current while dragging a paintable tool
@@ -10111,9 +10236,15 @@ cv.addEventListener('pointerdown', e=>{
   if (touches.size>=2 || pinch) return;          // ignore pointer events during a pinch
   cv.setPointerCapture(e.pointerId);
   const [px,py]=eventPos(e);
-  if (e.button===2 || e.button===1 || S.tool==='pan'){ cancelPending(); dragging=true; lastP=[px,py]; return; }
-  // inspect targets the visible structure (height-aware), every other tool the literal lot
-  const [gx,gy]= S.tool==='inspect' ? pickTile(px,py) : toGrid(px,py);
+  if (e.button===2 || e.button===1 || S.tool==='pan'){
+    cancelPending(); dragging=true; lastP=[px,py];
+    hideTip();   // a press kills any pending hover-peek so it can't pop up mid-drag
+    // a tap (no drag) in Pan view inspects: left-click → basic, right-click → advanced. Remember start + button.
+    downBtn=e.button;
+    downP = S.tool==='pan' && (e.button===0 || e.button===2) ? [px,py] : null;
+    return;
+  }
+  const [gx,gy]= toGrid(px,py);
   if (PAINTABLE[S.tool]){
     if (!inB(gx,gy)) return;
     hideTip();
@@ -10162,52 +10293,107 @@ cv.addEventListener('pointermove', e=>{
   if (painting && pend){ pend.b=[gx,gy]; return; }
   if (painting && tapPend){ tapPend=[gx,gy]; return; }   // deferred touch tap tracks the finger
   if (e.pointerType!=='mouse' || painting) return;
-  const [tx,ty]=pickTile(px,py);                                 // height-aware: point at the structure you see, not the lot behind it
-  if (S.tool==='inspect'){ if (!inspectSel) showTip(tx,ty,false); return; }   // immediate hover preview, unless a building is pinned
+  if (S.tool!=='pan'){ hideTip(); return; }   // the info card is part of Pan view only — building tools stay uncluttered
+  if (inspectSel) return;                      // a pinned card owns the panel; hovering elsewhere mustn't disturb it
+  const [tx,ty]=pickTile(px,py);               // height-aware: point at the structure you see, not the lot behind it
   if (moved){
     hideTip();
-    tipTimer=setTimeout(()=>{                                    // others show after a dwell
-      if (S.hover && S.hover[0]===gx && S.hover[1]===gy && !painting && !pend) showTip(tx,ty,false,true);
+    tipTimer=setTimeout(()=>{                  // a short dwell peeks the lean card on the right; it stays transient until you click
+      if (S.hover && S.hover[0]===gx && S.hover[1]===gy && !painting && !pend && !dragging && !inspectSel){
+        showTip(tx,ty,false,true,true,true);
+        // remember which element the peek is for: a click on it then skips straight to full detail (the basic is already on screen)
+        if (tipEl.style.display==='block' && tipEl.classList.contains('peek')){ const pc=map[ty][tx]; peekAt=[pc.grp?pc.grp[0]:tx, pc.grp?pc.grp[1]:ty]; }
+        else peekAt=null;
+      }
     }, TIP_DWELL_MS);
   }
 });
 let tipTimer=0;
-const TIP_DWELL_MS=2000;
-let inspectSel=null;   // [rootX,rootY] of the pinned building, or null — owns the docked card + its routes
-// inspect is a toggle: click a building to pin its info to the right sidebar (with commute lines),
-// click the same building again (or close/switch tools) to unpin and return to the floating card.
-function toggleInspect(x,y){
-  if (!inB(x,y)){ closeInspect(); return; }
+const TIP_DWELL_MS=1500;
+let peekAt=null;   // [rootX,rootY] the transient hover peek is currently showing, or null
+let inspectSel=null;   // [rootX,rootY] of the pinned element, or null — owns the docked right-hand card
+let inspectLevel='basic';   // 'basic' (lean readout) → 'full' (land-value math + commute lines). Click escalates.
+let lastInspectAct=0;      // wall-clock ms of the last click that staged/closed a card — double-click zoom backs off right after, so cycling the card never zooms
+// only built things are worth a card — plain grass / trees / water / rubble stay quiet (matches showTip's light gate)
+function isInspectable(c){ return !!(ZONE[c.t]||SVC[c.t]||ROADTYPE[c.t]||c.t==='rstation'); }
+// Pan view IS the inspector. mode picks what a click maps to:
+//   'basic' (left-click) and 'full' (right-click) pin that depth — repeating the SAME depth on the SAME
+//   element closes it, and switching button switches depth in place.
+//   'select' (touch tap — no right button) just selects: shows the basic card and is idempotent on the
+//   current element. Depth (▸/▴) and close (✕) come from the card's own controls, so a tap never carries
+//   hidden state — no "tap again to advance / tap again and it vanishes" surprise on a phone.
+// Clicking empty ground / open land always dismisses any pinned card.
+function inspectAt(x,y,mode){
+  if (!inB(x,y)){ if (inspectSel){ closeInspect(); lastInspectAct=performance.now(); } return; }
   const c=map[y][x], rx=c.grp?c.grp[0]:x, ry=c.grp?c.grp[1]:y;
-  if (inspectSel && inspectSel[0]===rx && inspectSel[1]===ry){ closeInspect(); return; }
+  if (!isInspectable(map[ry][rx])){ if (inspectSel){ closeInspect(); lastInspectAct=performance.now(); } return; }
+  lastInspectAct=performance.now();   // an inspect action, never a zoom trigger
+  const same = inspectSel && inspectSel[0]===rx && inspectSel[1]===ry;
+  let want;
+  if (mode==='select'){
+    if (same) return;            // already selected → leave it (depth/close live on the card buttons)
+    want='basic';
+  } else {
+    if (same && inspectLevel===mode){ closeInspect(); return; }     // same depth again → close
+    want = mode;
+  }
+  inspectLevel=want;
   inspectSel=[rx,ry];
-  showTip(rx,ry,true,false,true);   // force (full info + routes), docked
+  peekAt=null;
+  dirty=true;
+  pinShow();
+}
+function inspectClick(x,y){ inspectAt(x,y,'select'); }   // a plain tap/select — touch + the test harness
+// the in-card ▸/▴ toggle: change depth without re-clicking the map (so touch, which has no right button,
+// can still reach the advanced view)
+function setInspectLevel(level){
+  if (!inspectSel || inspectLevel===level) return;
+  inspectLevel=level; lastInspectAct=performance.now(); dirty=true;
+  pinShow();
+}
+// paint the pinned card at its current depth (commute lines reproject themselves from grid coords each frame)
+function pinShow(){
+  if (!inspectSel) return;
+  const [rx,ry]=inspectSel;
+  if (inspectLevel==='full') showTip(rx,ry,true,false,true);   // force: full detail + commute lines, docked
+  else showTip(rx,ry,false,true,true);                         // light: lean readout, docked, no lines
 }
 function closeInspect(){
   if (!inspectSel) return;
-  inspectSel=null; commuteViz=null;
-  tipEl.classList.remove('dock'); tipEl.style.display='none';
+  inspectSel=null; inspectLevel='basic'; commuteViz=null; dirty=true;   // repaint to clear the footprint outline even while paused
+  tipEl.classList.remove('dock','peek'); tipEl.style.display='none';
 }
 function hideTip(){
   clearTimeout(tipTimer);
+  peekAt=null;
   if (inspectSel) return;   // a pinned inspection keeps the docked panel + its routes through pan/zoom
+  tipEl.classList.remove('peek');
   tipEl.style.display='none';
   commuteViz=null;
 }
 cv.addEventListener('pointerup', e=>{
+  const [upx,upy]=eventPos(e);
+  // a tap (not a drag) in Pan view inspects: touch cycles depth, mouse uses the button — left=basic, right=advanced
+  if (downP && !pinch && touches.size<2 && Math.hypot(upx-downP[0],upy-downP[1])<8){
+    const [tx,ty]=pickTile(upx,upy);   // height-aware: target the structure you see
+    if (e.pointerType!=='mouse') inspectAt(tx,ty,'select');   // touch: tap selects; ▸/▴ + ✕ on the card do the rest
+    else inspectAt(tx,ty, downBtn===2 ? 'full' : 'basic');
+  }
+  downP=null;
   if (pend) commitPending();
   else if (tapPend && !pinch && touches.size<2) placeSingle(tapPend[0], tapPend[1]);  // a real tap, not the start of a pinch
-  // double-tap to zoom (touch): two quick taps near the same spot
-  if (e.pointerType!=='mouse' && !pinch && touches.size<2 && (S.tool==='pan'||S.tool==='inspect')){
+  // double-tap to zoom (touch): two quick taps near the same spot — but not while cycling an inspect card
+  if (e.pointerType!=='mouse' && !pinch && touches.size<2 && S.tool==='pan'){
     const [px,py]=eventPos(e), now=performance.now();
-    if (lastTap && now-lastTap.t<300 && Math.hypot(px-lastTap.x,py-lastTap.y)<32){
+    if (inspectSel || now-lastInspectAct<400){ lastTap=null; }   // tapping an item / closing its card never zooms
+    else if (lastTap && now-lastTap.t<300 && Math.hypot(px-lastTap.x,py-lastTap.y)<32){
       zoomAt(px,py, 1.6); dirty=true; lastTap=null;
     } else lastTap={x:px,y:py,t:now};
   }
   tapPend=null;
   dragging=false; painting=false; lastP=null;
 });
-cv.addEventListener('pointercancel', ()=>{ tapPend=null; cancelPending(); });
+cv.addEventListener('pointercancel', ()=>{ tapPend=null; downP=null; cancelPending(); });
 cv.addEventListener('pointerleave', ()=>{ S.hover=null; hideTip(); dirty=true; });
 // zooming shifts the world under a stationary cursor, so the tile/structure under the pointer
 // changes without a pointermove — re-pick hover state but dismiss any open dwell card
@@ -10226,7 +10412,8 @@ cv.addEventListener('wheel', e=>{
 },{passive:false});
 // double-click zooms in toward the cursor (mouse only; touch uses double-tap below)
 cv.addEventListener('dblclick', e=>{
-  if (ROTA || pinch || (S.tool!=='pan' && S.tool!=='inspect')) return;
+  if (ROTA || pinch || S.tool!=='pan') return;
+  if (inspectSel || performance.now()-lastInspectAct<400) return;   // a double-click that's cycling the inspect card must not also zoom
   e.preventDefault();
   const [px,py]=eventPos(e);
   zoomAt(px,py, 1.6); dirty=true; syncHover(px,py);
@@ -10272,6 +10459,7 @@ window.addEventListener('keydown', e=>{
   if (e.key==='Escape'){
     if (closeAnyModal()) return;        // ESC closes any open modal first
     if (typing){ e.target.blur(); return; }
+    if (inspectSel){ closeInspect(); return; }   // a pinned inspect card is the next thing ESC clears
     cancelPending();
     hideFly && hideFly();
     if (modal.classList.contains('open')) modal.classList.remove('open');
@@ -10281,7 +10469,7 @@ window.addEventListener('keydown', e=>{
   if (typing) return;                   // never hijack keys while typing in a field
   if (e.code==='Space'){ e.preventDefault(); setSpeed(S.speed?0:2); }
   if (!e.ctrlKey && !e.metaKey && !e.altKey && S.started){
-    const KEYTOOL={ r:'res', c:'com', i:'ind', t:'road', x:'bulldoze', p:'police', f:'fire', g:'park', h:'hospital', u:'busstop', n:'inspect' };
+    const KEYTOOL={ r:'res', c:'com', i:'ind', t:'road', x:'bulldoze', p:'police', f:'fire', g:'park', h:'hospital', u:'busstop' };
     const k=e.key.toLowerCase();
     if (k==='?'){ e.preventDefault(); document.getElementById('helpModal').classList.add('open'); return; }
     if (KEYTOOL[k]){
@@ -10302,7 +10490,7 @@ window.addEventListener('keydown', e=>{
   if (e.key==='ArrowDown'||e.key==='s') S.oy-=pan;
   if (e.key==='ArrowLeft'||e.key==='a') S.ox+=pan;
   if (e.key==='ArrowRight'||e.key==='d') S.ox-=pan;
-  const hot={'1':'road','2':'res','3':'com','4':'ind','5':'power','6':'avenue','7':'pump','8':'tower','b':'bulldoze','p':'park','v':'pan','i':'inspect'};
+  const hot={'1':'road','2':'res','3':'com','4':'ind','5':'power','6':'avenue','7':'pump','8':'tower','b':'bulldoze','p':'park','v':'pan'};
   if (hot[e.key]) setTool(hot[e.key]);
   if (e.key==='q') rotateAnim(-1);
   if (e.key==='e') rotateAnim(1);
@@ -10311,7 +10499,7 @@ window.addEventListener('keydown', e=>{
   // tool selection hotkeys
   if (!e.ctrlKey && !e.metaKey && !e.altKey){
     const TK={ t:'road', e:'power', w:'pump', p:'police', l:'school', h:'hospital',
-               g:'park', c:'com', i:'ind', x:'bulldoze', n:'inspect' };
+               g:'park', c:'com', i:'ind', x:'bulldoze' };
     const k=e.key.toLowerCase();
     // 'r' is taken by orient-rotate when a rotatable footprint is active; otherwise → Residential
     if (k==='r' && !(FOOT[S.tool] && FOOT[S.tool][0]!==FOOT[S.tool][1])){ pickTool('res'); return; }
@@ -10594,7 +10782,7 @@ function commuteLegend(viz){
   if (!(viz.routes && viz.routes.length)) h+=`<div class="cmleg" style="color:var(--dim)">straight line · no road route found</div>`;
   return h;
 }
-function showTip(x,y,force,light,dock){
+function showTip(x,y,force,light,dock,peek){
   if (!inB(x,y)){ tipEl.style.display='none'; return; }
   if (S.zoom<TIP_MINZ){ tipEl.style.display='none'; commuteViz=null; return; }   // surveying zoomed right out: buildings are tiny, so don't blanket them with the info card
   let c=map[y][x];
@@ -10783,15 +10971,26 @@ function showTip(x,y,force,light,dock){
   }
   if (commuteViz) html += commuteLegend(commuteViz);
   if (dock){
-    // pinned inspection: dock to the right sidebar, never reposition over the map / its lines
+    // the info card always docks to the right sidebar so it never repositions over the map / its lines
     tipEl.classList.add('dock');
+    tipEl.classList.toggle('peek', !!peek);
     tipEl.style.left=''; tipEl.style.top='';
-    tipEl.innerHTML = `<button class="tipX" title="Close — or click the building again">✕</button>` + html;
-    const xb=tipEl.querySelector('.tipX'); if (xb) xb.onclick=closeInspect;
+    if (peek){
+      // transient hover preview: no close button, pointer passes through (see #tip.peek), gentle nudge to click
+      tipEl.innerHTML = html + `<div class="tipMore">Left-click to pin · right-click for advanced</div>`;
+    } else {
+      // an in-card ▸/▴ depth toggle — reachable on touch, which has no right button
+      const toggle = force
+        ? `<button class="tipToggle" data-act="basic">▴ Less detail</button>`
+        : `<button class="tipToggle" data-act="full">▸ Advanced detail</button>`;
+      tipEl.innerHTML = `<button class="tipX" title="Close — or click the element again">✕</button>` + html + toggle;
+      const xb=tipEl.querySelector('.tipX'); if (xb) xb.onclick=closeInspect;
+      const tb=tipEl.querySelector('.tipToggle'); if (tb) tb.onclick=()=>setInspectLevel(tb.dataset.act);
+    }
     tipEl.style.display='block';
     return;
   }
-  tipEl.classList.remove('dock');
+  tipEl.classList.remove('dock','peek');
   tipEl.innerHTML=html;
   tipEl.style.display='block';
   const [px,py]=tileScreen(x,y);
@@ -12117,7 +12316,7 @@ for (const t of TOOLS){
     b.onmouseenter=()=>showFly(b,t);
   } else {
     b.innerHTML=groupInner(t,false);
-    const HK={res:'R',com:'C',ind:'I',bulldoze:'X',inspect:'N',pan:'space'};
+    const HK={res:'R',com:'C',ind:'I',bulldoze:'X',pan:'V'};
     if (HK[t.id]) b.dataset.hk=HK[t.id];
     b.title=HK[t.id]?('Key '+HK[t.id]):'';
     b.onclick=()=>{ hideFly(); setTool(S.tool===t.id && t.id!=='pan' ? 'pan' : t.id); };
@@ -12199,7 +12398,6 @@ const HINTS={
   monument:'<b>Monument:</b> a landmark obelisk visible across districts. Unlocked at Metropolis.',
   church:'<b>Church:</b> a neighbourhood landmark with a steeple and a cross — lifts nearby land value and the spirits of residents.',
   spaceport:'<b>Spaceport:</b> a 2×2 launch complex with a towering service gantry. Powered, it fires rockets into orbit now and then — a prestige landmark that lifts land value. Unlocked at Conurbation.',
-  inspect:'<b>Inspect:</b> tap any tile for details, land value math, and commutes.',
 };
 function setTool(id){
   const ld=TOOLDEF[id];
@@ -12210,11 +12408,11 @@ function setTool(id){
   }
   if (S.tool!==id) cancelPending();
   const prev=S.tool;
-  if (prev!==id) closeInspect();   // leaving inspect (Esc → Pan, or any tool switch) drops the pinned card
+  if (prev!==id){ closeInspect(); hideTip(); }   // switching tools drops the pinned card and any transient hover peek
   S.tool=id;
   rememberSub(id);
   document.querySelectorAll('.tool').forEach(b=>b.classList.toggle('on', b.dataset.id===id || (b.dataset.sub||'').split(',').includes(id)));
-  cv.style.cursor = id==='pan'?'grab': id==='inspect'?'help':'crosshair';
+  cv.style.cursor = id==='pan'?'grab':'crosshair';
   if (typeof bbarSync==='function') bbarSync();
   if (S.started && id!==prev && HINTS[id]) msg(HINTS[id]+' <span style="color:#6d8096">· Esc returns to Pan</span>');
   refreshOrientChip();
@@ -12786,6 +12984,18 @@ function updateHUD(){
     btr.style.display = (S.tourism||0)>0 ? 'flex' : 'none';
     if ((S.tourism||0)>0) document.getElementById('bTour').textContent='+'+fmt(Math.round(S.tourism)).slice(1);
   }
+  const btd=document.getElementById('bTradeRow'), tn=S.tradeNet||0;
+  if (btd){
+    btd.style.display = Math.abs(tn)>=0.5 ? 'flex' : 'none';
+    if (Math.abs(tn)>=0.5){
+      document.getElementById('bTradeLbl').textContent = tn>=0 ? 'Trade (exports)' : 'Trade (imports)';
+      const bt=document.getElementById('bTrade');
+      bt.textContent=(tn>=0?'+':'−')+fmt(Math.abs(Math.round(tn))).slice(1);
+      bt.style.color=tn>=0?'var(--green)':'var(--red)';
+    }
+  }
+  const bgd=document.getElementById('bGdp');
+  if (bgd) bgd.textContent=fmt(Math.round(S.gdp||0));
   const blr=document.getElementById('bLoanRow');
   if (blr){
     blr.style.display = S.loan ? 'flex' : 'none';
@@ -13329,6 +13539,7 @@ function renderStats(){
   const CHARTS=[
     ['POPULATION', ()=>[{data:col(1), col:'#5fd38a', label:''}], null],
     ['TREASURY',   ()=>[{data:col(2), col:'#ffd23f', label:''}], (v,sm)=>'§'+sm(v)],
+    ['GDP / YEAR', ()=>[{data:col(10), col:'#5fe0c0', label:''}], (v,sm)=>'§'+sm(v)],
     ['HAPPINESS',  ()=>[{data:col(3), col:'#7fb3ff', label:''}], (v)=>Math.round(v)+'%'],
     ['R · C · I DEMAND', ()=>[
       {data:col(4), col:'#5fd38a', label:'R'},
@@ -13951,15 +14162,20 @@ function fillBudgetWhy(){
     + r(`Difficulty (${B.dName})`, '× '+B.dInc.toFixed(2))
     + r(`= Tax income`, f((B.resTax+B.jobTax)*B.dInc))
     + (B.airports ? r(`Tourism · ${B.airports} airport${B.airports>1?'s':''} (after difficulty)`, '+'+f(B.tourism).slice(1)) : '')
+    + ((B.exportInc && B.exportInc>=0.5)
+        ? r(`Exports · ${Math.round(B.exportUnits).toLocaleString()} goods surplus × ${EXPORT_PRICE}`+(B.tradePorts||B.airports?` (${B.tradePorts} port${B.tradePorts===1?'':'s'}${B.airports?` + ${B.airports} air`:''})`:` (overland only — build a seaport)`), '+'+f(B.exportInc).slice(1))
+        : '')
     + `<div style="color:var(--amber);font-family:'Chakra Petch';font-size:10px;letter-spacing:.08em;margin-top:6px">UPKEEP · ×${B.dUp.toFixed(2)} difficulty</div>`
     + r(`Roads ${B.roads}×0.95 + avenues ${B.aves}×2.4`+(B.paths?` + paths ${B.paths}×0.18`:'')+(B.busStops?` + stops ${B.busStops}×3`:''), '−'+f(B.roadCost).slice(1))
     + r(`Services base ${f(B.svcBase)} × funding × 2.6`, '−'+f(B.svcCost).slice(1))
     + ((B.adminCost && B.adminCost>=0.5) ? r(`Administration · ${Math.max(0,B.pop-ADMIN_FREE).toLocaleString()} over ${ADMIN_FREE.toLocaleString()} × ${ADMIN_RATE}`, '−'+f(B.adminCost).slice(1)) : '')
     + ((B.emitCost && B.emitCost>=0.5) ? r(`Emissions levy · ${Math.round(B.emit)} smog × ${EMIT_RATE}`+((S.edu||0)>0.02?` <span style="color:#5fe08a">(−${Math.round(50*(S.edu||0))}% schooling)</span>`:''), '−'+f(B.emitCost).slice(1)) : '')
+    + ((B.importCost && B.importCost>=0.5) ? r(`Imports · ${Math.round(B.importUnits).toLocaleString()} goods deficit`+((B.tradePorts||B.airports)?` (gateways cut the bill)`:` (no port — overland spot premium)`), '−'+f(B.importCost).slice(1)) : '')
     + (S.loan ? r(`Loan payment`, '−'+f(S.loan.pay).slice(1)) : '')
     + ((B.polNet && Math.abs(B.polNet)>=0.5) ? r(`Ordinances (tolls − running costs)`, (B.polNet>=0?'+':'−')+f(Math.abs(B.polNet)).slice(1)) : '')
     + `<div style="border-top:1px solid var(--line);margin-top:5px;padding-top:4px">`
-    + r(`Net / month`, (S.net>=0?'+':'−')+f(Math.abs(S.net)).slice(1)) + '</div>';
+    + r(`Net / month`, (S.net>=0?'+':'−')+f(Math.abs(S.net)).slice(1)) + '</div>'
+    + (B.gdp ? `<div style="color:#6d8096;font-size:10px;margin-top:5px">GDP ${f(B.gdp)}/yr · ${B.pop>0?f(B.gdp/B.pop):'§0'} per capita · annualised value added — tax takes ≈${B.tax}% of it (not part of the budget)</div>` : '');
 }
 {
   const wb=document.getElementById('whyBtn');
@@ -14375,7 +14591,7 @@ function buildBBar(){
     else cur.leaves.push(t);
   }
   // direct high-frequency chips pulled out of their categories
-  const DIRECT=['bulldoze','inspect','pan'];
+  const DIRECT=['bulldoze','pan'];
   for (const grp of groups) grp.leaves=grp.leaves.filter(l=>!DIRECT.includes(l.id));
   const isUnlocked=(o)=>{ const d=TOOLDEF[o.id]; return !(d && d.lockAt!==undefined && S.milestone<d.lockAt); };
   const openCat=(grp,btn)=>{

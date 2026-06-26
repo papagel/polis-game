@@ -65,7 +65,7 @@ test('budget accounting identity holds', async ({ game }) => {
   const ok = await game.eval(() => {
     const B = computeBudget();
     const loanPay = S.loan ? S.loan.pay : 0;
-    const net = B.income - B.roadCost - B.svcCost - B.emitCost - B.adminCost + B.polNet - loanPay;
+    const net = B.income - B.roadCost - B.svcCost - B.emitCost - B.adminCost + B.polNet + B.tradeNet - loanPay;
     projectBudget();
     return Math.abs(net - S.net) < 1e-6;
   });
