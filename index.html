@@ -547,7 +547,7 @@
 <div id="intro">
   <h1>P<span class="lo">O</span>LIS</h1>
   <p>A pocket city builder. Lay roads, zone districts, keep the lights on and the taps running. Watch the streets — commuters jam narrow roads and gridlock stalls growth, so upgrade busy stretches to avenues. Your city autosaves as you play.</p>
-  <p class="keys">You start in <b>Pan</b> mode — left-click any building, road or park for its info, right-click for the advanced view (or tap the ▸ in the card) · pick a tool to build, tap again or Esc to stop · Q / E or ⟲⟳ rotates the view · Drag previews, release builds · Pinch or scroll zooms · the speaker button toggles sound · Fullscreen lives in the ⋯ menu</p>
+  <p class="keys">You start in <b>Pan</b> mode — left-click any building, road or park for its info, right-click for the advanced view (or tap the ▸ in the card) · pick a tool to build, tap again or Esc to stop · Q / E or ⟲⟳ rotates the view · Drag previews, release builds · on touch, one finger drags to pan — tap to place, hold then drag to draw roads &amp; zones · Pinch or scroll zooms · the speaker button toggles sound · Fullscreen lives in the ⋯ menu</p>
   <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
     <button id="continueBtn" style="display:none;background:var(--panel2);color:var(--ink);border:1px solid var(--amber)">CONTINUE</button>
     <button id="loadBtn" style="background:var(--panel2);color:var(--ink);border:1px solid var(--line)">LOAD CITY</button>
@@ -9973,6 +9973,14 @@ function render(now){
 let dragging=false, painting=false, lastP=null, pinch=null, tapPend=null, lastTap=null;
 let downP=null;   // screen pos where a pan press began — lets pointerup tell a tap (→ inspect) from a drag
 let downBtn=0;    // which pointer button started that press (0 left → basic, 2 right → advanced)
+// one-finger pan with a build tool active: a touch gesture starts UNDECIDED. A drag past MOVE_PAN px
+// pans the map (never builds); a single tool then places only on a tap, and a paint tool only starts
+// drawing after a brief hold (HOLD_DRAW_MS) — so a plain swipe always scrolls. Mouse is unaffected.
+const MOVE_PAN=12;          // px a one-finger touch must travel to be read as a pan, not a tap/build
+const HOLD_DRAW_MS=140;     // press-and-hold before a paint tool arms drawing (else the drag pans)
+let touchIntent=null;       // {sx,sy, gx,gy, paint, armed} for an undecided one-finger build gesture
+let holdTimer=0;            // setTimeout id that arms paint-drawing after the hold
+function clearTouchIntent(){ clearTimeout(holdTimer); holdTimer=0; touchIntent=null; }
 /* ---------- drag-preview (marquee) ---------- */
 const PAINTABLE={road:1,avenue:1,path:1,rail:1,res:1,com:1,ind:1,park:1,garden:1,playground:1,plaza:1,bulldoze:1,landfill:1,incinerator:1,recycling:1,tree:1,water:1,grass:1,raise:1,lower:1};
 let pend=null; // {a:[x,y], b:[x,y]} anchor → current while dragging a paintable tool
@@ -10266,7 +10274,7 @@ cv.addEventListener('contextmenu', e=>e.preventDefault());
 cv.addEventListener('pointerdown', e=>{
   if (ROTA) return;
   if (touches.size>=2 || pinch) return;          // ignore pointer events during a pinch
-  cv.setPointerCapture(e.pointerId);
+  try{ cv.setPointerCapture(e.pointerId); }catch(_){}   // can throw if the pointer isn't active; harmless
   const [px,py]=eventPos(e);
   if (e.button===2 || e.button===1 || S.tool==='pan'){
     cancelPending(); dragging=true; lastP=[px,py];
@@ -10281,12 +10289,25 @@ cv.addEventListener('pointerdown', e=>{
     if (!inB(gx,gy)) return;
     hideTip();
     statTip.style.display='none';
+    if (e.pointerType!=='mouse'){
+      // touch: stay UNDECIDED — a hold arms drawing, a drag pans. (Mouse paints immediately below.)
+      touchIntent={sx:px, sy:py, gx, gy, paint:true, armed:false};
+      S.hover=[gx,gy]; dirty=true;
+      holdTimer=setTimeout(()=>{
+        if (!touchIntent || touchIntent.armed) return;
+        touchIntent.armed=true;                       // hold held → begin drawing from here
+        pend={a:[touchIntent.gx,touchIntent.gy], b:[touchIntent.gx,touchIntent.gy]};
+        painting=true; dirty=true;
+        if (navigator.vibrate && document.body.classList.contains('mob')){ try{ navigator.vibrate(8); }catch(_){} }
+      }, HOLD_DRAW_MS);
+      return;
+    }
     pend={a:[gx,gy], b:[gx,gy]};   // nothing is built yet — preview only
     painting=true;
     return;
   }
-  // touch: defer single placements to release so a second finger (pinch) can cancel them
-  if (e.pointerType!=='mouse'){ tapPend=[gx,gy]; painting=true; S.hover=[gx,gy]; dirty=true; return; }
+  // touch: single placements stay UNDECIDED until release — a tap places, a drag pans (and a pinch cancels)
+  if (e.pointerType!=='mouse'){ touchIntent={sx:px, sy:py, gx, gy, paint:false, armed:false}; tapPend=[gx,gy]; painting=true; S.hover=[gx,gy]; dirty=true; return; }
   placeSingle(gx,gy);
   painting=true;
 });
@@ -10322,6 +10343,19 @@ cv.addEventListener('pointermove', e=>{
   const moved = !S.hover || S.hover[0]!==gx || S.hover[1]!==gy;
   S.hover=[gx,gy];
   if (moved && S.overlay && S.overlay!=='none') dirty=true;   // refresh the bold reach ring under the cursor
+  if (touchIntent && !touchIntent.armed){
+    if (Math.hypot(px-touchIntent.sx, py-touchIntent.sy) > MOVE_PAN){
+      // a swipe → pan, nothing is built. Apply the delta from the gesture start so the map moves with
+      // the finger immediately (no dead first MOVE_PAN px), then track subsequent moves normally.
+      S.ox += px-touchIntent.sx; S.oy += py-touchIntent.sy;
+      clearTouchIntent(); pend=null; tapPend=null; painting=false;
+      dragging=true; lastP=[px,py]; hideTip();
+      return;
+    }
+    touchIntent.gx=gx; touchIntent.gy=gy;                  // still a tap/hold candidate: track the tile under the finger
+    if (!touchIntent.paint) tapPend=[gx,gy];               // single tool: keep the deferred target under the finger
+    return;                                                // paint not armed yet → no preview until the hold fires
+  }
   if (painting && pend){ pend.b=[gx,gy]; return; }
   if (painting && tapPend){ tapPend=[gx,gy]; return; }   // deferred touch tap tracks the finger
   if (e.pointerType!=='mouse' || painting) return;
@@ -10412,8 +10446,11 @@ cv.addEventListener('pointerup', e=>{
     else inspectAt(tx,ty, downBtn===2 ? 'full' : 'basic');
   }
   downP=null;
+  const tap = !pinch && touches.size<2;   // a real release, not one finger lifting out of a pinch
+  if (touchIntent && touchIntent.paint && !touchIntent.armed && tap)
+    pend={a:[touchIntent.gx,touchIntent.gy], b:[touchIntent.gx,touchIntent.gy]};   // quick tap on a paint tool → one tile
   if (pend) commitPending();
-  else if (tapPend && !pinch && touches.size<2) placeSingle(tapPend[0], tapPend[1]);  // a real tap, not the start of a pinch
+  else if (tapPend && tap) placeSingle(tapPend[0], tapPend[1]);  // single tool: a tap places (a drag panned instead)
   // double-tap to zoom (touch): two quick taps near the same spot — but not while cycling an inspect card
   if (e.pointerType!=='mouse' && !pinch && touches.size<2 && S.tool==='pan'){
     const [px,py]=eventPos(e), now=performance.now();
@@ -10422,10 +10459,10 @@ cv.addEventListener('pointerup', e=>{
       zoomAt(px,py, 1.6); dirty=true; lastTap=null;
     } else lastTap={x:px,y:py,t:now};
   }
-  tapPend=null;
+  tapPend=null; clearTouchIntent();
   dragging=false; painting=false; lastP=null;
 });
-cv.addEventListener('pointercancel', ()=>{ tapPend=null; downP=null; cancelPending(); });
+cv.addEventListener('pointercancel', ()=>{ tapPend=null; downP=null; clearTouchIntent(); cancelPending(); });
 cv.addEventListener('pointerleave', ()=>{ S.hover=null; hideTip(); dirty=true; });
 // zooming shifts the world under a stationary cursor, so the tile/structure under the pointer
 // changes without a pointermove — re-pick hover state but dismiss any open dwell card
@@ -10466,7 +10503,7 @@ cv.addEventListener('touchstart', e=>{
   if(touches.size>=2){
     // a second finger means a pinch — abort any in-progress paint/drag/tap so they don't fight
     cancelPending();
-    painting=false; dragging=false; pend=null; tapPend=null;
+    painting=false; dragging=false; pend=null; tapPend=null; clearTouchIntent();
     pinch=pinchInfo(e);
   }
 },{passive:true});
