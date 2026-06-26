@@ -1528,7 +1528,7 @@ function setWorldSize(n){
   leisureCost = new Float32Array(G*G);
   stepCost = new Float32Array(G*G);
   congSnap = new Float32Array(G*G);
-  cars.length=0; svc.length=0; peds.length=0; smoke.length=0; copters.length=0;
+  cars.length=0; svc.length=0; peds.length=0; smoke.length=0; copters.length=0; ships.length=0; rockets.length=0;
   cachedRoads=[]; dirtyRoads=true; cachedWalk=[]; dirtyWalk=true;
   S.hover=null;
   centerCamera();
@@ -1551,7 +1551,7 @@ function centerCamera(){
 // cities (e.g. a kaiju mid-stomp bleeding into a freshly started scenario).
 function resetTransients(){
   cars.length=0; svc.length=0; peds.length=0; smoke.length=0; copters.length=0;
-  planes.length=0; trains.length=0; railComp=null; carPairOrd.clear();
+  planes.length=0; trains.length=0; ships.length=0; rockets.length=0; railComp=null; carPairOrd.clear();
   if (DIS){ DIS=null; cv.style.transform=''; }
   traffic.fill(0);
   dirtyRoads=true; dirtyWalk=true;
@@ -1616,7 +1616,7 @@ function expandWorld(pad){
   congSnap = new Float32Array(G*G);
   // agents & any live disaster hold tile coords the shift invalidated — drop them
   cars.length=0; svc.length=0; peds.length=0; smoke.length=0; copters.length=0; planes.length=0;
-  trains.length=0; railComp=null; carPairOrd.clear(); DIS=null;
+  trains.length=0; ships.length=0; rockets.length=0; railComp=null; carPairOrd.clear(); DIS=null;
   cachedRoads=[]; dirtyRoads=true; cachedWalk=[]; dirtyWalk=true; shoreDirty=true;
   // re-seat the vertex elevation layers (stride NV=G+1) by +pad, mirroring the tile shift, so the
   // procedural highlands AND player sculpts stay anchored to their tiles. Regenerating instead
@@ -3501,6 +3501,7 @@ function stepCars(dt){
     // then quietly retires. Queues always dissolve on their own.
     const patience = car.wait||0;
     let follow=1;
+    let lead=Infinity, leadBump=0;          // nearest in-lane leader: bumpers may touch but never cross
     for (const o of cars){
       if (o===car) continue;
       const dot=o.hx*car.hx+o.hy*car.hy;
@@ -3511,8 +3512,12 @@ function stepCars(dt){
         if (ahead<=0.01 || ahead>1.2) continue;
         const lat=Math.abs(dy2*car.hx-dx2*car.hy);
         if (lat>0.16) continue;                                    // different lane — free to pass
-        const gap=(CAR_HL[car.kind]||0.23)+(CAR_HL[o.kind]||0.23)+0.10;
+        const bump=(CAR_HL[car.kind]||0.23)+(CAR_HL[o.kind]||0.23);
+        const gap=bump+0.10;
         if (ahead<gap) follow=Math.min(follow, Math.max(0,(ahead-gap*0.55)/(gap*0.45)));
+        // remember the closest one to hard-clamp against — keep a small bumper gap on top of the
+        // summed half-lengths so stopped/queued cars read as separate vehicles, not one welded train
+        if (ahead<lead){ lead=ahead; leadBump=bump+0.09; }
       } else if (dot>-0.5 && patience<6){
         // crossing traffic at a junction: yield to the vehicle approaching from the right.
         // window is generous enough to catch simultaneous diagonal arrivals; the patience
@@ -3527,7 +3532,13 @@ function stepCars(dt){
       // opposite directions pass in their own lanes — no interaction
     }
     if (patience>12) follow=Math.max(follow, 0.30);                // creep through whatever blocks us
-    car.t += dt * car.sp * slow * follow * speedMul();
+    let inc = dt * car.sp * slow * follow * speedMul();
+    // hard anti-overrun: fx advances exactly `inc` along the heading per frame, so cap the step at
+    // the bumper distance to the leader — a fast car can no longer leap past the one ahead in a
+    // single frame (the soft `follow` ramp only eases, it can be outrun at speed 3). Skipped once the
+    // patience creep kicks in, or a wedged junction would never dissolve.
+    if (patience<=12 && lead<Infinity) inc=Math.min(inc, Math.max(0, lead-leadBump));
+    car.t += inc;
     if (S.speed>0){
       // LEAKY patience: queues oscillate (the head creeps, gaps ripple back), so the timer
       // must accumulate through stop-and-go and only drain in genuine free flow — a hard
@@ -3545,7 +3556,11 @@ function stepCars(dt){
         if (isRoad(nx,ny) && !(nx===car.lx&&ny===car.ly)) opts.push([nx,ny]);
       }
       if (!opts.length){ car.lx=undefined; car.ly=undefined; car.stuck=(car.stuck|0)+1; continue; }
-      const [nx,ny]=opts[Math.random()*opts.length|0];
+      // prefer a tile no other car is already sitting on/heading to (cuts the junction "two cars
+      // stack on one square" overlap); fall back to any road so a boxed-in car can still dissolve
+      const free=opts.filter(([nx,ny])=>{ for (const o of cars){ if (o!==car && o.x===nx && o.y===ny) return false; } return true; });
+      const pool=free.length?free:opts;
+      const [nx,ny]=pool[Math.random()*pool.length|0];
       car.lx=car.x; car.ly=car.y; car.x=nx; car.y=ny;
       car.steps=(car.steps|0)+1; car.stuck=0; car.stall=0;
     }
@@ -3672,15 +3687,22 @@ function drawVehicle(car,fx,fy){
   {
     const dl2=Math.hypot(vdx,vdy)||1, tx2=vdx/dl2, ty2=vdy/dl2;
     if (car.gvx===undefined){ car.gvx=tx2; car.gvy=ty2; }
+    // a near-180° flip is a stable point of this ease: the vector just shrinks and renormalizes
+    // back to the OLD heading, so a reversing vehicle (police patrol, an engine returning home down
+    // the same corridor) would drive forever backwards. Snap straight through it; 90° corners (dot~0)
+    // still ease smoothly.
+    else if (tx2*car.gvx+ty2*car.gvy < -0.2){ car.gvx=tx2; car.gvy=ty2; }
     car.gvx+=(tx2-car.gvx)*0.16; car.gvy+=(ty2-car.gvy)*0.16;
     const m2=Math.hypot(car.gvx,car.gvy);
     if (m2<0.35){ car.gvx=tx2; car.gvy=ty2; } else { car.gvx/=m2; car.gvy/=m2; }
   }
   const gvx2=car.gvx, gvy2=car.gvy, pvx2=-gvy2, pvy2=gvx2;
-  // footprints in tile units — a city bus reads about 2.6 cars long, like real life
-  const Lg=(K==='bus'?0.40:K==='firetruck'?0.36:K==='garbage'?0.33:K==='truck'?0.31:K==='van'?0.26:0.23);
-  const Wg=(K==='bus'?0.125:K==='firetruck'?0.13:K==='garbage'?0.125:K==='truck'?0.12:K==='van'?0.11:0.10);
-  const hB=(K==='bus'?5.4:K==='firetruck'?5.2:K==='garbage'?5.0:K==='truck'?5.0:K==='van'?4.4:3.2)*z;
+  // footprints in tile units — a city bus reads about 2.6 cars long, like real life.
+  // VS trims every four-wheeler uniformly (length, width, height, wheels) to sit lighter on the street.
+  const VS=0.85;
+  const Lg=(K==='bus'?0.40:K==='firetruck'?0.36:K==='garbage'?0.33:K==='truck'?0.31:K==='van'?0.26:0.23)*VS;
+  const Wg=(K==='bus'?0.125:K==='firetruck'?0.13:K==='garbage'?0.125:K==='truck'?0.12:K==='van'?0.11:0.10)*VS;
+  const hB=(K==='bus'?5.4:K==='firetruck'?5.2:K==='garbage'?5.0:K==='truck'?5.0:K==='van'?4.4:3.2)*z*VS;
   const cyB=cyp-1*z;
   const Q=(u,v,h)=>{ const dX=gvx2*u+pvx2*v, dY=gvy2*u+pvy2*v;
     return [cxp+(dX-dY)*(TW/2)*z, cyB+(dX+dY)*(TH/2)*z-(h||0)]; };
@@ -3759,8 +3781,8 @@ function drawVehicle(car,fx,fy){
     for (const u2 of axu){
       const [wx2,wy2]=Q(u2, nv*Wg, 0);
       cx.fillStyle='#141b24';
-      cx.beginPath(); cx.roundRect(wx2-1.15*z, wy2-1.5*z, 2.3*z, 2.1*z, 0.9*z); cx.fill();
-      if (z>0.85){ cx.fillStyle='#39444f'; cx.beginPath(); cx.arc(wx2, wy2-0.45*z, 0.45*z, 0, 7); cx.fill(); }
+      cx.beginPath(); cx.roundRect(wx2-1.15*z*VS, wy2-1.5*z*VS, 2.3*z*VS, 2.1*z*VS, 0.9*z*VS); cx.fill();
+      if (z>0.85){ cx.fillStyle='#39444f'; cx.beginPath(); cx.arc(wx2, wy2-0.45*z*VS, 0.45*z*VS, 0, 7); cx.fill(); }
     }
   }
   // lights on whichever end faces the camera; a soft beam pool ahead at night
@@ -3817,12 +3839,21 @@ function drawVehicle(car,fx,fy){
     }
     // firetruck water jet — a pressurized cannon: cone of spray, droplets, splash + steam at the blaze
     if (car.svc==='fire' && car.spray){
-      const [svx,svy]=rotD((car.sdx||1),(car.sdy||0));
-      const ox=cxp, oy=cyp - 5.8*z;
-      const dx2=(svx-svy)*(TW/2)*z, dy2=(svx+svy)*(TH/2)*z;
-      const dl2=Math.hypot(dx2,dy2)||1, ux=dx2/dl2, uy=dy2/dl2;
-      const px=-uy, py=ux;                                   // perpendicular, for cone width
-      const reach=23*z, ix=ox+ux*reach, iy=oy+uy*reach - 2*z;
+      const ox=cxp, oy=cyp - 5.8*z;                          // the cannon on the truck's roof
+      // aim the jet at the actual burning tile the engine is fighting (car.sdx/sdy is the grid
+      // delta picked in stepSvc), landing the water on the visible flames instead of a fixed
+      // stub — so a lot set a tile or two back, or a tall blazing tower, gets soaked where it
+      // burns. Flame anchor + building height mirror drawFireFX so the splash sits in the fire.
+      const fcx=car.x+(car.sdx||0), fcy=car.y+(car.sdy||0);
+      const [frcx,frcy]=rotC(fcx+.5,fcy+.5);
+      const [fsx,fsyt]=toScreen(frcx-.5,frcy-.5);
+      const fc=inB(fcx,fcy)?map[fcy][fcx]:null;
+      const lotH=(fc&&FIRE_LOT_H[fc.t])?FIRE_LOT_H[fc.t][Math.min(fc.lv,3)]:16;
+      const bh=(fc&&ZONE[fc.t]&&fc.lv>0&&!fc.part)?(fc.grp?towerHeight(fc.t,fc.lv):lotH)*z*0.9:0;
+      const fb=fsyt+TH*0.40*z;                               // flame base, matching drawFireFX
+      const ix=fsx, iy=fb-(6*z+bh*0.5);                      // the heart of the flames
+      const dxT=ix-ox, dyT=iy-oy, reach=Math.hypot(dxT,dyT)||1;
+      const ux=dxT/reach, uy=dyT/reach, px=-uy, py=ux;       // unit aim + perpendicular for cone width
       // 1) translucent pressurized cone, narrow at the nozzle, fanning out at the blaze
       cx.fillStyle='rgba(170,215,255,.26)';
       cx.beginPath();
@@ -3834,7 +3865,7 @@ function drawVehicle(car,fx,fy){
       cx.beginPath(); cx.moveTo(ox,oy); cx.quadraticCurveTo((ox+ix)/2, Math.min(oy,iy)-7*z, ix, iy); cx.stroke(); cx.lineCap='butt';
       // 3) flying droplets streaming along the arc
       for (let k=0;k<16;k++){
-        const t2=((tn/65)+k*0.27)%1, dist=4*z + t2*reach, arc=-Math.sin(t2*Math.PI)*8.5*z;
+        const t2=((tn/65)+k*0.27)%1, dist=4*z + t2*(reach-4*z), arc=-Math.sin(t2*Math.PI)*Math.min(11,reach*0.22)*z;
         cx.fillStyle = k%4? 'rgba(150,205,255,.9)' : 'rgba(255,255,255,.85)';
         cx.beginPath(); cx.arc(ox+ux*dist, oy+uy*dist + arc, Math.max(.4*z,(1.35-t2)*1.25*z), 0, 7); cx.fill();
       }
@@ -8098,15 +8129,15 @@ function drawCopters(night,now){
   }
 }
 function drawCopterSprite(px,py,u,shx,shy,night,now,a){
-  // orient along the screen-space heading; mirror (never roll) when it travels into the left half
-  let ang=Math.atan2(shy,shx), mir=1;
-  if (Math.cos(ang)<0){ ang-=Math.PI; mir=-1; }
+  // this is a flat side-elevation sprite, so in the iso view it must stay upright
+  // (rotor up, skids down) and only mirror left/right by travel direction — rolling
+  // it by the full screen heading laid it on its side on diagonal flights/landings.
+  const mir = shx<0 ? -1 : 1;
   // ground shadow, drifting apart with altitude
   cx.fillStyle='rgba(10,16,28,'+(a>0?Math.max(0.05,0.20-a*0.0022):0.22)+')';
   cx.beginPath(); cx.ellipse(px+a*0.3, py+a*0.85, 5*u, 1.8*u, 0, 0, 7); cx.fill();
   cx.save();
   cx.translate(px,py-a);
-  cx.rotate(ang);
   cx.scale(mir,1);
   // tail boom + fin
   cx.fillStyle='#c4cad1';
