@@ -9981,8 +9981,11 @@ const HOLD_DRAW_MS=140;     // press-and-hold before a paint tool arms drawing (
 let touchIntent=null;       // {sx,sy, gx,gy, paint, armed} for an undecided one-finger build gesture
 let holdTimer=0;            // setTimeout id that arms paint-drawing after the hold
 function clearTouchIntent(){ clearTimeout(holdTimer); holdTimer=0; touchIntent=null; }
-// pattern (ms, or [on,off,on…]) → device vibration, mobile only and best-effort
-function haptic(p){ if (navigator.vibrate && document.body.classList.contains('mob')){ try{ navigator.vibrate(p); }catch(_){} } }
+// pattern (ms, or [on,off,on…]) → device vibration, best-effort. Don't gate on the 'mob' class (that
+// keys off innerWidth<1100 and wrongly excludes tablets / large phones / landscape); desktops simply
+// have no motor so vibrate() is a harmless no-op there. NOTE: iOS/WebKit doesn't implement the
+// Vibration API at all, so navigator.vibrate is undefined on iPhone/iPad and this can't fire.
+function haptic(p){ try{ if (navigator.vibrate) navigator.vibrate(p); }catch(_){} }
 /* ---------- drag-preview (marquee) ---------- */
 const PAINTABLE={road:1,avenue:1,path:1,rail:1,res:1,com:1,ind:1,park:1,garden:1,playground:1,plaza:1,bulldoze:1,landfill:1,incinerator:1,recycling:1,tree:1,water:1,grass:1,raise:1,lower:1};
 let pend=null; // {a:[x,y], b:[x,y]} anchor → current while dragging a paintable tool
@@ -10126,11 +10129,21 @@ function spawnFloat(x,y,txt,col){
 function drawPlaceFX(now){
   const z=S.zoom;
   for (let i=placeFX.length-1;i>=0;i--){
-    const f=placeFX[i], dur=f.kind==='dust'?700:1000, t=(now-f.t0)/dur;
+    const f=placeFX[i], dur=f.kind==='dust'?700:f.kind==='arm'?460:1000, t=(now-f.t0)/dur;
     if (t>=1){ placeFX.splice(i,1); continue; }
     if (t<0) continue;
     const [sx,sy]=tileScreen(f.x,f.y), cyp=sy+TH/2*z;
-    if (f.kind==='dust'){
+    if (f.kind==='arm'){
+      // "draw mode engaged" cue (the haptic equivalent for iOS): a quick diamond flash on the start
+      // tile plus a ring snapping outward, so the hold registering is unmistakable without a buzz.
+      const col=f.col||'#ffd23f', hw=TW/2*z, hh=TH/2*z;
+      const fa = t<0.3 ? t/0.3 : 1-(t-0.3)/0.7;     // flash in fast, ease out
+      cx.fillStyle=hexA(col, 0.34*Math.max(0,fa));
+      cx.beginPath(); cx.moveTo(sx,cyp-hh); cx.lineTo(sx+hw,cyp); cx.lineTo(sx,cyp+hh); cx.lineTo(sx-hw,cyp); cx.closePath(); cx.fill();
+      const e=1-Math.pow(1-t,2);
+      cx.strokeStyle=hexA(col, 0.9*(1-t)); cx.lineWidth=Math.max(1.6, 2.6*z);
+      cx.beginPath(); cx.ellipse(sx, cyp, hw*(0.4+e*0.95), hh*(0.4+e*0.95), 0, 0, 7); cx.stroke();
+    } else if (f.kind==='dust'){
       // demolition: heavier brown dust, quicker
       for (let k=0;k<(f.n||5);k++){
         const a=k*1.26+f.seed, e=1-Math.pow(1-t,3), r=(3+e*9)*z;
@@ -10300,7 +10313,8 @@ cv.addEventListener('pointerdown', e=>{
         touchIntent.armed=true;                       // hold held → begin drawing from here
         pend={a:[touchIntent.gx,touchIntent.gy], b:[touchIntent.gx,touchIntent.gy]};
         painting=true; dirty=true;
-        haptic([10, 30, 20]);                         // distinct two-pulse "draw mode engaged" cue
+        haptic([10, 30, 20]);                         // distinct two-pulse "draw mode engaged" cue (Android)
+        spawnPlaceFX(touchIntent.gx, touchIntent.gy, 'arm', (TOOLDEF[S.tool]&&TOOLDEF[S.tool].col)||'#ffd23f');   // visual cue (works on iOS too)
       }, HOLD_DRAW_MS);
       return;
     }
@@ -13374,7 +13388,7 @@ function loop(now){
   // actually changed (`dirty`, set by every mutation) or is still animating on its own.
   // Running (speed>0) and interaction always fall through, so live play is untouched.
   if (S.started && S.speed===0 && !interacting && !dirty && !DIS && !ROTA
-      && WX.rain<0.03 && !smoke.length && !S.hover && !commuteViz) return;
+      && WX.rain<0.03 && !smoke.length && !S.hover && !commuteViz && !placeFX.length && !floatFX.length) return;
   const rt0=performance.now();
   render(now);
   dirty=false;
