@@ -70,11 +70,10 @@ test('inspecting a workplace anchors every route to that workplace', async ({ ga
   expect(res.okFar).toBe(true);       // and every route ends at the CLICKED factory, not a nearer one
 });
 
-// Touch model (no right button): a tap just SELECTS — it pins the lean card and is idempotent on the
-// current element (no hidden "tap again to advance / tap again and it vanishes"). Depth and close come
-// from the card's own ▸/▴ and ✕ controls; tapping empty ground dismisses. Drive the 'select' path
-// (inspectClick) + setInspectLevel and assert each of those, plus that a stray hover never disturbs it.
-test('touch: a tap selects the basic card and is idempotent; depth/close via card controls', async ({ game }) => {
+// Touch model (no right button): a tap TOGGLES the basic card — tap an item to open it, tap the SAME item
+// again to close it. Depth (▸/▴) and a ✕ live on the card itself; tapping empty ground also dismisses.
+// Drive the 'select' path (inspectClick) + setInspectLevel and assert open → in-card depth → tap-to-close.
+test('touch: a tap toggles the basic card open/closed; depth via card controls', async ({ game }) => {
   const res = await game.eval(inPage(`
     resetGrid();
     S.commuteRoute = true;
@@ -95,26 +94,25 @@ test('touch: a tap selects the basic card and is idempotent; depth/close via car
     const hasClose   = !!tipEl.querySelector('.tipX');
     const hasToggle  = !!tipEl.querySelector('.tipToggle');   // the ▸ depth control is present
 
-    inspectClick(16, ry+1);                            // tap the SAME again → idempotent: no escalate, no close
-    const idempotent = !!inspectSel && inspectLevel==='basic' && tipEl.style.display==='block' && !commuteViz;
-
     setInspectLevel('full');                           // the card's ▸ control → advanced (touch's path to detail)
     const fullLevel  = inspectLevel === 'full';
     const hasLines   = !!commuteViz && commuteViz.routes.length > 0;
     const hasLegend  = tipEl.innerHTML.includes('Commute lines');
 
-    inspectClick(16, ry+1);                            // tap same while advanced → still idempotent, stays advanced
-    const stillAdvanced = inspectLevel==='full' && !!inspectSel;
-
     // a hover elsewhere must NOT disturb the pinned panel
     hideTip();
     const survives = !!inspectSel && tipEl.style.display === 'block';
 
-    inspectClick(3, 3);                                // tap empty ground → clear
-    const cleared  = inspectSel === null && commuteViz === null
-                   && !tipEl.classList.contains('dock') && tipEl.style.display === 'none';
+    inspectClick(16, ry+1);                            // tap the SAME item again → close (toggle off)
+    const closedByTap = inspectSel === null && commuteViz === null
+                      && !tipEl.classList.contains('dock') && tipEl.style.display === 'none';
 
-    return { pinned, basicLevel, docked, shown, basicNoLines, hasClose, hasToggle, idempotent, fullLevel, hasLines, hasLegend, stillAdvanced, survives, cleared };
+    inspectClick(5, ry+1);                             // tap a different item → opens it (basic)
+    const reopened = !!inspectSel && inspectSel[0]===5 && inspectLevel==='basic';
+    inspectClick(3, 3);                                // tap empty ground → clear
+    const clearedByEmpty = inspectSel === null && tipEl.style.display === 'none';
+
+    return { pinned, basicLevel, docked, shown, basicNoLines, hasClose, hasToggle, fullLevel, hasLines, hasLegend, survives, closedByTap, reopened, clearedByEmpty };
   `));
 
   expect(res.pinned).toBe(true);
@@ -124,13 +122,13 @@ test('touch: a tap selects the basic card and is idempotent; depth/close via car
   expect(res.basicNoLines).toBe(true);  // …with no commute overlay…
   expect(res.hasClose).toBe(true);
   expect(res.hasToggle).toBe(true);     // …and the ▸ control to reach detail
-  expect(res.idempotent).toBe(true);    // tapping the same item again changes nothing
   expect(res.fullLevel).toBe(true);     // the in-card control deepens to the full inspect…
   expect(res.hasLines).toBe(true);      // …which draws the routes…
   expect(res.hasLegend).toBe(true);     // …and their legend
-  expect(res.stillAdvanced).toBe(true); // tapping the item again doesn't drop back out of advanced
   expect(res.survives).toBe(true);      // pan/zoom/hover keep the pinned card alive
-  expect(res.cleared).toBe(true);       // tapping empty ground tears everything down
+  expect(res.closedByTap).toBe(true);   // tapping the SAME item again closes it
+  expect(res.reopened).toBe(true);      // tapping a different item opens that one
+  expect(res.clearedByEmpty).toBe(true);// tapping empty ground also dismisses
 });
 
 // Pan view's two-button model: LEFT-click pins the basic card (no commute overlay), RIGHT-click pins the

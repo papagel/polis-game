@@ -10321,9 +10321,9 @@ function isInspectable(c){ return !!(ZONE[c.t]||SVC[c.t]||ROADTYPE[c.t]||c.t==='
 // Pan view IS the inspector. mode picks what a click maps to:
 //   'basic' (left-click) and 'full' (right-click) pin that depth — repeating the SAME depth on the SAME
 //   element closes it, and switching button switches depth in place.
-//   'select' (touch tap — no right button) just selects: shows the basic card and is idempotent on the
-//   current element. Depth (▸/▴) and close (✕) come from the card's own controls, so a tap never carries
-//   hidden state — no "tap again to advance / tap again and it vanishes" surprise on a phone.
+//   'select' (touch tap — no right button) toggles the basic card: tap an item to open it, tap the SAME
+//   item again to close it. Depth (▸/▴) lives on the card itself, so a tap is just open/close — no hidden
+//   "tap again to advance" cycle.
 // Clicking empty ground / open land always dismisses any pinned card.
 function inspectAt(x,y,mode){
   if (!inB(x,y)){ if (inspectSel){ closeInspect(); lastInspectAct=performance.now(); } return; }
@@ -10333,7 +10333,7 @@ function inspectAt(x,y,mode){
   const same = inspectSel && inspectSel[0]===rx && inspectSel[1]===ry;
   let want;
   if (mode==='select'){
-    if (same) return;            // already selected → leave it (depth/close live on the card buttons)
+    if (same){ closeInspect(); return; }   // tap the already-open item again → close it
     want='basic';
   } else {
     if (same && inspectLevel===mode){ closeInspect(); return; }     // same depth again → close
