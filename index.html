@@ -9625,8 +9625,10 @@ function render(now){
     if (inB(rx,ry)){
       const rc=map[ry][rx], fw=rc.fw||(rc.grp?2:1), fh=rc.fh||(rc.grp?2:1), z=S.zoom;
       const lift=isElevCell(rx,ry)?terrainH(rx,ry)*z:0;   // buildings sit on flattened ground, so one root lift fits the whole slab
-      // the footprint's OUTER perimeter (4 grid corners), not per-tile diamonds — no internal grid lines on towers
-      const corner=(cgx,cgy)=>{ const [sx,sy]=tileScreen(cgx,cgy); return [sx, sy-lift]; };
+      // the footprint's OUTER perimeter (4 grid corners), not per-tile diamonds — no internal grid lines on towers.
+      // these are CONTINUOUS corner-space coords (0..G), so rotate with rotC (G-x), not the tile-index g2v (G-1-x) —
+      // tileScreen would land the border a tile off in every rotated view.
+      const corner=(cgx,cgy)=>{ const [vx,vy]=rotC(cgx,cgy); const [sx,sy]=toScreen(vx,vy); return [sx, sy-lift]; };
       const A=corner(rx,ry), B=corner(rx+fw,ry), C=corner(rx+fw,ry+fh), D=corner(rx,ry+fh);
       cx.save();
       cx.beginPath(); cx.moveTo(A[0],A[1]); cx.lineTo(B[0],B[1]); cx.lineTo(C[0],C[1]); cx.lineTo(D[0],D[1]); cx.closePath();
