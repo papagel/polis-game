@@ -797,6 +797,7 @@
   <div class="row"><span>Tax income</span><span id="bIncome">§0</span></div>
   <div class="row"><span>Road upkeep</span><span id="bRoads">§0</span></div>
   <div class="row"><span>Services</span><span id="bServices">§0</span></div>
+  <div class="row" id="bAdminRow" style="display:none"><span>Administration</span><span id="bAdmin">§0</span></div>
   <div class="row" id="bEmitRow" style="display:none"><span>Emissions levy</span><span id="bEmit">§0</span></div>
   <div class="row" id="bTourRow" style="display:none"><span>Tourism (airport)</span><span id="bTour" style="color:var(--good,#5fe08a)">§0</span></div>
   <div class="row" id="bLoanRow" style="display:none"><span>Loan payment</span><span id="bLoan">§0</span></div>
@@ -993,7 +994,7 @@ const S = {
   money: 20000, tax: 9, day: 0, speed: 1, started: false, diff: 1,
   pop: 0, jobs: 0, happy: 60,
   demand: { r: .6, c: .1, i: .4 },
-  income: 0, roadCost: 0, svcCost: 0, net: 0,
+  income: 0, roadCost: 0, svcCost: 0, adminCost: 0, net: 0,
   zoom: 1, ox: 0, oy: 0,
   tool: 'pan', hover: null, msgT: 0, overlay: 'none', safetyView: 'all', congested: 0, rot: 0, milestone: 0, weather: false, cityName: 'Polis',
   powerCap:0, powerUse:0, waterCap:0, waterUse:0,
@@ -1069,12 +1070,16 @@ function __taxSweep(taxes, days){
 /* cell: {t:type, lv:level, dev:progress, pw:powered, fire:0, vary:noise} */
 const map = [];
 let pollution, leisure, crime, landVal, cover;
+// summed-area tables (size (G+1)²) reused by recomputeFields' land-value pass — see the build there
+let satWT, satPath;
 function allocFields(){
   pollution = new Float32Array(G * G);
   leisure   = new Float32Array(G * G);
   crime     = new Float32Array(G * G);
   landVal   = new Float32Array(G * G);
   cover = { police: new Float32Array(G*G), fire: new Float32Array(G*G), school: new Float32Array(G*G), health: new Float32Array(G*G), transit: new Float32Array(G*G) };
+  satWT = new Int32Array((G+1)*(G+1));
+  satPath = new Int32Array((G+1)*(G+1));
 }
 allocFields();
 const idx = (x, y) => y * G + x;
@@ -2017,7 +2022,26 @@ function recomputeFields(){
     const risk=cap*0.045*(1.12-pol)*DIFF[S.diff].crime*pfx.crimeMul;
     if (risk>0.1) splat(crime,x,y,3,risk);
   }
+  // summed-area tables for the land-value neighbourhood scan: the per-cell 7×7 amenity probe (water/tree
+  // beauty + walkable paths) was 49 map lookups × G² — the dominant cost of this whole pass. A running-row
+  // prefix sum turns each window into 4 array reads. satWT counts water|tree, satPath counts paths; a tile
+  // is only ever one type, matching the original else-if, so the two counts stay disjoint and exact.
+  {
+    const S1=G+1;
+    for (let x=0;x<S1;x++){ satWT[x]=0; satPath[x]=0; }
+    for (let y=0;y<G;y++){
+      const row=(y+1)*S1, prev=y*S1; satWT[row]=0; satPath[row]=0;
+      let rw=0, rp=0;
+      for (let x=0;x<G;x++){
+        const t=map[y][x].t;
+        if (t==='water'||t==='tree') rw++; else if (t==='path') rp++;
+        satWT[row+x+1]=satWT[prev+x+1]+rw;
+        satPath[row+x+1]=satPath[prev+x+1]+rp;
+      }
+    }
+  }
   // land value
+  const SS1=G+1;
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     let v = 50 - Math.min(45, pollution[idx(x,y)]);
     // congestion on adjacent streets drags value down
@@ -2026,13 +2050,11 @@ function recomputeFields(){
       if (isRoad(x+dx,y+dy)) tr=Math.max(tr, congestion(x+dx,y+dy));
     v -= Math.min(16, Math.max(0,tr-0.6)*20);
     v += Math.min(1, cover.police[idx(x,y)])*8 + Math.min(1, cover.school[idx(x,y)])*8 + Math.min(1, cover.health[idx(x,y)])*6;
-    let water=0, walk=0;
-    for (let dy=-3;dy<=3;dy++) for (let dx=-3;dx<=3;dx++){
-      const nx=x+dx, ny=y+dy; if(!inB(nx,ny)) continue;
-      const nt=map[ny][nx].t;
-      if (nt==='water'||nt==='tree') water+=.4;
-      else if (nt==='path') walk+=.5;       // walkable greenways lift the streets they thread
-    }
+    // 7×7 amenity window via the SATs above (water|tree beauty, walkable greenways) — O(1) per cell
+    const x0=x>3?x-3:0, x1=x+3<G?x+3:G-1, y0=y>3?y-3:0, y1=y+3<G?y+3:G-1;
+    const a=(y1+1)*SS1, b=y0*SS1;
+    const water=0.4*(satWT[a+x1+1]-satWT[b+x1+1]-satWT[a+x0]+satWT[b+x0]);
+    const walk =0.5*(satPath[a+x1+1]-satPath[b+x1+1]-satPath[a+x0]+satPath[b+x0]);
     v += Math.min(22, leisure[idx(x,y)]) + Math.min(8, water) + Math.min(6, walk);
     v -= Math.min(14, crime[idx(x,y)]*0.55);
     landVal[idx(x,y)] = Math.max(0, Math.min(100, v));
@@ -2745,6 +2767,12 @@ function unmerge(bx,by,mode){
    Reads the same 12+lv*6 term the pollution field uses, after the Recycling
    ordinance (indPolMul), so cleaning up also shrinks the bill. */
 const EMIT_RATE=0.45;
+/* civic overhead: residents below ADMIN_FREE are governed "for free"; every head above
+   pays ADMIN_RATE §/month for administration + infrastructure renewal. tuned so a mature
+   city clears a modest, roughly size-independent margin instead of compounding to millions
+   — the negative-feedback term that cancels the linear-income runaway. scaled by d.up so
+   Easy barely notices it and Hard feels the diseconomy more. */
+const ADMIN_FREE=2000, ADMIN_RATE=2.4;
 /* the whole monthly budget, computable at any moment — simTick applies it at
    month end, and the sliders use it to preview changes immediately */
 function computeBudget(){
@@ -2782,17 +2810,22 @@ function computeBudget(){
   const svcCost = svcBase * 2.6 * d.up * km.up;
   const emit = indEmit * polFx().indPolMul * indCleanMul();
   const emitCost = emit * EMIT_RATE * d.up * km.up;
+  // diseconomy of scale: income is linear in pop while road/service upkeep is per-footprint
+  // and flat, so a densifying city's margin widens without bound (the late-game runaway).
+  // a per-capita administration/renewal overhead supplies the missing negative feedback —
+  // soft threshold keeps towns paying ~nothing, so only a real metropolis feels the drag.
+  const adminCost = Math.max(0, pop - ADMIN_FREE) * ADMIN_RATE * d.up * km.up;
   const polNet = polBudget();
-  return { income, tourism, roadCost, svcCost, emitCost, emit, polNet,
+  return { income, tourism, roadCost, svcCost, emitCost, emit, adminCost, polNet,
            pop, jobs, tax:S.tax, resTax, jobTax, dInc:d.inc, dUp:d.up, dName:d.n,
            roads, aves, paths, busStops, airports, svcBase };
 }
 function projectBudget(){
   if (!S.started) return;
   const B=computeBudget();
-  S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.polNet=B.polNet;
+  S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.adminCost=B.adminCost; S.polNet=B.polNet;
   S.budgetParts=B;
-  S.net = S.income - S.roadCost - S.svcCost - S.emitCost + S.polNet - (S.loan?S.loan.pay:0);
+  S.net = S.income - S.roadCost - S.svcCost - S.emitCost - S.adminCost + S.polNet - (S.loan?S.loan.pay:0);
   updateHUD();
   fillBudgetWhy();
 }
@@ -3130,7 +3163,7 @@ function simTick(){
     }
     // a mature, well-run city should clear a modest margin — not print money
     const B=computeBudget();
-    S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.polNet=B.polNet;
+    S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.adminCost=B.adminCost; S.polNet=B.polNet;
     S.budgetParts=B;
     // loan servicing: fixed amortized payment each month until the balance clears
     S.loanPay=0;
@@ -3146,11 +3179,11 @@ function simTick(){
         refreshLoanBox();
       }
     }
-    S.net = S.income - S.roadCost - S.svcCost - (S.emitCost||0) + (S.polNet||0) - S.loanPay;
+    S.net = S.income - S.roadCost - S.svcCost - (S.emitCost||0) - (S.adminCost||0) + (S.polNet||0) - S.loanPay;
     S.money += S.net;
     if (S.money < 0) msg('<b>The treasury is in the red.</b> Raise taxes, trim services'+(S.loan?'':' or take a loan')+' before the city defaults.');
     recordHist();
-    if (S.started && !window.__SWEEP && store.available()) writeSlot('auto');   // quiet monthly autosave (suppressed during the tax-sweep harness)
+    if (S.started && !window.__SWEEP && store.available()) scheduleAutosave();   // quiet monthly autosave — deferred to idle so it never freezes the tick (suppressed during the tax-sweep harness)
   }
   updateHUD();
 }
@@ -12300,6 +12333,8 @@ function toggleCommute(){
 
 /* ---------- save / load ---------- */
 const TYPE_IDS=['grass','tree','water','road','avenue','res','com','ind','park','power','pump','tower','police','fire','school','hospital','rubble','garden','pool','stadium','solar','nuclear','highschool','university','clinic','medcenter','playground','plaza','arena','path','cityhall','monument','botanic','museum','titan','airport','rstation','landfill','incinerator','recycling','fusion','spaceport','zoo','church','port'];
+// reverse lookup: makeSave runs per-cell over the whole grid, so an indexOf scan there is O(cells·types)
+const TYPE_IDX={}; TYPE_IDS.forEach((t,i)=>{ TYPE_IDX[t]=i; });
 /* ---- municipal loans: one at a time, fixed 24-month amortized terms ---- */
 const LOAN_OFFERS=[8000, 20000, 50000];
 const LOAN_TERM=24;
@@ -12353,7 +12388,8 @@ function makeSave(){
     const c=map[y][x];
     // 4th value is a bitmask so road overlays can stack: 1=grp root,2=grp part,4=bridge,8=bus,16=rail,32=tunnel
     const mg=(c.grp?(c.part?2:1):0)|(c.bridge?4:0)|(c.bus?8:0)|(c.rail?16:0)|(c.tunnel?32:0);
-    cells.push(TYPE_IDS.indexOf(c.t), c.t==='rubble'?Math.max(0,TYPE_IDS.indexOf(c.rz||'grass')):c.lv, Math.round(c.dev), mg);
+    const ti=TYPE_IDX[c.t]; const tid=ti===undefined?TYPE_IDS.indexOf(c.t):ti;
+    cells.push(tid, c.t==='rubble'?Math.max(0,(TYPE_IDX[c.rz||'grass']??TYPE_IDS.indexOf(c.rz||'grass'))):c.lv, Math.round(c.dev), mg);
   }
   // player-sculpted terrain: a sparse [vertexIndex, roundedHeight, …] list (omitted if flat)
   let eh=0;
@@ -12539,6 +12575,20 @@ async function svMigrate(){
   await store.set('svmig','1');
 }
 function writeSlot(id){ return svWrite(id==='auto'?'auto':null); }
+/* Monthly autosave is heavy and fully synchronous up to the store write (svThumb's toDataURL,
+   makeSave's whole-grid serialize + btoa, then a blocking localStorage.setItem). Running it INSIDE
+   simTick froze the fixed-step loop for that frame — the visible "traffic freezes every few
+   seconds" hitch — and a long tick then made the accumulator catch up with extra ticks, compounding
+   it. Defer it to browser idle time instead: off the sim's critical path, coalesced so overlapping
+   month boundaries (catch-up ticks) collapse to a single save, with a timeout so it can't starve. */
+let __autosavePending=false;
+function scheduleAutosave(){
+  if (__autosavePending) return;
+  __autosavePending=true;
+  const run=()=>{ __autosavePending=false; try{ writeSlot('auto'); }catch(_){} };
+  if (window.requestIdleCallback) requestIdleCallback(run,{timeout:4000});
+  else setTimeout(run,0);
+}
 function ago(ts){
   const s2=(Date.now()-ts)/1000;
   if (s2<90) return 'just now';
@@ -12721,6 +12771,11 @@ function updateHUD(){
   document.getElementById('bIncome').textContent=fmt(S.income);
   document.getElementById('bRoads').textContent='−'+fmt(S.roadCost).slice(1);
   document.getElementById('bServices').textContent='−'+fmt(S.svcCost).slice(1);
+  const bar=document.getElementById('bAdminRow'), ac=S.adminCost||0;
+  if (bar){
+    bar.style.display = ac>=0.5 ? 'flex' : 'none';
+    if (ac>=0.5){ const ba=document.getElementById('bAdmin'); ba.textContent='−'+fmt(ac).slice(1); ba.style.color='var(--red)'; }
+  }
   const ber=document.getElementById('bEmitRow'), ec=S.emitCost||0;
   if (ber){
     ber.style.display = ec>=0.5 ? 'flex' : 'none';
@@ -13899,6 +13954,7 @@ function fillBudgetWhy(){
     + `<div style="color:var(--amber);font-family:'Chakra Petch';font-size:10px;letter-spacing:.08em;margin-top:6px">UPKEEP · ×${B.dUp.toFixed(2)} difficulty</div>`
     + r(`Roads ${B.roads}×0.95 + avenues ${B.aves}×2.4`+(B.paths?` + paths ${B.paths}×0.18`:'')+(B.busStops?` + stops ${B.busStops}×3`:''), '−'+f(B.roadCost).slice(1))
     + r(`Services base ${f(B.svcBase)} × funding × 2.6`, '−'+f(B.svcCost).slice(1))
+    + ((B.adminCost && B.adminCost>=0.5) ? r(`Administration · ${Math.max(0,B.pop-ADMIN_FREE).toLocaleString()} over ${ADMIN_FREE.toLocaleString()} × ${ADMIN_RATE}`, '−'+f(B.adminCost).slice(1)) : '')
     + ((B.emitCost && B.emitCost>=0.5) ? r(`Emissions levy · ${Math.round(B.emit)} smog × ${EMIT_RATE}`+((S.edu||0)>0.02?` <span style="color:#5fe08a">(−${Math.round(50*(S.edu||0))}% schooling)</span>`:''), '−'+f(B.emitCost).slice(1)) : '')
     + (S.loan ? r(`Loan payment`, '−'+f(S.loan.pay).slice(1)) : '')
     + ((B.polNet && Math.abs(B.polNet)>=0.5) ? r(`Ordinances (tolls − running costs)`, (B.polNet>=0?'+':'−')+f(Math.abs(B.polNet)).slice(1)) : '')

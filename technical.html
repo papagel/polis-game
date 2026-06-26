@@ -290,8 +290,9 @@
       <tr><td><b>+ Tourism</b></td><td>from working airports, scales with population</td></tr>
       <tr><td><b>− Roads</b></td><td>road / avenue / path / bus / rail upkeep</td></tr>
       <tr><td><b>− Services</b></td><td><code>UPKEEP × fund × 2.6 × diff</code> per service</td></tr>
+      <tr><td><b>− Administration</b></td><td><code>max(0, pop − 2000) × 2.4 × diff</code> — per-capita overhead on big cities</td></tr>
       <tr><td><b>− Loans</b></td><td>amortized monthly</td></tr>
-      <tr><td><b>= Net</b></td><td><code>S.net = income − roadCost − svcCost − loanPay</code></td></tr>
+      <tr><td><b>= Net</b></td><td><code>S.net = income − roadCost − svcCost − adminCost − loanPay</code></td></tr>
     </table>
     <p>Everything scales by the difficulty multipliers in <code>DIFF</code> (income, upkeep, growth, crime, disaster rate, grant size, loan rate) and a time ramp (<code>kmRamp()</code>). Loans come from <code>LOAN_OFFERS</code> with <code>takeLoan</code>/<code>repayLoan</code>.</p>
   </section>

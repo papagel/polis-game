@@ -65,11 +65,25 @@ test('budget accounting identity holds', async ({ game }) => {
   const ok = await game.eval(() => {
     const B = computeBudget();
     const loanPay = S.loan ? S.loan.pay : 0;
-    const net = B.income - B.roadCost - B.svcCost - B.emitCost + B.polNet - loanPay;
+    const net = B.income - B.roadCost - B.svcCost - B.emitCost - B.adminCost + B.polNet - loanPay;
     projectBudget();
     return Math.abs(net - S.net) < 1e-6;
   });
   expect(ok).toBe(true);
+});
+
+test('civic overhead supplies the late-game negative feedback', async ({ game }) => {
+  await game.loadExample();
+  // the runaway came from income being linear in pop while upkeep is flat per
+  // footprint. assert the admin term (a) is zero for a town under the free
+  // threshold, and (b) grows with population above it — the missing brake.
+  const r = await game.eval(() => {
+    const at = (pop) => { S.pop = pop; return computeBudget().adminCost; };
+    return { town: at(ADMIN_FREE - 500), small: at(ADMIN_FREE + 1000), big: at(ADMIN_FREE + 50000) };
+  });
+  expect(r.town).toBe(0);                 // a town is governed "for free"
+  expect(r.small).toBeGreaterThan(0);     // it switches on past the threshold
+  expect(r.big).toBeGreaterThan(r.small * 10);  // and scales with city size
 });
 
 test('difficulty is monotonic: harder => less income, more upkeep', async ({ game }) => {

@@ -54,7 +54,9 @@ from the jobs↔pop↔commerce↔industry balance minus a tax drag.
   `d.inc` + **tourism** (from working airports), all × `kmRamp()`.
 - **Costs** = road/avenue/path/busstop/rail upkeep + service `svcCost`
   (`UPKEEP` × per-service funding sliders `S.fund` × 2.6 × difficulty).
-- `S.net = income − roadCost − svcCost − loanPay`; added to `S.money`.
+- `S.net = income − roadCost − svcCost − emitCost − adminCost − loanPay`; added to
+ `S.money`. `adminCost` (`max(0,pop−ADMIN_FREE)×ADMIN_RATE×d.up`) is the per-capita
+ civic overhead that cancels the otherwise-unbounded late-game income runaway.
 - **Difficulty** `DIFF` (~1203) scales growth/income/upkeep/disaster rates.
   **Loans**: `LOAN_OFFERS`, `takeLoan`/`repayLoan`, amortized monthly.
 
