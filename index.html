@@ -711,7 +711,7 @@
     <button class="modalX" data-close="disModal">✕</button>
   </div>
 </div>
-<button id="orientChip" class="hud" style="display:none">↻ 4×2</button>
+<button id="orientChip" class="hud" style="display:none">↻ 5×2</button>
 <div id="ticker" class="hud panel">Welcome to POLIS — the ancient Greek word for city. Lay your first road, zone beside it, and add power.</div>
 </div>
 
@@ -1132,7 +1132,7 @@ const TOOLS = [
       { id:'stadium',    n:'Stadium',     c:1100, ic:'◎', col:'#b86a8f', d:'2×2 grounds · value +12 over 6 tiles' },
       { id:'arena',      n:'Arena',       c:1400, ic:'◍', col:'#8f6ab8', d:'2×2 grounds · value +12 over 6 tiles · light show' },
       { id:'zoo',        n:'City Zoo',    c:2600, ic:'🦁', col:'#c79a5b', d:'3×3 grounds · home to dozens of animals · value +16 over 8 tiles' },
-      { id:'airport',    n:'Airport',     c:9000, ic:'✈', col:'#9ab8d8', d:'4×2 runway · rotatable · tourism income scales with population', lockAt:6, br:1 },
+      { id:'airport',    n:'Airport',     c:9000, ic:'✈', col:'#9ab8d8', d:'5×2 runway · rotatable · tourism income scales with population', lockAt:6, br:1 },
       { id:'port',       n:'Seaport',     c:1800, ic:'⚓', col:'#3a77b8', d:'2×2 waterfront dock · ships sail the river · value +9 over 5 tiles' } ] },
   { id:'cityhall', n:'City Hall', c:1500, ic:'⚖', col:'#c9b87a', sub:[
       { id:'church',   n:'Church',   c:700,  ic:'✝', col:'#e0d8c6', d:'a neighbourhood landmark with a steeple · value +12 over 6 tiles' },
@@ -2700,7 +2700,7 @@ function ageBreakdown(p){
 const EDU_SMOOTH=0.02;
 /* ---------- multi-tile footprints ---------- */
 /* base [w,h]; non-square types can be rotated at placement (R / the ↻ chip) */
-const FOOT = { airport:[4,2], stadium:[2,2], arena:[2,2], nuclear:[2,2], fusion:[2,2], university:[2,2], medcenter:[2,2], botanic:[2,2], museum:[2,2], titan:[2,2], spaceport:[2,2], zoo:[3,3], port:[2,2] };
+const FOOT = { airport:[5,2], stadium:[2,2], arena:[2,2], nuclear:[2,2], fusion:[2,2], university:[2,2], medcenter:[2,2], botanic:[2,2], museum:[2,2], titan:[2,2], spaceport:[2,2], zoo:[3,3], port:[2,2] };
 function footCells(bx,by,w,h){ const r=[]; for(let dy=0;dy<h;dy++)for(let dx=0;dx<w;dx++) r.push([bx+dx,by+dy]); return r; }
 function grpRoot(c){ return map[c.grp[1]][c.grp[0]]; }
 function grpCells(c){ const [bx,by]=c.grp, r=grpRoot(c); return footCells(bx,by, r.fw||2, r.fh||2); }
@@ -2778,7 +2778,13 @@ const EMIT_RATE=0.45;
        the brake this way keeps the ~size-independent margin (~45% small → ~22% large) that
        cancels the linear-income runaway, without one opaque "Administration" line eating most
        of revenue. */
-const ROAD_WEAR=1.7, AVE_WEAR=2.6;   // extra §/tile at congestion≈1, on top of the flat upkeep
+/* an avenue is priced as exactly THREE roads compressed into one tile: 3× the flat upkeep
+   (2.85 = 0.95×3) and a wear rate (5.1 = ROAD_WEAR×120/40) that makes per-car wear identical
+   to a road — because congestion already divides by the 3× cap, AVE_WEAR must carry that 3×
+   back to stay neutral. so an avenue is cost-neutral against the road capacity it replaces;
+   its whole advantage is spatial (⅓ the tiles) + gridlock avoidance (lower congestion fraction
+   feeds growth/land value), not a maintenance discount. */
+const ROAD_WEAR=1.7, AVE_WEAR=5.1;   // extra §/tile at congestion≈1, on top of the flat upkeep
 const SVC_LOAD=0.00002;              // per-resident caseload growth that multiplies service upkeep
 /* civic overhead: the first ADMIN_FREE residents (the bootstrap town) are governed "for
    free"; every head above pays ADMIN_RATE §/month. lowered from 2.4 now that road wear +
@@ -2873,7 +2879,7 @@ function computeBudget(){
   // GDP — derived headline only (annualised value added), anchored to the taxable base; never fed back into the budget
   const gdp = (pop*GDP_RES + (comJ+indJ)*GDP_JOB + tourism) * 12;
   const wearCost = (roadWear*ROAD_WEAR + aveWear*AVE_WEAR) * d.up * km.up;   // congestion surcharge — usage, not headcount
-  const roadCost = (roads*0.95 + aves*2.4 + paths*0.18 + busStops*3.0 + rails*0.55 + rstations*8.0) * d.up * km.up + wearCost;
+  const roadCost = (roads*0.95 + aves*2.85 + paths*0.18 + busStops*3.0 + rails*0.55 + rstations*8.0) * d.up * km.up + wearCost;
   const svcLoad = 1 + SVC_LOAD * Math.max(0, pop - ADMIN_FREE);   // caseload each service must cover grows with the city
   const svcCost = svcBase * 2.6 * svcLoad * d.up * km.up;
   const emit = indEmit * polFx().indPolMul * indCleanMul();
@@ -5608,20 +5614,19 @@ function drawCell(x,y,now){
       cx.beginPath(); cx.moveTo(peak[0], peak[1]); cx.lineTo(peak[0], peak[1]-5.5*z2);
       cx.moveTo(peak[0]-1.8*z2, peak[1]-3.8*z2); cx.lineTo(peak[0]+1.8*z2, peak[1]-3.8*z2); cx.stroke(); cx.lineCap='butt';
       break; }
-    case 'airport': { // apron per tile; flat runway on the view-bottom tile, each tall structure on its own tile so a building in front of it occludes it
+    case 'airport': { // each tile paints its own apron + runway slice; tall structures dispatch per-tile so a building in front of any of them occludes it
       diamond(sx,sy); cx.fillStyle=shade('#9aa3ad',.96+c.vary*.05); cx.fill();
       cx.strokeStyle='rgba(70,80,92,.25)'; cx.lineWidth=1; diamond(sx,sy,.98); cx.stroke();
       if (!c.grp) break;
       const r=grpRoot(c), [abx,aby]=c.grp, fw=r.fw||2, fh=r.fh||2;
       const [vcx,vcy]=rotC(abx+fw/2, aby+fh/2);
       const [amx,amy]=toScreen(vcx-.5,vcy-.5);
-      let lastX=-1,lastY=-1,best=-1;
-      for (const [qx,qy] of grpCells(c)){
-        const [vqx,vqy]=g2v(qx,qy);
-        if (vqx+vqy>best){ best=vqx+vqy; lastX=qx; lastY=qy; }
-      }
-      // flat runway/markings are safe on the front (view-bottom) tile — painted after every per-tile apron diamond
-      if (x===lastX && y===lastY) drawAirport(amx,amy,z*0.56,night,now, fw,fh, 'ground');
+      // flat runway/markings: paint this tile's slice clipped to its own diamond so it depth-sorts at this
+      // tile's depth. A single poly stamped on the front tile instead paints over neighbours that stand in
+      // front of the back of the runway (e.g. a police station beside the apron in some rotations).
+      cx.save(); diamond(sx,sy); cx.clip();
+      drawAirport(amx,amy,z*0.56,night,now, fw,fh, 'ground');
+      cx.restore();
       // the tall terminal / control tower / parked jets sit at the back of the footprint: dispatch each
       // from the grid cell it stands on so a neighbour in front paints over it, instead of stamping the
       // whole airport on the single front tile (which over-covers smaller buildings in front of it).
@@ -10577,6 +10582,7 @@ window.addEventListener('keydown', e=>{
     if (closeAnyModal()) return;        // ESC closes any open modal first
     if (typing){ e.target.blur(); return; }
     if (inspectSel){ closeInspect(); return; }   // a pinned inspect card is the next thing ESC clears
+    if (clearOverlay()) return;                  // then drop any active data-map overlay back to the plain map
     cancelPending();
     hideFly && hideFly();
     if (modal.classList.contains('open')) modal.classList.remove('open');
@@ -11058,8 +11064,8 @@ function showTip(x,y,force,light,dock,peek){
       const fk=(c.t==='police')?'police':(c.t==='fire')?'fire':(c.t==='school'||c.t==='highschool'||c.t==='university')?'school':(c.t==='clinic'||c.t==='hospital'||c.t==='medcenter')?'health':null;
       up = UPKEEP[c.t]*(fk?S.fund[fk]/100:1)*2.6*DIFF[S.diff].up;
     }
-    else if (c.t==='road') up=0.95*DIFF[S.diff].up;
-    else if (c.t==='avenue') up=2.4*DIFF[S.diff].up;
+    else if (c.t==='road') up=(0.95 + congestion(x,y)*ROAD_WEAR)*DIFF[S.diff].up;
+    else if (c.t==='avenue') up=(2.85 + congestion(x,y)*AVE_WEAR)*DIFF[S.diff].up;
     else if (c.t==='path') up=0.18*DIFF[S.diff].up;
     if (up>0) html+=`<div class="row"><span>Maintenance</span><span>${up<1?'§'+up.toFixed(2):fmt(Math.round(up))} / month</span></div>`;
   }
@@ -12482,7 +12488,7 @@ const HINTS={
   garden:'<b>Garden:</b> a manicured park — the strongest land value boost per tile.',
   pool:'<b>Public pool:</b> a neighborhood favorite. Raises nearby land value.',
   stadium:'<b>Stadium:</b> tiered stands, floodlights and matchday prestige over a wide radius.',
-  airport:'<b>Airport:</b> a 2×2 international gateway. Powered and road-connected, it flies tourists in every month — income grows with your population. Watch the skies.',
+  airport:'<b>Airport:</b> a 5×2 international gateway. Powered and road-connected, it flies tourists in every month — income grows with your population. Watch the skies.',
   solar:'<b>Solar farm:</b> clean power, modest output. No smog.',
   nuclear:'<b>Nuclear plant:</b> enormous capacity, hefty upkeep, tiny footprint of pollution.',
   fusion:'<b>Fusion plant:</b> a 2×2 tokamak campus — colossal output, near-zero smog, and an upkeep to match. Endgame power.',
@@ -12601,6 +12607,14 @@ document.querySelectorAll('#views button[data-v]').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#views button[data-v]').forEach(o=>o.classList.toggle('on', !off && o===b));
   viewsBtnSync(); dirty=true;
 });
+// drop any active data overlay back to the plain map (ESC clears it); returns true if one was on
+function clearOverlay(){
+  if (!S.overlay || S.overlay==='none') return false;
+  S.overlay='none';
+  document.querySelectorAll('#views button[data-v]').forEach(o=>o.classList.remove('on'));
+  viewsBtnSync(); dirty=true;
+  return true;
+}
 document.querySelectorAll('#safetySub button[data-sv]').forEach(b=>b.onclick=()=>{
   S.safetyView=b.dataset.sv;
   document.querySelectorAll('#safetySub button[data-sv]').forEach(o=>o.classList.toggle('on', o===b));
@@ -12722,7 +12736,7 @@ function loadSave(code){
     c._mg=(mg&1)?1:((mg&2)?2:0);
   }
   // reconstruct multi-tile blocks: measure each root's footprint from its part markers,
-  // so 2×2 towers and 4×2 airports all load from the same flags
+  // so 2×2 towers and 5×2 airports all load from the same flags
   {
     for (let y=0;y<G;y++) for (let x=0;x<G;x++){
       const c=map[y][x];
@@ -13780,7 +13794,7 @@ function renderCatalog(){
     S.ox=px; S.oy=py-TH/2;
     const [sx,sy]=tileScreen(0,0);
     diamond(sx,sy); cx.fillStyle=shade('#9aa3ad',.97); cx.fill();
-    drawAirport(sx, sy, S.zoom*0.5, isNight(), 5000, 4, 2);
+    drawAirport(sx, sy, S.zoom*0.5, isNight(), 5000, 5, 2);
     S.zoom=oldZ;
   }};
   // the zoo is a 3×3 block — render the whole menagerie shrunk onto one diamond so it fits the cell
@@ -13892,7 +13906,7 @@ function renderCatBig(it, pv){
   try{
     if (it.draw){
       let z;
-      if (it.c && it.c.t==='airport') z=1.15;
+      if (it.c && it.c.t==='airport') z=0.92;   // 5-tile runway — shrink to fill the swatch without clipping
       else if (it.c && it.c.t==='zoo') z=2.0;                   // 3×3 menagerie — fill the portrait width without clipping
       else z=Math.min(3.0, 262/towerHeight(it.c.t, it.c.lv));   // fill the width regardless of tier height
       it.draw(baseX, WORK - 24 - TH*z, z);
@@ -14277,7 +14291,7 @@ function fillBudgetWhy(){
         ? r(`Exports · ${Math.round(B.exportUnits).toLocaleString()} goods surplus × ${EXPORT_PRICE}`+(B.tradePorts||B.airports?` (${B.tradePorts} port${B.tradePorts===1?'':'s'}${B.airports?` + ${B.airports} air`:''})`:` (overland only — build a seaport)`), '+'+f(B.exportInc).slice(1))
         : '')
     + `<div style="color:var(--amber);font-family:'Chakra Petch';font-size:10px;letter-spacing:.08em;margin-top:6px">UPKEEP · ×${B.dUp.toFixed(2)} difficulty</div>`
-    + r(`Roads ${B.roads}×0.95 + avenues ${B.aves}×2.4`+(B.paths?` + paths ${B.paths}×0.18`:'')+(B.busStops?` + stops ${B.busStops}×3`:'')+((B.wearCost&&B.wearCost>=0.5)?` + traffic wear ${f(B.wearCost)}`:''), '−'+f(B.roadCost).slice(1))
+    + r(`Roads ${B.roads}×0.95 + avenues ${B.aves}×2.85`+(B.paths?` + paths ${B.paths}×0.18`:'')+(B.busStops?` + stops ${B.busStops}×3`:'')+((B.wearCost&&B.wearCost>=0.5)?` + traffic wear ${f(B.wearCost)}`:''), '−'+f(B.roadCost).slice(1))
     + r(`Services base ${f(B.svcBase)} × funding × 2.6`+((B.svcLoad&&B.svcLoad>1.005)?` × load ${B.svcLoad.toFixed(2)} (pop caseload)`:''), '−'+f(B.svcCost).slice(1))
     + ((B.adminCost && B.adminCost>=0.5) ? r(`Administration · ${Math.max(0,B.pop-ADMIN_FREE).toLocaleString()} over ${ADMIN_FREE.toLocaleString()} × ${ADMIN_RATE}`, '−'+f(B.adminCost).slice(1)) : '')
     + ((B.emitCost && B.emitCost>=0.5) ? r(`Emissions levy · ${Math.round(B.emit)} smog × ${EMIT_RATE}`+((S.edu||0)>0.02?` <span style="color:#5fe08a">(−${Math.round(50*(S.edu||0))}% schooling)</span>`:''), '−'+f(B.emitCost).slice(1)) : '')
@@ -14351,11 +14365,17 @@ const SCEN={
  crash:{ t:'The Housing Crash', icon:'📉', years:6, goal:'restore 70,000 residents',
   check:()=>S.pop>=70000,
   start(){ loadDemo(EXAMPLE_CITY2,
-      '<b>The Housing Crash</b> — the previous mayor zoned homes and forgot the jobs. Demand has collapsed and people are leaving. Restore 70,000 residents within 6 years. The 💡 Advisor knows exactly what is wrong.');
-    let razed=0;
-    for (let y=0;y<G&&razed<110;y++) for (let x=0;x<G&&razed<110;x++){
+      '<b>The Housing Crash</b> — a property bubble burst. Every employer shuttered and half the west side emptied out. The job base is gone, so housing demand has collapsed and the people who remain are stuck. Build the jobs the city forgot, re-zone the abandoned neighbourhoods, and restore it to 70,000 residents within 6 years. The 💡 Advisor knows exactly what is wrong.');
+    // The crash takes BOTH halves of the balance: every job complex closes, and the
+    // overbuilt western housing stands abandoned (cleared to land). Jobs alone won't do
+    // it — the workforce demand model self-heals a pure job deficit back to the old peak,
+    // so the win now demands actively re-zoning the emptied west, not just waiting it out.
+    for (let y=0;y<G;y++) for (let x=0;x<G;x++){
       const c=map[y][x];
-      if (c.grp&&!c.part&&(c.t==='com'||c.t==='ind')){ unmerge(x,y,'clear'); razed++; }
+      if (c.grp&&!c.part){
+        if (c.t==='com'||c.t==='ind') unmerge(x,y,'clear');
+        else if (c.t==='res' && x < G*0.30) unmerge(x,y,'clear');
+      }
     }
     S.money=45000; recomputeNets(); recomputeFields(); dirty=true; updateHUD(); } },
  blackout:{ t:'Blackout', icon:'⚡', years:4, goal:'195,000 residents on full power', hold:12,

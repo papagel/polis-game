@@ -288,9 +288,9 @@
       <tr><td><b>Residential tax</b></td><td><code>pop × tax × 0.26</code></td></tr>
       <tr><td><b>Job tax</b></td><td><code>jobs × tax × 0.36</code></td></tr>
       <tr><td><b>+ Tourism</b></td><td>from working airports, scales with population</td></tr>
-      <tr><td><b>− Roads</b></td><td>road / avenue / path / bus / rail upkeep</td></tr>
-      <tr><td><b>− Services</b></td><td><code>UPKEEP × fund × 2.6 × diff</code> per service</td></tr>
-      <tr><td><b>− Administration</b></td><td><code>max(0, pop − 500) × 2.4 × diff</code> — per-capita civic overhead (scales with city size)</td></tr>
+      <tr><td><b>− Roads</b></td><td>flat upkeep (road 0.95 / avenue 2.85 / path / bus / rail) <code>+ Σ congestion × WEAR</code> — busy networks wear out faster (avenues priced as 3 roads in one tile)</td></tr>
+      <tr><td><b>− Services</b></td><td><code>UPKEEP × fund × 2.6 × svcLoad × diff</code> per service — <code>svcLoad</code> grows the caseload with population</td></tr>
+      <tr><td><b>− Administration</b></td><td><code>max(0, pop − 500) × 1.6 × diff</code> — flat per-head civic overhead; road wear + service load now share this size brake</td></tr>
       <tr><td><b>− Loans</b></td><td>amortized monthly</td></tr>
       <tr><td><b>= Net</b></td><td><code>S.net = income − roadCost − svcCost − adminCost − loanPay</code></td></tr>
     </table>

@@ -1,7 +1,7 @@
 import { test, expect } from './harness.js';
 import { inPage } from './citybuild.js';
 
-// The airport is a 4×2 (rotatable) building. Its tall parts — terminal, control
+// The airport is a 5×2 (rotatable) building. Its tall parts — terminal, control
 // tower, parked jets — sit at the back of the footprint, so stamping the whole
 // thing on the single view-bottom tile makes those parts paint over neighbours
 // standing in front of them. The fix dispatches each tall part from the grid
@@ -12,7 +12,7 @@ import { inPage } from './citybuild.js';
 test('airport dispatches its tall parts per-tile, not stamped on one tile', async ({ game }) => {
   const res = await game.eval(inPage(`
     resetGrid();
-    const bx=10, by=10, fw=4, fh=2;
+    const bx=10, by=10, fw=5, fh=2;
     const root=set(bx,by,'airport');
     root.grp=[bx,by]; root.part=false; root.fw=fw; root.fh=fh; root.pw=true; root.road=true;
     for (let yy=by; yy<by+fh; yy++) for (let xx=bx; xx<bx+fw; xx++){
@@ -61,8 +61,10 @@ test('airport dispatches its tall parts per-tile, not stamped on one tile', asyn
 
   for (const r of res){
     const count=(p)=> r.phases.filter(x=>x===p).length;
-    // a real frame fires the flat-ground pass plus each tall part exactly once
-    expect(count('ground')).toBe(1);
+    // the flat runway is painted per-tile (one clipped slice per footprint tile),
+    // not stamped once on a single late tile, so it depth-sorts against neighbours
+    expect(count('ground')).toBe(10);                // 5×2 footprint
+    // each tall part is dispatched once, from the cell it stands on
     expect(count('terminal')).toBe(1);
     expect(count('tower')).toBe(1);
     expect(count('jet1')).toBe(1);
