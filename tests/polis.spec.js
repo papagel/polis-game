@@ -86,6 +86,39 @@ test('civic overhead supplies the late-game negative feedback', async ({ game })
   expect(r.big).toBeGreaterThan(r.small * 10);  // and scales with city size
 });
 
+test('road maintenance scales with traffic, not headcount (wear brake)', async ({ game }) => {
+  await game.loadExample();
+  // part of the size brake now rides on USAGE: a congested network costs more to
+  // maintain. assert an idle road carries no surcharge and saturating it raises the
+  // road line — so the cost is actionable (transit/layout) rather than a flat tax.
+  const r = await game.eval(inPage(`
+    resetGrid();
+    hroad(10, 10, 17);                                              // road at y=10, x=10..17
+    for (let i=0;i<traffic.length;i++) traffic[i]=0;
+    const idle = computeBudget();
+    for (let x=10;x<=17;x++) traffic[idx(x,10)] = roadCapAt(x,10);  // saturate the tiles
+    const busy = computeBudget();
+    return { idleWear: idle.wearCost, busyWear: busy.wearCost,
+             idleRoad: idle.roadCost, busyRoad: busy.roadCost };
+  `));
+  expect(r.idleWear).toBeCloseTo(0, 5);            // empty roads: no wear surcharge
+  expect(r.busyWear).toBeGreaterThan(0);           // congestion costs money to maintain
+  expect(r.busyRoad).toBeGreaterThan(r.idleRoad);  // and it lands in the road line
+});
+
+test('service upkeep scales with the population it must cover (load brake)', async ({ game }) => {
+  await game.loadExample();
+  // the sibling brake: each service covers a bigger caseload as the city grows, so the
+  // load multiplier is 1 for a town and rises monotonically with population.
+  const r = await game.eval(() => {
+    const at = (pop) => { S.pop = pop; return computeBudget().svcLoad; };
+    return { town: at(ADMIN_FREE - 100), small: at(ADMIN_FREE + 5000), big: at(ADMIN_FREE + 100000) };
+  });
+  expect(r.town).toBeCloseTo(1, 6);          // a town adds no caseload surcharge
+  expect(r.small).toBeGreaterThan(1);        // it grows past the free floor
+  expect(r.big).toBeGreaterThan(r.small);    // and keeps scaling with size
+});
+
 test('difficulty is monotonic: harder => less income, more upkeep', async ({ game }) => {
   await game.loadExample();
   // indices 0..3 = Easy, Normal, Hard, Very hard. 4 (Kobayashi Maru) is

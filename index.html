@@ -829,16 +829,6 @@
   <div class="bsec" id="bsec_pol">
   <div id="polList"></div>
   </div>
-  <h3 class="bsecH" data-sec="diff" style="margin-top:10px">DIFFICULTY <span class="bsecA">▾</span></h3>
-  <div class="bsec" id="bsec_diff">
-  <div id="gameDiffRow">
-    <div style="display:flex;align-items:center;gap:10px;width:100%">
-      <input type="range" id="gameDiff" min="0" max="3" value="1" style="flex:1;min-width:0">
-      <b id="gameDiffLbl" style="white-space:nowrap;flex:none">Normal</b>
-    </div>
-    <div id="gameDiffHint" style="font-size:10.5px;color:#6d8096;margin:4px 0 2px">§20,000 start · balanced income, upkeep &amp; fire risk</div>
-  </div>
-  </div>
   <h3 class="bsecH" data-sec="loan" style="margin-top:10px">LOANS <span class="bsecA">▾</span></h3>
   <div class="bsec" id="bsec_loan">
   <div id="loanBox"></div>
@@ -2779,13 +2769,21 @@ function unmerge(bx,by,mode){
    Reads the same 12+lv*6 term the pollution field uses, after the Recycling
    ordinance (indPolMul), so cleaning up also shrinks the bill. */
 const EMIT_RATE=0.45;
+/* the size-independent margin is held by THREE population-scaling brakes that share the
+   load, so no single line dominates the panel and most of them are player-actionable:
+   (1) road WEAR — a busy network costs more to maintain (scales with traffic ≈ usage; cut it
+       with transit, avenues' higher cap, better layout), (2) service LOAD — each service must
+       cover a bigger caseload as the city grows (scales with pop, dialable via the funding
+       sliders), and (3) the flat per-head ADMIN overhead below for whatever's left. Splitting
+       the brake this way keeps the ~size-independent margin (~45% small → ~22% large) that
+       cancels the linear-income runaway, without one opaque "Administration" line eating most
+       of revenue. */
+const ROAD_WEAR=1.7, AVE_WEAR=2.6;   // extra §/tile at congestion≈1, on top of the flat upkeep
+const SVC_LOAD=0.00002;              // per-resident caseload growth that multiplies service upkeep
 /* civic overhead: the first ADMIN_FREE residents (the bootstrap town) are governed "for
-   free"; every head above pays ADMIN_RATE §/month for administration + infrastructure
-   renewal. tuned so a city of ANY size clears a modest, roughly size-independent margin
-   (~45% small → ~22% large) instead of every town printing an ~80%-margin surplus — the
-   negative-feedback term that cancels the linear-income runaway. scaled by d.up so Easy
-   barely notices it and Hard feels the diseconomy more. */
-const ADMIN_FREE=500, ADMIN_RATE=2.4;
+   free"; every head above pays ADMIN_RATE §/month. lowered from 2.4 now that road wear +
+   service load carry part of the brake. scaled by d.up so Easy barely notices it, Hard feels it. */
+const ADMIN_FREE=500, ADMIN_RATE=1.6;
 /* ---------- goods & trade ----------
    Industry manufactures goods; homes and shops consume them. A net SURPLUS is
    exported for income, a net DEFICIT must be imported at a cost — but only as
@@ -2820,14 +2818,15 @@ const GDP_JOB=36;   // §/job/month of taxable value — the base jobTax is levi
 /* the whole monthly budget, computable at any moment — simTick applies it at
    month end, and the sliders use it to preview changes immediately */
 function computeBudget(){
-  const pop=S.pop, jobs=S.jobs, d=DIFF[S.diff];
+  const pop=S.pop, d=DIFF[S.diff];
   let roads=0, aves=0, paths=0, busStops=0, rails=0, rstations=0, svcBase=0, indEmit=0;
+  let roadWear=0, aveWear=0;   // Σ congestion over trafficked tiles → maintenance scales with how busy the network is
   let comJ=0, indJ=0;   // job counts re-derived here so the trade/GDP figures stay live on slider previews too
   const svcRows=[];
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
     const t=map[y][x].t;
-    if (t==='road') roads++;
-    if (t==='avenue') aves++;
+    if (t==='road'){ roads++; roadWear += congestion(x,y); }
+    if (t==='avenue'){ aves++; aveWear += congestion(x,y); }
     if (t==='path') paths++;
     if (map[y][x].bus) busStops++;
     if (map[y][x].rail) rails++;
@@ -2842,6 +2841,7 @@ function computeBudget(){
       svcBase += UPKEEP[t] * (fk ? S.fund[fk]/100 : 1);
     }
   }
+  const jobs = comJ + indJ;   // derived live from the map (mirrors simTick's S.jobs) so the budget is correct even right after a load, before S.jobs is re-ticked
   const resTax = pop * S.tax * 0.26;
   const jobTax = jobs * S.tax * 0.36;
   let tourism=0, airports=0;
@@ -2872,22 +2872,23 @@ function computeBudget(){
   const tradeNet = exportInc - importCost;                                // one signed line in the budget, like ordinances
   // GDP — derived headline only (annualised value added), anchored to the taxable base; never fed back into the budget
   const gdp = (pop*GDP_RES + (comJ+indJ)*GDP_JOB + tourism) * 12;
-  const roadCost = (roads*0.95 + aves*2.4 + paths*0.18 + busStops*3.0 + rails*0.55 + rstations*8.0) * d.up * km.up;
-  const svcCost = svcBase * 2.6 * d.up * km.up;
+  const wearCost = (roadWear*ROAD_WEAR + aveWear*AVE_WEAR) * d.up * km.up;   // congestion surcharge — usage, not headcount
+  const roadCost = (roads*0.95 + aves*2.4 + paths*0.18 + busStops*3.0 + rails*0.55 + rstations*8.0) * d.up * km.up + wearCost;
+  const svcLoad = 1 + SVC_LOAD * Math.max(0, pop - ADMIN_FREE);   // caseload each service must cover grows with the city
+  const svcCost = svcBase * 2.6 * svcLoad * d.up * km.up;
   const emit = indEmit * polFx().indPolMul * indCleanMul();
   const emitCost = emit * EMIT_RATE * d.up * km.up;
-  // income is linear in pop while road/service upkeep is per-footprint and flat (~5% of a
-  // dense city's income), so without this every city — town or metropolis — runs an ~80%
-  // margin and the treasury just compounds. a per-capita administration/renewal overhead
-  // is the missing negative feedback: it claws back ~half of each resident's tax so the net
-  // margin stays roughly size-independent. the small free floor only spares the opening
-  // minutes (a pop<500 startup that hasn't wired up income yet).
+  // income is linear in pop while the flat per-footprint costs aren't, so without a brake every
+  // city compounds an ~80% surplus. that brake is now SHARED: road wear (wearCost) and service
+  // load (svcLoad) already absorbed part of it above; this flat per-head admin overhead carries
+  // the remainder. the small free floor only spares the opening minutes (a pop<500 startup that
+  // hasn't wired up income yet).
   const adminCost = Math.max(0, pop - ADMIN_FREE) * ADMIN_RATE * d.up * km.up;
   const polNet = polBudget();
   return { income, tourism, roadCost, svcCost, emitCost, emit, adminCost, polNet,
            tradeNet, exportInc, importCost, exportUnits, importUnits, goodsNet, goodsProd, goodsUse, tradeCap, tradePorts, gdp,
            pop, jobs, comJ, indJ, tax:S.tax, resTax, jobTax, dInc:d.inc, dUp:d.up, dName:d.n,
-           roads, aves, paths, busStops, airports, svcBase };
+           roads, aves, paths, busStops, airports, svcBase, wearCost, svcLoad, roadWear, aveWear };
 }
 function projectBudget(){
   if (!S.started) return;
@@ -2903,13 +2904,13 @@ function projectBudget(){
    Per-type daily ignition odds for a powered lot: a factory is full of fuel and
    machinery, a shop has kitchens and wiring, a home is the least likely to light up.
    Scaled by density (more to burn), fire-station coverage, rain and difficulty. */
-const FIRE_RISK = { res:0.00016, com:0.00032, ind:0.00078 };
+const FIRE_RISK = { res:0.00008, com:0.00016, ind:0.00039 };
 // burn-down countdown in game-days. Long enough that a dispatched engine can
 // reach the blaze before a covered lot is lost — the truck navigates roads in
 // real time while this ticks once/day, so too short and the lot is always rubble
 // by the time it arrives. An uncovered lot still smoulders down to rubble.
 const FIRE_BURN = { res:30, com:36, ind:45 };
-const FIRE_SPREAD = 0.025;   // commercial-baseline daily odds a blaze catches in a neighbour (scaled by FIRE_FLAM)
+const FIRE_SPREAD = 0.018;   // commercial-baseline daily odds a blaze catches in a neighbour (scaled by FIRE_FLAM)
 // fire catches faster in a more-flammable neighbour: the per-day spread chance is
 // FIRE_SPREAD weighted by that neighbour's relative ignition risk (commercial = 1×),
 // so an industrial block races (~4.9× a home) and a residential one crawls.
@@ -5607,20 +5608,30 @@ function drawCell(x,y,now){
       cx.beginPath(); cx.moveTo(peak[0], peak[1]); cx.lineTo(peak[0], peak[1]-5.5*z2);
       cx.moveTo(peak[0]-1.8*z2, peak[1]-3.8*z2); cx.lineTo(peak[0]+1.8*z2, peak[1]-3.8*z2); cx.stroke(); cx.lineCap='butt';
       break; }
-    case 'airport': { // apron per tile, full art anchored on the view-bottom tile
+    case 'airport': { // apron per tile; flat runway on the view-bottom tile, each tall structure on its own tile so a building in front of it occludes it
       diamond(sx,sy); cx.fillStyle=shade('#9aa3ad',.96+c.vary*.05); cx.fill();
       cx.strokeStyle='rgba(70,80,92,.25)'; cx.lineWidth=1; diamond(sx,sy,.98); cx.stroke();
       if (!c.grp) break;
       const r=grpRoot(c), [abx,aby]=c.grp, fw=r.fw||2, fh=r.fh||2;
+      const [vcx,vcy]=rotC(abx+fw/2, aby+fh/2);
+      const [amx,amy]=toScreen(vcx-.5,vcy-.5);
       let lastX=-1,lastY=-1,best=-1;
       for (const [qx,qy] of grpCells(c)){
         const [vqx,vqy]=g2v(qx,qy);
         if (vqx+vqy>best){ best=vqx+vqy; lastX=qx; lastY=qy; }
       }
-      if (x===lastX && y===lastY){
-        const [vcx,vcy]=rotC(abx+fw/2, aby+fh/2);
-        const [amx,amy]=toScreen(vcx-.5,vcy-.5);
-        drawAirport(amx,amy,z*0.56,night,now, fw,fh);
+      // flat runway/markings are safe on the front (view-bottom) tile — painted after every per-tile apron diamond
+      if (x===lastX && y===lastY) drawAirport(amx,amy,z*0.56,night,now, fw,fh, 'ground');
+      // the tall terminal / control tower / parked jets sit at the back of the footprint: dispatch each
+      // from the grid cell it stands on so a neighbour in front paints over it, instead of stamping the
+      // whole airport on the single front tile (which over-covers smaller buildings in front of it).
+      const along=fw>=fh, cxg=abx+fw/2, cyg=aby+fh/2;
+      for (const p of airportParts(fw,fh)){
+        const gx = along ? cxg+p.du : cxg-p.dv;
+        const gy = along ? cyg+p.dv : cyg+p.du;
+        const pcx=Math.min(abx+fw-1, Math.max(abx, Math.floor(gx)));
+        const pcy=Math.min(aby+fh-1, Math.max(aby, Math.floor(gy)));
+        if (x===pcx && y===pcy) drawAirport(amx,amy,z*0.56,night,now, fw,fh, p.k);
       }
       break;
     }
@@ -7416,7 +7427,20 @@ function drawPort(mx,my,u,night,now, fw=2, fh=2, on=true, phase='all', seaward=n
   if (night && on){ cx.fillStyle=((now/600|0)%2===0)?'#ff5a5a':'rgba(255,90,90,.3)'; cx.beginPath(); cx.arc(le_x,le_y-legH-1.5*z,1.1*z,0,7); cx.fill(); }
   cx.lineCap='butt';
 }
-function drawAirport(mx,my,u,night,now, fw=2, fh=2){
+// the tall airport structures, keyed by name and placed by footprint offset (du along the long axis,
+// dv along the short one). render() maps each offset to the grid cell it stands on and dispatches it
+// from that cell, so each one depth-sorts against its own neighbours instead of the single front tile.
+function airportParts(fw,fh){
+  const L=Math.max(fw,fh)/2, W2=Math.min(fw,fh)/2;
+  const parts=[
+    { k:'terminal', du:-L*0.35, dv:-W2+0.30 },
+    { k:'tower',    du: L*0.62, dv:-W2+0.34 },
+    { k:'jet1',     du: 0.05,   dv:-W2+0.55 },
+  ];
+  if (Math.max(fw,fh)>=4) parts.push({ k:'jet2', du:0.85, dv:-W2+0.50 });
+  return parts;
+}
+function drawAirport(mx,my,u,night,now, fw=2, fh=2, phase='all'){
   const z=S.zoom;
   const long = fw>=fh;                                  // long axis in grid terms
   const [avx,avy]=rotD(long?1:0, long?0:1);             // view-space long axis
@@ -7429,6 +7453,11 @@ function drawAirport(mx,my,u,night,now, fw=2, fh=2){
     pts.forEach((q,k)=>{ const [qx,qy]=P(q[0],q[1]); k?cx.lineTo(qx,qy):cx.moveTo(qx,qy); });
     cx.closePath(); cx.fill(); };
   const L=Math.max(fw,fh)/2, W2=Math.min(fw,fh)/2;
+  const part=(k)=> phase==='all'||phase===k;           // structures keyed by name so each lands on its own tile
+  if (phase==='all'||phase==='ground'){
+  // flat surface art — runway, markings, edge lights — all on the +pv (far) half, so it is safe to paint
+  // on the front tile after every apron diamond. The taxi apron itself is just the per-tile diamond colour
+  // (a distinct stripe drawn here would either be erased by later diamonds or clip the structures' feet).
   // runway: spans the footprint end to end, tucked just inside the boundary so it never spills onto the grass
   const rl=L-0.04;
   poly([[-rl,0.06],[rl,0.06],[rl,W2-0.10],[-rl,W2-0.10]], '#5d6670');
@@ -7455,17 +7484,16 @@ function drawAirport(mx,my,u,night,now, fw=2, fh=2){
       }
     }
   }
-  // taxi apron on the near side
-  poly([[-L+0.1,-W2+0.08],[L-0.1,-W2+0.08],[L-0.1,0.02],[-L+0.1,0.02]], '#717b86');
+  }
   // terminal: glass hall along the apron
-  { const [tx2,ty2]=P(-L*0.35,-W2+0.30);
+  if (part('terminal')){ const [tx2,ty2]=P(-L*0.35,-W2+0.30);
     const f=vol(tx2,ty2-TH/2*z,0,0,.42,.20,9,'#cdd6df',{roof:'#aeb8c2'});
     archRoof(f,'#bcc6d0',6);
     cx.fillStyle = night?'rgba(255,236,170,.75)':'rgba(150,190,225,.65)';
     cx.beginPath(); cx.moveTo(f.L[0]+1*z,f.L[1]+f.H*0.35); cx.lineTo(f.B[0],f.B[1]+f.H*0.35); cx.lineTo(f.B[0],f.B[1]+f.H); cx.lineTo(f.L[0]+1*z,f.L[1]+f.H); cx.closePath(); cx.fill();
   }
   // control tower near the far threshold
-  { const [tx2,ty2]=P(L*0.62,-W2+0.34);
+  if (part('tower')){ const [tx2,ty2]=P(L*0.62,-W2+0.34);
     const t=cyl(tx2,ty2-TH/2*z,0,0,.12,20,'#d8dde3');
     cx.fillStyle='#3e4a58';
     cx.beginPath(); cx.ellipse(t.cx, t.cy-t.H-1.4*z, t.rx*1.7, t.ry*1.7, 0, 0, 7); cx.fill();
@@ -7475,8 +7503,8 @@ function drawAirport(mx,my,u,night,now, fw=2, fh=2){
     cx.beginPath(); cx.arc(t.cx, t.cy-t.H-4.6*z, 1.1*z, 0, 7); cx.fill();
   }
   // parked jets on the apron
-  { const [j1x,j1y]=P(0.05,-W2+0.55);  drawJetSprite(j1x, j1y, z*0.50, avx>=0?1:-1, 0, night, now, 0); }
-  if (Math.max(fw,fh)>=4){ const [j2x,j2y]=P(0.85,-W2+0.5); drawJetSprite(j2x, j2y, z*0.46, avx>=0?-1:1, 0, night, now, 0); }
+  if (part('jet1')){ const [j1x,j1y]=P(0.05,-W2+0.55);  drawJetSprite(j1x, j1y, z*0.50, avx>=0?1:-1, 0, night, now, 0); }
+  if (part('jet2') && Math.max(fw,fh)>=4){ const [j2x,j2y]=P(0.85,-W2+0.5); drawJetSprite(j2x, j2y, z*0.46, avx>=0?-1:1, 0, night, now, 0); }
 }
 /* a little jet, reusable on the apron and in the sky; a = altitude px for shadow separation */
 function drawJetSprite(px,py,u,shx,shy,night,now,a){
@@ -12216,7 +12244,7 @@ function discoBar(){
   }
   return BAR*1000;
 }
-/* — style 16: TANGO (marcato bass, reedy bandoneon stabs on the 3-3-2 habanera, sweeping vibrato violin) — */
+/* — style 16: TANGO (marcato bass, reedy bandoneon stabs on the 3-3-2 habanera) — */
 const PROG_TG=[[0,3,7],[-2,2,5],[-4,0,3],[-5,-1,2]];        // descending minor drama (rel. A=220)
 function tangoBar(){
   const C=AU.ctx, t=C.currentTime, BAR=60/108*4, ST=BAR/16;
@@ -12243,20 +12271,6 @@ function tangoBar(){
       const g=C.createGain(); g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(held?0.016:0.022,at+0.012);
       g.gain.exponentialRampToValueAtTime(0.001,at+dur);
       o.connect(lp); lp.connect(g); g.connect(AU.mus); o.start(at); o.stop(at+dur+0.05);
-    }
-  }
-  // sweeping violin: a dramatic legato line with vibrato, swelling every other bar
-  if (lively>0.3 && bar%2===0 && Math.random()<0.85){
-    const seq=[ch[2],ch[2]+2,ch[1],ch[2],ch[0]+12];
-    let at=t+2*ST;
-    for (let i=0;i<seq.length;i++){ const dur=ST*2.6, f=NOTE(seq[i]+12);
-      const o=C.createOscillator(); o.type='sawtooth'; o.frequency.value=f;
-      const vib=C.createOscillator(); vib.frequency.value=5.5; const vd=C.createGain(); vd.gain.value=f*0.006;
-      vib.connect(vd); vd.connect(o.frequency);
-      const lp=C.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2800;
-      const g=C.createGain(); g.gain.setValueAtTime(0.0001,at); g.gain.linearRampToValueAtTime(0.024,at+0.12);
-      g.gain.setValueAtTime(0.02,at+dur*0.6); g.gain.linearRampToValueAtTime(0.0001,at+dur);
-      o.connect(lp); lp.connect(g); g.connect(AU.mus); o.start(at); vib.start(at); o.stop(at+dur+0.05); vib.stop(at+dur+0.05); at+=dur;
     }
   }
   return BAR*1000;
@@ -12781,7 +12795,15 @@ function loadSave(code){
   if (Array.isArray(data.eh)) for (let k=0;k+1<data.eh.length;k+=2){ const i=data.eh[k]|0; if (i>=0&&i<EHAND.length) EHAND[i]=data.eh[k+1]; }
   elevDirty=true;
   centerCamera();              // a load should always frame the city, even when the size didn't change
-  recomputeNets(); recomputeFields(); updateHUD();
+  recomputeNets(); recomputeFields();
+  // budget figures aren't persisted (jobs is re-derived from the map), so without this the HUD
+  // reads a stale/zero net until the first monthly tick — compute it now so reload shows real numbers.
+  { const B=computeBudget();
+    S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.adminCost=B.adminCost; S.polNet=B.polNet;
+    S.tradeNet=B.tradeNet; S.gdp=B.gdp; S.jobs=B.jobs; S.budgetParts=B;
+    S.net = S.income - S.roadCost - S.svcCost - S.emitCost - S.adminCost + S.polNet + S.tradeNet - (S.loan?S.loan.pay:0);
+  }
+  updateHUD(); fillBudgetWhy();
 }
 const modal=document.getElementById('saveModal'),
       codeBox=document.getElementById('saveCode'),
@@ -14255,8 +14277,8 @@ function fillBudgetWhy(){
         ? r(`Exports · ${Math.round(B.exportUnits).toLocaleString()} goods surplus × ${EXPORT_PRICE}`+(B.tradePorts||B.airports?` (${B.tradePorts} port${B.tradePorts===1?'':'s'}${B.airports?` + ${B.airports} air`:''})`:` (overland only — build a seaport)`), '+'+f(B.exportInc).slice(1))
         : '')
     + `<div style="color:var(--amber);font-family:'Chakra Petch';font-size:10px;letter-spacing:.08em;margin-top:6px">UPKEEP · ×${B.dUp.toFixed(2)} difficulty</div>`
-    + r(`Roads ${B.roads}×0.95 + avenues ${B.aves}×2.4`+(B.paths?` + paths ${B.paths}×0.18`:'')+(B.busStops?` + stops ${B.busStops}×3`:''), '−'+f(B.roadCost).slice(1))
-    + r(`Services base ${f(B.svcBase)} × funding × 2.6`, '−'+f(B.svcCost).slice(1))
+    + r(`Roads ${B.roads}×0.95 + avenues ${B.aves}×2.4`+(B.paths?` + paths ${B.paths}×0.18`:'')+(B.busStops?` + stops ${B.busStops}×3`:'')+((B.wearCost&&B.wearCost>=0.5)?` + traffic wear ${f(B.wearCost)}`:''), '−'+f(B.roadCost).slice(1))
+    + r(`Services base ${f(B.svcBase)} × funding × 2.6`+((B.svcLoad&&B.svcLoad>1.005)?` × load ${B.svcLoad.toFixed(2)} (pop caseload)`:''), '−'+f(B.svcCost).slice(1))
     + ((B.adminCost && B.adminCost>=0.5) ? r(`Administration · ${Math.max(0,B.pop-ADMIN_FREE).toLocaleString()} over ${ADMIN_FREE.toLocaleString()} × ${ADMIN_RATE}`, '−'+f(B.adminCost).slice(1)) : '')
     + ((B.emitCost && B.emitCost>=0.5) ? r(`Emissions levy · ${Math.round(B.emit)} smog × ${EMIT_RATE}`+((S.edu||0)>0.02?` <span style="color:#5fe08a">(−${Math.round(50*(S.edu||0))}% schooling)</span>`:''), '−'+f(B.emitCost).slice(1)) : '')
     + ((B.importCost && B.importCost>=0.5) ? r(`Imports · ${Math.round(B.importUnits).toLocaleString()} goods deficit`+((B.tradePorts||B.airports)?` (gateways cut the bill)`:` (no port — overland spot premium)`), '−'+f(B.importCost).slice(1)) : '')
