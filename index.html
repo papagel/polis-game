@@ -214,6 +214,20 @@
   .stgl{background:#1a2636;border:1px solid var(--line);border-radius:6px;color:var(--dim);font-size:9px;padding:2px 8px;cursor:pointer}
   .stgl.on{background:#1f3a2a;border-color:var(--green);color:var(--green)}
   #advModal .inner{max-width:780px;width:94vw}
+  #budgetModal .inner{max-width:720px;width:94vw}
+  #bmBody{max-height:min(78vh,760px);overflow:auto;font-size:12.5px;line-height:1.5;color:#aeb8c2}
+  #bmBody .bmSec{color:var(--amber);font-family:'Chakra Petch';font-size:10.5px;letter-spacing:.09em;margin:14px 0 6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+  #bmBody .bmSec:first-child{margin-top:0}
+  #bmBody .bmRow{display:flex;justify-content:space-between;gap:12px;padding:2px 0}
+  #bmBody .bmRow.sub{color:#6d8096;font-size:11.5px;padding-left:12px}
+  #bmBody .bmRow b{white-space:nowrap}
+  #bmBody .bmRow.tot{border-top:1px solid var(--line);margin-top:5px;padding-top:6px;font-size:13.5px}
+  #bmBody .pos{color:#5fe08a}  #bmBody .neg{color:#ff8a6b}
+  #bmBody .bmNote{font-size:11px;color:#6d8096;margin:4px 0 2px;line-height:1.45}
+  #bmBody .bmCallout{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin:8px 0}
+  #bmBody .bmCallout .ttl{color:var(--ink);font-size:12px;font-weight:600;margin-bottom:3px}
+  #bmBody .bmInsight{display:flex;gap:8px;padding:7px 9px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px;background:#0a131e;font-size:11.5px;line-height:1.4}
+  #bmBody .bmInsight .ic{flex:none;font-size:14px}
   #catModal .inner{max-width:1240px;width:96vw}
   #statsModal .inner{max-width:1140px;width:96vw}
   #statsScroll{overflow:auto;max-height:calc(100vh - 140px);border:1px solid var(--line);border-radius:10px;background:#0a131e}
@@ -310,7 +324,7 @@
   body.mob #safetySub{left:calc(8px + env(safe-area-inset-left));bottom:calc(var(--bbarh,58px) + 62px)}
 
   /* save/load modal */
-  #saveModal,#catModal,#advModal,#statsModal,#mapModal,#helpModal{position:fixed;inset:0;z-index:30;background:rgba(5,10,18,.7);display:none;align-items:center;justify-content:center;padding:calc(18px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left))}
+  #saveModal,#catModal,#advModal,#statsModal,#mapModal,#helpModal,#budgetModal{position:fixed;inset:0;z-index:30;background:rgba(5,10,18,.7);display:none;align-items:center;justify-content:center;padding:calc(18px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left))}
   #mapModal .inner{max-width:1120px;width:94vw;text-align:center;max-height:calc(100dvh - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow-y:auto;padding:16px 20px 14px}
   #mapBody{display:flex;gap:18px;align-items:stretch;margin-top:10px;text-align:left}
   #mapBody #mapGrid{flex:1;min-width:0;margin-top:0;align-content:start}
@@ -357,10 +371,10 @@
   #wxRow input{accent-color:var(--amber);width:15px;height:15px;cursor:pointer}
   .dragGrip{height:14px;cursor:grab;display:flex;align-items:center;justify-content:center;color:#44556b;font-size:9px;letter-spacing:3px;user-select:none;touch-action:none}
   .dragGrip:active{cursor:grabbing}
-  #saveModal.open,#catModal.open,#advModal.open,#statsModal.open,#mapModal.open,#helpModal.open{display:flex}
+  #saveModal.open,#catModal.open,#advModal.open,#statsModal.open,#mapModal.open,#helpModal.open,#budgetModal.open{display:flex}
   #saveModal .inner{width:min(480px,94vw);padding:18px;max-height:calc(100dvh - 36px);display:flex;flex-direction:column;min-height:0}
-  #catModal .inner,#advModal .inner,#statsModal .inner,#mapModal .inner,#helpModal .inner{padding:20px}
-  #catModal h3,#advModal h3,#statsModal h3,#mapModal h3,#helpModal h3{font-family:'Chakra Petch';color:var(--amber);font-size:15px;margin-bottom:10px}
+  #catModal .inner,#advModal .inner,#statsModal .inner,#mapModal .inner,#helpModal .inner,#budgetModal .inner{padding:20px}
+  #catModal h3,#advModal h3,#statsModal h3,#mapModal h3,#helpModal h3,#budgetModal h3{font-family:'Chakra Petch';color:var(--amber);font-size:15px;margin-bottom:10px}
   #saveModal h3{font-family:'Chakra Petch';color:var(--amber);font-size:15px;margin-bottom:8px}
   #saveModal p{color:var(--dim);font-size:12px;line-height:1.6;margin-bottom:10px}
   #saveCode{width:100%;height:120px;background:#0a121c;border:1px solid var(--line);border-radius:9px;color:#9fd2a8;font-family:monospace;font-size:11px;padding:9px;resize:none;word-break:break-all}
@@ -371,7 +385,7 @@
   #codeBox[open] summary::before{content:'▾ '}
   #codeBox summary:hover{color:var(--ink)}
   #codeBox textarea{margin-top:10px}
-  #catModal .inner,#advModal .inner,#statsModal .inner,#saveModal .inner{position:relative}
+  #catModal .inner,#advModal .inner,#statsModal .inner,#saveModal .inner,#budgetModal .inner{position:relative}
   .modalX{position:absolute;top:10px;right:12px;background:#1a2636;border:1px solid var(--line);border-radius:8px;color:var(--dim);width:28px;height:28px;cursor:pointer;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center}
   .modalX:hover{color:var(--ink);border-color:var(--amber)}
   .catDN{position:absolute;top:10px;right:48px;background:#1a2636;border:1px solid var(--line);border-radius:8px;color:var(--dim);height:28px;padding:0 10px;cursor:pointer;font-size:11px;line-height:1;display:flex;align-items:center;gap:5px;font-family:'Chakra Petch'}
@@ -973,6 +987,13 @@
     <div id="advList"></div>
   </div>
 </div>
+<div id="budgetModal">
+  <div class="panel inner">
+    <h3>BUDGET BREAKDOWN</h3>
+    <button class="modalX" data-close="budgetModal">✕</button>
+    <div id="bmBody"></div>
+  </div>
+</div>
 <script>
 'use strict';
 /* ============================================================
@@ -992,6 +1013,8 @@ const S = {
   pop: 0, jobs: 0, happy: 60,
   demand: { r: .6, c: .1, i: .4 },
   income: 0, roadCost: 0, svcCost: 0, adminCost: 0, net: 0,
+  infraAge: 0, infraStock: 0,   // average asset age (days) → depreciation surcharge; stock = funding-invariant maintained size, last seen at month end
+
   zoom: 1, ox: 0, oy: 0,
   tool: 'pan', hover: null, msgT: 0, overlay: 'none', safetyView: 'all', congested: 0, rot: 0, milestone: 0, weather: false, cityName: 'Polis',
   powerCap:0, powerUse:0, waterCap:0, waterUse:0,
@@ -2479,6 +2502,39 @@ function bridgeDeck(cxg,cyg,ax,ay,W2,Lf,Ln,ave,z,junc){
   }
   cx.setLineDash([]);
 }
+/* a 4-way bridge junction tile. Two crossing deck strips leave water-gaps at the four tile
+   corners and read as a thin plus; instead fill the WHOLE tile square at deck height (a solid
+   intersection plate), drop a thin fascia on the two camera-near edges for thickness, then lay
+   both roads' centre markings — left open through the middle box like a real junction. */
+function bridgeJunc(cxg,cyg,ax,ay,L,ave,z){
+  const perpx=-ay, perpy=ax;
+  const Pt=(gx,gy)=>{ const [rx,ry]=rotC(gx,gy); const p=toScreen(rx,ry); return [p[0], p[1]-L]; };
+  const cor=[ [cxg-ax*0.5-perpx*0.5,cyg-ay*0.5-perpy*0.5],
+              [cxg+ax*0.5-perpx*0.5,cyg+ay*0.5-perpy*0.5],
+              [cxg+ax*0.5+perpx*0.5,cyg+ay*0.5+perpy*0.5],
+              [cxg-ax*0.5+perpx*0.5,cyg-ay*0.5+perpy*0.5] ].map(c=>Pt(c[0],c[1]));
+  const th=(ave?3:2.4)*z, cy=(cor[0][1]+cor[1][1]+cor[2][1]+cor[3][1])/4;
+  cx.fillStyle=ave?'#2c343d':'#454e58';                                    // fascia under the front edges
+  for (let i=0;i<4;i++){ const a=cor[i], b=cor[(i+1)%4];
+    if ((a[1]+b[1])/2 > cy+0.01){ cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.lineTo(b[0],b[1]+th); cx.lineTo(a[0],a[1]+th); cx.closePath(); cx.fill(); }
+  }
+  cx.fillStyle=ave?'#3a4450':'#56616e';                                    // solid deck plate
+  cx.beginPath(); for (let i=0;i<4;i++){ const p=cor[i]; i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]); } cx.closePath(); cx.fill();
+  // both roads' markings, broken around the central junction box so the crossing reads cleanly
+  const mark=(mx,my)=>{
+    cx.strokeStyle='rgba(255,196,90,.85)'; cx.lineWidth=Math.max(1,1.5*z); cx.setLineDash([]);
+    for (const sgn of [1,-1]){ const a=Pt(cxg+mx*0.5*sgn,cyg+my*0.5*sgn), b=Pt(cxg+mx*0.2*sgn,cyg+my*0.2*sgn);
+      cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.stroke(); }
+    if (ave){ const px=-my, py=mx;
+      cx.strokeStyle='rgba(240,244,248,.55)'; cx.lineWidth=Math.max(1,1.1*z); cx.setLineDash([3.5*z,4*z]);
+      for (const s of [1,-1]) for (const sgn of [1,-1]){
+        const a=Pt(cxg+mx*0.5*sgn+px*0.21*s,cyg+my*0.5*sgn+py*0.21*s), b=Pt(cxg+mx*0.24*sgn+px*0.21*s,cyg+my*0.24*sgn+py*0.21*s);
+        cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.stroke(); }
+    }
+    cx.setLineDash([]);
+  };
+  mark(ax,ay); mark(perpx,perpy);
+}
 
 /* ---------- placement ---------- */
 /* open ground for building over: bare land, or an empty zone nobody has built on
@@ -2804,6 +2860,12 @@ const SVC_LOAD=0.00002;              // per-resident caseload growth that multip
    free"; every head above pays ADMIN_RATE §/month. lowered from 2.4 now that road wear +
    service load carry part of the brake. scaled by d.up so Easy barely notices it, Hard feels it. */
 const ADMIN_FREE=500, ADMIN_RATE=1.6;
+/* depreciation: physical infrastructure costs gently more to maintain as it ages, so a frozen
+   city is never a steady-state money printer — standing still slowly raises the upkeep bill. it
+   is ANSWERABLE: building out fresh infrastructure dilutes the city's average asset age (done in
+   simTick), pulling the surcharge back down, so a city that keeps growing/renewing stays cheap.
+   gentle slope (~AGE_RATE/yr); AGE_MAX only bounds the absurd (≈a century frozen), not real play. */
+const AGE_RATE=0.02, AGE_MAX=3.0;
 /* ---------- goods & trade ----------
    Industry manufactures goods; homes and shops consume them. A net SURPLUS is
    exported for income, a net DEFICIT must be imported at a cost — but only as
@@ -2839,7 +2901,7 @@ const GDP_JOB=36;   // §/job/month of taxable value — the base jobTax is levi
    month end, and the sliders use it to preview changes immediately */
 function computeBudget(){
   const pop=S.pop, d=DIFF[S.diff];
-  let roads=0, aves=0, paths=0, busStops=0, rails=0, rstations=0, svcBase=0, indEmit=0;
+  let roads=0, aves=0, paths=0, busStops=0, rails=0, rstations=0, svcBase=0, svcRaw=0, indEmit=0;
   let roadWear=0, aveWear=0;   // Σ congestion over trafficked tiles → maintenance scales with how busy the network is
   let comJ=0, indJ=0;   // job counts re-derived here so the trade/GDP figures stay live on slider previews too
   const svcRows=[];
@@ -2859,6 +2921,7 @@ function computeBudget(){
                : (t==='school'||t==='highschool'||t==='university')?'school'
                : (t==='clinic'||t==='hospital'||t==='medcenter')?'health' : null;
       svcBase += UPKEEP[t] * (fk ? S.fund[fk]/100 : 1);
+      svcRaw  += UPKEEP[t];   // funding-invariant: the depreciation stock measure must not move when sliders do
     }
   }
   const jobs = comJ + indJ;   // derived live from the map (mirrors simTick's S.jobs) so the budget is correct even right after a load, before S.jobs is re-ticked
@@ -2893,9 +2956,14 @@ function computeBudget(){
   // GDP — derived headline only (annualised value added), anchored to the taxable base; never fed back into the budget
   const gdp = (pop*GDP_RES + (comJ+indJ)*GDP_JOB + tourism) * 12;
   const wearCost = (roadWear*ROAD_WEAR + aveWear*AVE_WEAR) * d.up * km.up;   // congestion surcharge — usage, not headcount
-  const roadCost = (roads*0.95 + aves*2.85 + paths*0.18 + busStops*3.0 + rails*0.55 + rstations*8.0) * d.up * km.up + wearCost;
+  const roadFlat = roads*0.95 + aves*2.85 + paths*0.18 + busStops*3.0 + rails*0.55 + rstations*8.0;
+  // ageing surcharge on physical-asset upkeep (roads + civic): rises with the city's average asset
+  // age, diluted by build-out in simTick. keeps a static city from being a free steady state.
+  const ageMul = Math.min(AGE_MAX, 1 + AGE_RATE * (S.infraAge||0)/YEAR_DAYS);
+  const infraStock = roadFlat + svcRaw;   // funding-/difficulty-invariant size of the maintained stock
+  const roadCost = (roadFlat * d.up * km.up + wearCost) * ageMul;
   const svcLoad = 1 + SVC_LOAD * Math.max(0, pop - ADMIN_FREE);   // caseload each service must cover grows with the city
-  const svcCost = svcBase * 2.6 * svcLoad * d.up * km.up;
+  const svcCost = svcBase * 2.6 * svcLoad * d.up * km.up * ageMul;
   const emit = indEmit * polFx().indPolMul * indCleanMul();
   const emitCost = emit * EMIT_RATE * d.up * km.up;
   // income is linear in pop while the flat per-footprint costs aren't, so without a brake every
@@ -2908,7 +2976,7 @@ function computeBudget(){
   return { income, tourism, roadCost, svcCost, emitCost, emit, adminCost, polNet,
            tradeNet, exportInc, importCost, exportUnits, importUnits, goodsNet, goodsProd, goodsUse, tradeCap, tradePorts, gdp,
            pop, jobs, comJ, indJ, tax:S.tax, resTax, jobTax, dInc:d.inc, dUp:d.up, dName:d.n,
-           roads, aves, paths, busStops, airports, svcBase, wearCost, svcLoad, roadWear, aveWear };
+           roads, aves, paths, busStops, airports, svcBase, wearCost, svcLoad, roadWear, aveWear, ageMul, infraStock };
 }
 function projectBudget(){
   if (!S.started) return;
@@ -2918,7 +2986,7 @@ function projectBudget(){
   S.budgetParts=B;
   S.net = S.income - S.roadCost - S.svcCost - S.emitCost - S.adminCost + S.polNet + S.tradeNet - (S.loan?S.loan.pay:0);
   updateHUD();
-  fillBudgetWhy();
+  fillBudgetWhy(); fillBudgetModal();
 }
 /* ---------- fire risk ----------
    Per-type daily ignition odds for a powered lot: a factory is full of fuel and
@@ -2990,6 +3058,7 @@ function panToTile(x,y){
   if (tk) tk.addEventListener('click', ()=>{ if (S.msgGo) panToTile(S.msgGo[0],S.msgGo[1]); }); })();
 function simTick(){
   S.day++;
+  S.infraAge=(S.infraAge||0)+1;   // the maintained stock ages one day; build-out dilutes it monthly (see budget block)
   if (DIFF[S.diff] && DIFF[S.diff].km){
     S.kmPeakPop = Math.max(S.kmPeakPop||0, S.pop||0);
     S.kmYears = (S.day/YEAR_DAYS);
@@ -3254,6 +3323,11 @@ function simTick(){
     }
     // a mature, well-run city should clear a modest margin — not print money
     const B=computeBudget();
+    // depreciation reset: fresh infrastructure built since last month dilutes the average asset age,
+    // so renewing/expanding the city pulls the ageing surcharge back down (a shrinking stock — pure
+    // demolition — is treated as removed at the average, leaving the age unchanged).
+    if (S.infraStock>0 && B.infraStock>S.infraStock) S.infraAge *= S.infraStock / B.infraStock;
+    S.infraStock = B.infraStock;
     S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.adminCost=B.adminCost; S.polNet=B.polNet;
     S.tradeNet=B.tradeNet; S.gdp=B.gdp;
     S.budgetParts=B;
@@ -4660,7 +4734,7 @@ function drawCell(x,y,now){
       const flat=(c.t==='grass'||c.t==='water'||c.t==='road'||c.t==='avenue'||c.t==='path');
       const internal=(c.t==='tree'||c.t==='res'||c.t==='com'||c.t==='ind');
       if (GP===2 && c.t==='water'){ drawWaterShimmer(x,y,sx,sy,z,now); return; }   // animated glints over the cached base
-      if (GP===2 && flat) return;               // flat ground already cached
+      if (GP===2 && flat && !c.bridge) return;  // flat ground already cached — but a bridge's lifted deck is an elevated struct, drawn live here
       if (GP===1 && !flat && !internal) return; // tall structures skipped in the ground pass
     }
   }
@@ -4907,37 +4981,49 @@ function drawCell(x,y,now){
       const qfill=(a,b2,c2,d2)=>{ cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b2[0],b2[1]); cx.lineTo(c2[0],c2[1]); cx.lineTo(d2[0],d2[1]); cx.closePath(); cx.fill(); };
       const conns=[];
       for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) if (isRoad(x+dx,y+dy)) conns.push([dx,dy]);
-      if (GP!==2){   // static road surface (asphalt, sidewalks, markings, night streetlights) → ground cache
+      // bridges: the WATER beneath bakes into the ground cache, but the LIFTED deck + piers are
+      // elevated geometry that must ride the structure pass. A ground-baked deck is painted before
+      // every building, so any structure behind the span draws over it ("buildings on top of the
+      // bridge"); queued as a struct (like elevated rail) it occludes against buildings by depth.
       if (c.bridge){
         const bd = (BRIDGE && BRIDGE.get(y*G+x)) || { ax:1, ay:0, idx:0, len:1 };
         const wy = sy+TH/2*z, cxg=x+.5, cyg=y+.5;
-        // water beneath — the bank is pinned straight at the crossing, so a clean diamond reads
-        if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
-        cx.fillStyle=shade('#3a7fc1', .95+Math.sin((x+y)*1.3)*.06); cx.fill();   // baked under bridges → keep time-independent (see water case)
-        if (bd.cross){
-          // two spans meet over water → a flat 4-way deck junction. Draw both axes' strips at one
-          // shared (interior) height plus a stout pier; barriers are dropped so the roads run through.
-          const Lj = bridgeLift(Math.max(bd.len, bd.len2), z);
-          let aw=ave;                                    // widen the junction to the wider of the crossing roads
-          for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
-            if (inB(x+dx,y+dy) && map[y+dy][x+dx].t==='avenue' && (map[y+dy][x+dx].bridge||isRoad(x+dx,y+dy))) aw=true;
-          const Wj = bridgeW2(aw);
-          drawPier(sx, wy, Lj, z, true, aw);
-          bridgeDeck(cxg, cyg,  bd.ax,  bd.ay, Wj, Lj, Lj, aw, z, true);
-          bridgeDeck(cxg, cyg, -bd.ay,  bd.ax, Wj, Lj, Lj, aw, z, true);
-          break;
+        if (GP!==2){   // water beneath → ground cache (the bank is pinned straight here, so a clean diamond reads)
+          if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
+          cx.fillStyle=shade('#3a7fc1', .95+Math.sin((x+y)*1.3)*.06); cx.fill();   // time-independent: it's baked
         }
-        const lift = bridgeLift(bd.len, z), W2 = bridgeW2(ave);
-        // deck height per along-axis edge: full lift toward the span interior, ramping down to the
-        // ground where the span abuts land. Keeping the ramp on the bridge's OWN end tile leaves the
-        // land road a clean flat road (no parapet/sidewalk overlap) and meets it flush at the shore.
-        const Lf = (bd.idx===0)          ? 0 : lift;     // -axis edge (back)
-        const Ln = (bd.idx===bd.len-1)   ? 0 : lift;     // +axis edge (forward)
-        // supports only under the lifted interior — ends ramp down onto their banks
-        if (bd.idx>0 && bd.idx<bd.len-1) drawPier(sx, wy, lift, z, bd.len>=4 && bd.idx%3===1, ave);
-        bridgeDeck(cxg, cyg, bd.ax, bd.ay, W2, Lf, Ln, ave, z);
+        if (GP!==1){   // deck + piers → struct pass (GP 2 is that pass; GP 0 queues + flushes per band)
+          const drawDeck=()=>{
+            if (bd.cross){
+              // two spans meet over water → one solid 4-way deck plate (corners filled, not a thin
+              // plus that leaks water), a stout pier, and barriers dropped so both roads run through.
+              const Lj = bridgeLift(Math.max(bd.len, bd.len2), z);
+              let aw=ave;                                  // widen the junction to the wider of the crossing roads
+              for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
+                if (inB(x+dx,y+dy) && map[y+dy][x+dx].t==='avenue' && (map[y+dy][x+dx].bridge||isRoad(x+dx,y+dy))) aw=true;
+              drawPier(sx, wy, Lj, z, true, aw);
+              bridgeJunc(cxg, cyg, bd.ax, bd.ay, Lj, aw, z);
+              return;
+            }
+            const lift = bridgeLift(bd.len, z), W2 = bridgeW2(ave);
+            // deck height per along-axis edge: full lift toward the span interior, ramping down to the
+            // ground where the span abuts land. Keeping the ramp on the bridge's OWN end tile leaves the
+            // land road a clean flat road (no parapet/sidewalk overlap) and meets it flush at the shore.
+            const Lf = (bd.idx===0)          ? 0 : lift;   // -axis edge (back)
+            const Ln = (bd.idx===bd.len-1)   ? 0 : lift;   // +axis edge (forward)
+            // supports only under the lifted interior — ends ramp down onto their banks
+            if (bd.idx>0 && bd.idx<bd.len-1) drawPier(sx, wy, lift, z, bd.len>=4 && bd.idx%3===1, ave);
+            bridgeDeck(cxg, cyg, bd.ax, bd.ay, W2, Lf, Ln, ave, z);
+          };
+          // Draw the deck LAST within its band (a very low sort key). Cross-band depth already paints it
+          // in front of the bank behind and behind the bank in front; the only same-band neighbours a span
+          // can have are waterfront lots whose wide bases spill toward the crossing — and the bridge, as the
+          // foreground structure, must cover that spill rather than lose to a lot shorter than the deck lift.
+          if (STRUCT_Q) queueStruct(false, -1e6, drawDeck); else drawDeck();
+        }
         break;
       }
+      if (GP!==2){   // static road surface (asphalt, sidewalks, markings, night streetlights) → ground cache
       if (ave){
         // full-width asphalt — tiles butt seamlessly
         if (isShoreCell(x,y)) groundPath(x,y); else diamond(sx,sy);
@@ -12761,7 +12847,7 @@ function makeSave(){
   // player-sculpted terrain: a sparse [vertexIndex, roundedHeight, …] list (omitted if flat)
   let eh=0;
   if (EHAND){ const a=[]; for (let i=0;i<EHAND.length;i++){ const q=Math.round(EHAND[i]); if (q) a.push(i,q); } if (a.length) eh=a; }
-  const data={v:5,g:G,m:Math.round(S.money),tx:S.tax,d:S.day,p:S.pop,c:cells,fd:S.fund,df:S.diff,ms:S.milestone,hs:packHist(),wx:S.weather?1:0,au:settingsSnapshot(),cn:S.cityName,ln:S.loan||0,sc:S.scen||0,po:S.policy||{},tm:terrainMtn,eh};
+  const data={v:5,g:G,m:Math.round(S.money),tx:S.tax,d:S.day,p:S.pop,c:cells,fd:S.fund,df:S.diff,ms:S.milestone,hs:packHist(),wx:S.weather?1:0,au:settingsSnapshot(),cn:S.cityName,ln:S.loan||0,sc:S.scen||0,po:S.policy||{},tm:terrainMtn,eh,ia:Math.round(S.infraAge||0),is:Math.round(S.infraStock||0)};
   return 'TLV5.'+btoa(unescape(encodeURIComponent(JSON.stringify(data))));
 }
 function loadSave(code){
@@ -12837,6 +12923,7 @@ function loadSave(code){
   try{ updateScenChip(); }catch(_){}
   refreshLoanBox();
   S.pop=data.p||0;
+  S.infraAge=data.ia||0; S.infraStock=data.is||0;   // older saves default to a fresh (age 0) stock — generous, never punitive on load
   S.milestone=data.ms||0;
   if (data.wx!==undefined){ S.weather=!!data.wx; SEAS._init=false; updateSeason();
     const wb=document.querySelector('#wxMenuBtn .mlbl'); if (wb) wb.textContent='Weather: '+(S.weather?'On':'Off'); }
@@ -12869,7 +12956,7 @@ function loadSave(code){
     S.tradeNet=B.tradeNet; S.gdp=B.gdp; S.jobs=B.jobs; S.budgetParts=B;
     S.net = S.income - S.roadCost - S.svcCost - S.emitCost - S.adminCost + S.polNet + S.tradeNet - (S.loan?S.loan.pay:0);
   }
-  updateHUD(); fillBudgetWhy();
+  updateHUD(); fillBudgetWhy(); fillBudgetModal();
 }
 const modal=document.getElementById('saveModal'),
       codeBox=document.getElementById('saveCode'),
@@ -13767,7 +13854,7 @@ function closeAnyModal(){
     if (!S.started) document.getElementById('intro').style.display='flex';
     return true;
   }
-  for (const id of ['statsModal','catModal','advModal','saveModal','helpModal']){
+  for (const id of ['statsModal','catModal','advModal','saveModal','helpModal','budgetModal']){
     const m2=document.getElementById(id);
     if (m2 && m2.classList.contains('open')){ m2.classList.remove('open'); closed=true; }
   }
@@ -14342,7 +14429,7 @@ function fillBudgetWhy(){
     + ((B.exportInc && B.exportInc>=0.5)
         ? r(`Exports · ${Math.round(B.exportUnits).toLocaleString()} goods surplus × ${EXPORT_PRICE}`+(B.tradePorts||B.airports?` (${B.tradePorts} port${B.tradePorts===1?'':'s'}${B.airports?` + ${B.airports} air`:''})`:` (overland only — build a seaport)`), '+'+f(B.exportInc).slice(1))
         : '')
-    + `<div style="color:var(--amber);font-family:'Chakra Petch';font-size:10px;letter-spacing:.08em;margin-top:6px">UPKEEP · ×${B.dUp.toFixed(2)} difficulty</div>`
+    + `<div style="color:var(--amber);font-family:'Chakra Petch';font-size:10px;letter-spacing:.08em;margin-top:6px">UPKEEP · ×${B.dUp.toFixed(2)} difficulty${(B.ageMul&&B.ageMul>1.005)?` · ×${B.ageMul.toFixed(2)} ageing (build to renew)`:''}</div>`
     + r(`Roads ${B.roads}×0.95 + avenues ${B.aves}×2.85`+(B.paths?` + paths ${B.paths}×0.18`:'')+(B.busStops?` + stops ${B.busStops}×3`:'')+((B.wearCost&&B.wearCost>=0.5)?` + traffic wear ${f(B.wearCost)}`:''), '−'+f(B.roadCost).slice(1))
     + r(`Services base ${f(B.svcBase)} × funding × 2.6`+((B.svcLoad&&B.svcLoad>1.005)?` × load ${B.svcLoad.toFixed(2)} (pop caseload)`:''), '−'+f(B.svcCost).slice(1))
     + ((B.adminCost && B.adminCost>=0.5) ? r(`Administration · ${Math.max(0,B.pop-ADMIN_FREE).toLocaleString()} over ${ADMIN_FREE.toLocaleString()} × ${ADMIN_RATE}`, '−'+f(B.adminCost).slice(1)) : '')
@@ -14354,15 +14441,69 @@ function fillBudgetWhy(){
     + r(`Net / month`, (S.net>=0?'+':'−')+f(Math.abs(S.net)).slice(1)) + '</div>'
     + (B.gdp ? `<div style="color:#6d8096;font-size:10px;margin-top:5px">GDP ${f(B.gdp)}/yr · ${B.pop>0?f(B.gdp/B.pop):'§0'} per capita · annualised value added — tax takes ≈${B.tax}% of it (not part of the budget)</div>` : '');
 }
+/* the full budget breakdown modal — a richer view of the same numbers fillBudgetWhy summarises,
+   with the upkeep mechanics (ageing, congestion wear, service load) spelled out and a few
+   actionable insights derived from the live budget. kept read-only: it only renders S.budgetParts. */
+function fillBudgetModal(){
+  const el=document.getElementById('bmBody');
+  if (!el || !document.getElementById('budgetModal').classList.contains('open')) return;
+  const B = (S.started && S.budgetParts) ? S.budgetParts : computeBudget();
+  const f=(n)=>'§'+Math.round(n).toLocaleString();
+  const sec=(t)=>`<div class="bmSec">${t}</div>`;
+  const row=(l,v,cls)=>`<div class="bmRow${cls?' '+cls:''}"><span>${l}</span><b>${v}</b></div>`;
+  const loanPay=S.loan?S.loan.pay:0;
+  const ageMul=B.ageMul||1, ageYrs=(S.infraAge||0)/YEAR_DAYS;
+  const ageExtra=ageMul>1 ? (1-1/ageMul)*(B.roadCost+B.svcCost) : 0;   // share of road+svc upkeep due to ageing
+  let h='';
+  // ---- INCOME ----
+  h+=sec('INCOME');
+  h+=row(`Residents · ${B.pop.toLocaleString()} × tax ${B.tax}% × 0.26`, f(B.resTax),'sub');
+  h+=row(`Jobs · ${B.jobs.toLocaleString()} × tax ${B.tax}% × 0.36`, f(B.jobTax),'sub');
+  h+=row(`Difficulty (${B.dName})`, '× '+B.dInc.toFixed(2),'sub');
+  h+=row(`Tax income`, '+'+f((B.resTax+B.jobTax)*B.dInc).slice(1),'pos');
+  if (B.airports) h+=row(`Tourism · ${B.airports} airport${B.airports>1?'s':''}`, '+'+f(B.tourism).slice(1),'pos');
+  if (B.exportInc&&B.exportInc>=0.5) h+=row(`Exports · ${Math.round(B.exportUnits).toLocaleString()} goods surplus × ${EXPORT_PRICE}`+(B.tradePorts||B.airports?` (${B.tradePorts} port${B.tradePorts===1?'':'s'}${B.airports?` + ${B.airports} air`:''})`:` (overland only)`), '+'+f(B.exportInc).slice(1),'pos');
+  // ---- UPKEEP ----
+  h+=sec(`UPKEEP · ×${B.dUp.toFixed(2)} difficulty`);
+  h+=row(`Roads ${B.roads}×0.95 + avenues ${B.aves}×2.85`+(B.paths?` + paths ${B.paths}×0.18`:'')+(B.busStops?` + stops ${B.busStops}×3`:'')+((B.wearCost&&B.wearCost>=0.5)?` + traffic wear ${f(B.wearCost)}`:''), '−'+f(B.roadCost).slice(1),'neg');
+  h+=row(`Services base ${f(B.svcBase)} × funding × 2.6`+((B.svcLoad&&B.svcLoad>1.005)?` × load ${B.svcLoad.toFixed(2)}`:''), '−'+f(B.svcCost).slice(1),'neg');
+  if (B.adminCost&&B.adminCost>=0.5) h+=row(`Administration · ${Math.max(0,B.pop-ADMIN_FREE).toLocaleString()} over ${ADMIN_FREE.toLocaleString()} × ${ADMIN_RATE}`, '−'+f(B.adminCost).slice(1),'neg');
+  if (B.emitCost&&B.emitCost>=0.5) h+=row(`Emissions levy · ${Math.round(B.emit)} smog × ${EMIT_RATE}`+((S.edu||0)>0.02?` (−${Math.round(50*(S.edu||0))}% schooling)`:''), '−'+f(B.emitCost).slice(1),'neg');
+  if (B.importCost&&B.importCost>=0.5) h+=row(`Imports · ${Math.round(B.importUnits).toLocaleString()} goods deficit`+((B.tradePorts||B.airports)?` (gateways cut the bill)`:` (no port — spot premium)`), '−'+f(B.importCost).slice(1),'neg');
+  if (S.loan) h+=row(`Loan payment`, '−'+f(loanPay).slice(1),'neg');
+  if (B.polNet&&Math.abs(B.polNet)>=0.5) h+=row(`Ordinances (tolls − running costs)`, (B.polNet>=0?'+':'−')+f(Math.abs(B.polNet)).slice(1), B.polNet>=0?'pos':'neg');
+  // ---- maintenance & ageing callout ----
+  if (B.infraStock>0){
+    h+=`<div class="bmCallout"><div class="ttl">🛠 Maintenance &amp; ageing</div>`
+      + row(`Average infrastructure age`, ageYrs.toFixed(1)+' yrs','sub')
+      + row(`Ageing multiplier on road + service upkeep`, '× '+ageMul.toFixed(3),'sub')
+      + (ageExtra>=0.5 ? row(`Extra upkeep from ageing`, '−'+f(ageExtra).slice(1),'neg sub') : '')
+      + `<div class="bmNote">Infrastructure costs gently more to maintain as it ages. Building out or replacing tiles renews the city — it lowers the average age and pulls this surcharge back down, so a growing city stays cheap while a frozen one slowly gets pricier.</div></div>`;
+  }
+  // ---- NET ----
+  h+=row(`Net / month`, (S.net>=0?'+':'−')+f(Math.abs(S.net)).slice(1), 'tot '+(S.net>=0?'pos':'neg'));
+  if (B.gdp) h+=`<div class="bmNote" style="margin-top:6px">GDP ${f(B.gdp)}/yr · ${B.pop>0?f(B.gdp/B.pop):'§0'} per capita — annualised value added; tax takes ≈${B.tax}% of it (not part of the budget).</div>`;
+  // ---- insights ----
+  const ins=[];
+  if (S.net<0) ins.push(['⚠️',`The budget runs a deficit of ${f(-S.net)}/mo. Raise taxes, trim service funding, or grow the tax base before the treasury empties.`]);
+  if (ageExtra>=Math.max(20,B.income*0.02)) ins.push(['🛠',`Ageing infrastructure is adding ≈${f(ageExtra)}/mo. Keep developing — fresh construction renews the city and cuts this.`]);
+  if (B.wearCost&&B.wearCost>=Math.max(20,B.roadCost*0.18)) ins.push(['🚦',`Traffic congestion is inflating road upkeep by ${f(B.wearCost)}/mo. Avenues, bus stops and rail spread the load.`]);
+  if (B.svcLoad&&B.svcLoad>1.2) ins.push(['🏛',`Services cover a large population (×${B.svcLoad.toFixed(2)} load). The funding sliders trade coverage for cost.`]);
+  if (B.importCost&&B.importCost>=Math.max(20,B.income*0.02)) ins.push(['🚢',`You're importing ${Math.round(B.importUnits).toLocaleString()} goods/mo${(B.tradePorts||B.airports)?'':' overland at a premium — a seaport moves freight far cheaper'}.`]);
+  if (B.adminCost&&B.adminCost>=Math.max(20,B.income*0.04)) ins.push(['📋',`Administration (${f(B.adminCost)}/mo) is the per-capita civic overhead that scales with population — unavoidable, but it keeps late-game income from running away.`]);
+  if (!ins.length && S.net>=0) ins.push(['✓',`The city clears a healthy ${f(S.net)}/mo. Reinvest the surplus in growth or services before it just piles up.`]);
+  if (ins.length){
+    h+=sec('INSIGHTS');
+    for (const [ic,t] of ins) h+=`<div class="bmInsight"><span class="ic">${ic}</span><span>${t}</span></div>`;
+  }
+  el.innerHTML=h;
+}
 {
   const wb=document.getElementById('whyBtn');
-  if (wb) wb.onclick=()=>{
-    const el=document.getElementById('budgetWhy');
-    const open=el.style.display!=='none';
-    el.style.display=open?'none':'block';
-    wb.textContent='How is this calculated? '+(open?'▾':'▴');
-    if (!open){ if (S.started){ S.budgetParts=computeBudget(); } fillBudgetWhy(); }
-  };
+  const bm=document.getElementById('budgetModal');
+  if (wb) wb.textContent='How is this calculated? →';
+  if (wb) wb.onclick=()=>{ if (S.started){ S.budgetParts=computeBudget(); } bm.classList.add('open'); fillBudgetModal(); };
+  if (bm) bm.onclick=e=>{ if (e.target===bm) bm.classList.remove('open'); };
 }
 function syncGameDiff(){
   const sl=document.getElementById('gameDiff');
@@ -14487,7 +14628,7 @@ function scenFresh(size,diff,seed,name){
   resetTransients();
   undoStack.length=0; redoStack.length=0; updateUndoUI();
   S.money=DIFF[S.diff].money;
-  S.day=0; S.pop=0; S.jobs=0; S.tax=9;
+  S.day=0; S.pop=0; S.jobs=0; S.tax=9; S.infraAge=0; S.infraStock=0;
   S.fund={ police:100, fire:100, school:100, health:100 };
   S.policy={}; renderPolicies();
   S.edu=null; S.health=100;
@@ -14864,7 +15005,7 @@ document.getElementById('mapBegin').onclick=()=>{
   resetTransients();
   undoStack.length=0; redoStack.length=0; updateUndoUI();
   S.money=DIFF[S.diff].money;
-  S.day=0; S.pop=0; S.jobs=0; S.tax=9;
+  S.day=0; S.pop=0; S.jobs=0; S.tax=9; S.infraAge=0; S.infraStock=0;
   S.fund={ police:100, fire:100, school:100, health:100 };
   S.policy={}; renderPolicies();
   S.edu=null; S.health=100;

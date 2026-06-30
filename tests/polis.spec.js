@@ -211,3 +211,54 @@ test('stability: 10 years of ticks produce no NaN/Infinity or thrown errors', as
   expect(stats.happy).toBeGreaterThanOrEqual(0);
   expect(game.errors()).toEqual([]);
 });
+
+test('ageing depreciation: a frozen city pays steadily more upkeep over time', async ({ game }) => {
+  await game.loadExample();
+  // the anti-steady-state brake: physical-asset upkeep rises with the city's average asset age, so
+  // a city that stops growing is never a free money printer. assert (a) a brand-new stock carries NO
+  // surcharge (no regression), (b) the multiplier and the upkeep lines rise with age, (c) it's bounded.
+  const r = await game.eval(() => {
+    S.diff = 1;
+    const at = (age) => { S.infraAge = age; const B = computeBudget(); return { mul: B.ageMul, up: B.roadCost + B.svcCost }; };
+    return { fresh: at(0), decade: at(10 * YEAR_DAYS), century: at(100 * YEAR_DAYS), max: AGE_MAX };
+  });
+  expect(r.fresh.mul).toBeCloseTo(1, 6);                      // age 0 == today's numbers exactly
+  expect(r.decade.mul).toBeGreaterThan(r.fresh.mul);          // ageing compounds the maintenance bill
+  expect(r.decade.up).toBeGreaterThan(r.fresh.up);            // and it lands in the road + service lines
+  expect(r.century.mul).toBeLessThanOrEqual(r.max + 1e-9);    // bounded — gentle, never an absurd runaway
+});
+
+test('ageing is answerable: building out fresh infrastructure dilutes the city age', async ({ game }) => {
+  // the depreciation must be escapable by reinvestment, not a passive bleed: fresh stock built since
+  // last month pulls the average asset age (and thus the surcharge) back down at month end.
+  const r = await game.eval(inPage(`
+    resetGrid();
+    S.money = 1e6; S.diff = 1;
+    hroad(10, 10, 14);                       // a little maintained stock to start
+    S.infraStock = computeBudget().infraStock;
+    S.infraAge = 50 * YEAR_DAYS;             // pretend it's a very old city
+    const before = S.infraAge;
+    hroad(20, 10, 30);                       // a big build-out of brand-new road
+    S.day = 29; simTick();                   // cross a month boundary so the dilution bookkeeping runs
+    return { before, after: S.infraAge, ranMonthEnd: S.day % 30 === 0 };
+  `));
+  expect(r.ranMonthEnd).toBe(true);
+  expect(r.after).toBeLessThan(r.before);    // renewing/expanding the city makes it younger and cheaper
+});
+
+test('budget breakdown modal opens and renders the live numbers', async ({ game }) => {
+  await game.loadExample();
+  const r = await game.eval(() => {
+    S.started = true;
+    document.getElementById('whyBtn').click();      // repurposed: now opens the full modal
+    const open = document.getElementById('budgetModal').classList.contains('open');
+    const html = document.getElementById('bmBody').innerHTML;
+    return { open, html, len: html.length };
+  });
+  expect(r.open).toBe(true);
+  expect(r.html).toContain('INCOME');
+  expect(r.html).toContain('UPKEEP');
+  expect(r.html).toContain('Net / month');
+  expect(r.len).toBeGreaterThan(200);
+  expect(game.errors()).toEqual([]);
+});
