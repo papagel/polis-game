@@ -1689,6 +1689,11 @@ const ZONE = { res:1, com:1, ind:1 };
 const SVC  = { power:1, park:1, police:1, fire:1, school:1, hospital:1, pump:1, tower:1, garden:1, pool:1, stadium:1, solar:1, nuclear:1, fusion:1, highschool:1, university:1, clinic:1, medcenter:1, playground:1, plaza:1, arena:1, cityhall:1, monument:1, botanic:1, museum:1, titan:1, airport:1, spaceport:1, landfill:1, recycling:1, incinerator:1, zoo:1, church:1, port:1 };
 const ROADTYPE = { road:1, avenue:1 };
 const WALKTYPE = { road:1, avenue:1, path:1 };
+/* ground-level built tiles low enough to coexist with elevated rail: it can be
+   laid over them, and (the mirror) they can be laid back under existing track —
+   roads/paths + the short park/leisure family. Natural ground (grass/tree/water)
+   coexists too but is handled by the terrain brushes. */
+const RAILSPAN = { road:1, avenue:1, path:1, park:1, playground:1, plaza:1, garden:1, pool:1 };
 function isWalk(x,y){ return inB(x,y) && WALKTYPE[map[y][x].t]; }
 let traffic = new Float32Array(G * G);
 const ROAD_CAP = { road: 40, avenue: 120 };
@@ -2531,8 +2536,8 @@ function place(x, y, quiet){
     // a lone tap toggles track off; a drag only ever lays track, skipping tiles that already have it
     if (c.rail){ if (quiet) return false; c.rail=false; dirty=true; recomputeFields(); msg('Rail track removed.'); return true; }
     const ok = !c.grp && !c.part && !c.bridge &&
-      (c.t==='grass'||c.t==='tree'||c.t==='water'||c.t==='park'||c.t==='garden'||ROADTYPE[c.t]);
-    if (!ok){ if(!quiet) msg('<b>Elevated rail</b> runs on pylons over open ground, roads, parks, water and bus stops — not over buildings or bridges.'); return false; }
+      (c.t==='grass'||c.t==='tree'||c.t==='water'||RAILSPAN[c.t]);
+    if (!ok){ if(!quiet) msg('<b>Elevated rail</b> runs on pylons over open ground, roads, paths, parks, water and bus stops — not over buildings or bridges.'); return false; }
     if (S.money < def.c){ if(!quiet) msg('<b>Not enough funds.</b>'); return false; }
     S.money -= def.c; c.rail=true; dirty=true; recomputeFields(); updateHUD();
     return true;
@@ -2640,6 +2645,15 @@ function place(x, y, quiet){
     c.t=t; c.dev=Math.min(c.dev, 20); c.rz=null;
     dirty=true; recomputeNets(); recomputeFields();
     if (!quiet) firstZoneHint(x,y);
+    return true;
+  }
+  // elevated rail runs on pylons, so any low ground-level tile can pass beneath it —
+  // the mirror of laying rail over a road/park (which is already allowed above)
+  if (RAILSPAN[t] && c.rail && (c.t==='grass'||c.t==='tree')){
+    if (S.money < def.c){ if(!quiet) msg('<b>Not enough funds</b> — ' + def.n + ' costs ' + fmt(def.c) + '.'); return 'nofunds'; }
+    S.money -= def.c;
+    c.t=t; c.lv=0; c.dev=0; c.fire=0;
+    dirty=true; recomputeNets(); recomputeFields(); updateHUD();
     return true;
   }
   if (!buildClear(c)){ if(!quiet) msg('Bulldoze first to build here.'); return false; }
@@ -3476,9 +3490,10 @@ function stepCars(dt){
   let tries=0;
   while (cars.length < want && roads.length>1 && tries++<60){
     const [x,y]=pickRoad();
-    // never spawn on top of (or right beside) an existing vehicle
+    // never spawn on top of (or right beside) an existing vehicle — including a service engine
     let clash=false;
     for (const o of cars){ if (Math.abs((o.fx!==undefined?o.fx:o.x)-x)+Math.abs((o.fy!==undefined?o.fy:o.y)-y)<0.9){ clash=true; break; } }
+    if (!clash) for (const o of svc){ if (Math.abs((o.fx!==undefined?o.fx:o.x)-x)+Math.abs((o.fy!==undefined?o.fy:o.y)-y)<0.9){ clash=true; break; } }
     if (clash) continue;
     const r=Math.random();
     let kind='car';
@@ -3499,6 +3514,9 @@ function stepCars(dt){
     let hx=car.x-car.px, hy=car.y-car.py;
     const hl=Math.hypot(hx,hy)||1; car.hx=hx/hl; car.hy=hy/hl;
   }
+  // service engines (firetrucks/police/garbage) are real vehicles too: fold them into the
+  // car-following scan so ordinary traffic yields to them instead of driving through them.
+  const obstacles = svc.length ? cars.concat(svc) : cars;
   for (const car of cars){
     const jam = clamp(congestion(car.x,car.y), 0, 2.2);
     const slow = 1/(1+jam*1.4);          // cars crawl on jammed streets
@@ -3509,8 +3527,8 @@ function stepCars(dt){
     const patience = car.wait||0;
     let follow=1;
     let lead=Infinity, leadBump=0;          // nearest in-lane leader: bumpers may touch but never cross
-    for (const o of cars){
-      if (o===car) continue;
+    for (const o of obstacles){
+      if (o===car || o.fx===undefined) continue;
       const dot=o.hx*car.hx+o.hy*car.hy;
       const dx2=o.fx-car.fx, dy2=o.fy-car.fy;
       const ahead=dx2*car.hx+dy2*car.hy;
@@ -3565,7 +3583,7 @@ function stepCars(dt){
       if (!opts.length){ car.lx=undefined; car.ly=undefined; car.stuck=(car.stuck|0)+1; continue; }
       // prefer a tile no other car is already sitting on/heading to (cuts the junction "two cars
       // stack on one square" overlap); fall back to any road so a boxed-in car can still dissolve
-      const free=opts.filter(([nx,ny])=>{ for (const o of cars){ if (o!==car && o.x===nx && o.y===ny) return false; } return true; });
+      const free=opts.filter(([nx,ny])=>{ for (const o of cars){ if (o!==car && o.x===nx && o.y===ny) return false; } for (const o of svc){ if (o.x===nx && o.y===ny) return false; } return true; });
       const pool=free.length?free:opts;
       const [nx,ny]=pool[Math.random()*pool.length|0];
       car.lx=car.x; car.ly=car.y; car.x=nx; car.y=ny;
@@ -4077,6 +4095,10 @@ function fireRetarget(v){
 function stepSvc(dt){
   svcSpawnTick();
   const spd=speedMul();
+  // mutual awareness with ordinary traffic: engines have right of way (cars yield to them in
+  // stepCars), but must still keep a bumper gap behind the vehicle directly ahead — cars or
+  // another engine — instead of driving through it.
+  const obstacles = cars.length ? svc.concat(cars) : svc;
   for (let i=svc.length-1;i>=0;i--){
     const v=svc[i];
     v.fx=v.px+(v.x-v.px)*v.t; v.fy=v.py+(v.y-v.py)*v.t;
@@ -4113,7 +4135,28 @@ function stepSvc(dt){
     if (v.svc==='fire' && v.state==='go' && v.tgt && map[v.tgt[1]][v.tgt[0]].fire<=0){
       v.state='return'; v.field=svcField(svcRoadsAround(v.home[0],v.home[1])); v.lx=undefined;
     }
-    v.t += dt * v.sp * spd * 0.9;
+    // same-lane car-following: ease off (down to a stop) behind the leader; never cross bumpers.
+    let follow=1, lead=Infinity, leadBump=0;
+    for (const o of obstacles){
+      if (o===v || o.fx===undefined) continue;
+      const dot=o.hx*v.hx+o.hy*v.hy;
+      if (dot<=0.5) continue;                            // only a leader in our lane matters
+      const dx2=o.fx-v.fx, dy2=o.fy-v.fy;
+      const ahead=dx2*v.hx+dy2*v.hy;
+      if (ahead<=0.01 || ahead>1.2) continue;
+      if (Math.abs(dy2*v.hx-dx2*v.hy)>0.16) continue;    // a different lane — free to pass
+      const bump=(CAR_HL[v.kind]||0.23)+(CAR_HL[o.kind]||0.23);
+      const gap=bump+0.10;
+      if (ahead<gap) follow=Math.min(follow, Math.max(0,(ahead-gap*0.55)/(gap*0.45)));
+      if (ahead<lead){ lead=ahead; leadBump=bump+0.09; }
+    }
+    // patience creep: a queued engine must never wedge short of a blaze, so after a stuck spell
+    // it stops yielding and pushes through (same trick the ordinary cars use).
+    if ((v.qwait||0)>12) follow=Math.max(follow,0.30);
+    let inc = dt * v.sp * spd * 0.9 * follow;
+    if ((v.qwait||0)<=12 && lead<Infinity) inc=Math.min(inc, Math.max(0, lead-leadBump));
+    v.t += inc;
+    if (follow<0.5) v.qwait=(v.qwait||0)+dt; else v.qwait=Math.max(0,(v.qwait||0)-dt*2.5);
     if (v.t>=1){
       v.t=0; v.px=v.x; v.py=v.y;
       const atSeed = v.field && v.field[idx(v.x,v.y)]===0;
@@ -4334,13 +4377,18 @@ let lastBoxShadow={x:NaN,y:NaN,w:0};
 function box(sx,sy,s,hp,col,opts={}){
   if(BLD_TINT){ col=tintHex(col); if(opts.roof) opts={...opts,roof:tintHex(opts.roof)}; }
   const z=S.zoom, w=TW/2*s*z, h=TH/2*s*z, cxp=sx, cyp=sy+TH/2*z, H=hp*z;
+  // Dark accents (silhouette outline, base ambient occlusion, ground shadow) fade out toward survey
+  // zoom: on a few-px footprint a floored dark line muddies the whole mass (and bloats when the far-zoom
+  // bake re-projects — see avenue markings). 1 at normal/close zoom, 0 by the min-zoom floor, so the
+  // zoomed-out city reads as crisp lit massing instead of a black wash. Untouched at z≥0.42.
+  const edge=Math.min(1,Math.max(0,(z-0.20)/0.22));
   // soft ground shadow, scaled by building height. wedding-cake towers stack several boxes on the
   // same ground point (widest base first); skip the inner setbacks' shadows so they don't nest into
   // a double-ellipse crescent — the base footprint already grounds the whole mass.
   if (H>4*z && !opts.noShadow){
     const nested = Math.abs(cxp-lastBoxShadow.x)<0.5 && Math.abs(cyp-lastBoxShadow.y)<0.5 && w<=lastBoxShadow.w+0.01;
     if (!nested){
-      cx.fillStyle=`rgba(10,16,28,${Math.min(.30, .12+hp*.004)})`;
+      cx.fillStyle=`rgba(10,16,28,${Math.min(.30, .12+hp*.004)*edge})`;
       cx.beginPath();
       cx.ellipse(cxp+w*0.30, cyp+h*0.18, w*1.02, h*0.85, 0, 0, 7);
       cx.fill();
@@ -4357,10 +4405,10 @@ function box(sx,sy,s,hp,col,opts={}){
   // base ambient occlusion — walls darken toward the ground
   if (H>6*z){
     // flat two-step ambient occlusion: visually close to the old gradient, no per-frame allocation
-    cx.fillStyle='rgba(8,12,20,.12)';
+    cx.fillStyle=`rgba(8,12,20,${.12*edge})`;
     cx.beginPath(); cx.moveTo(L[0],L[1]+H*0.5); cx.lineTo(B[0],B[1]+H*0.5); cx.lineTo(R[0],R[1]+H*0.5);
     cx.lineTo(R[0],R[1]+H); cx.lineTo(B[0],B[1]+H); cx.lineTo(L[0],L[1]+H); cx.closePath(); cx.fill();
-    cx.fillStyle='rgba(8,12,20,.14)';
+    cx.fillStyle=`rgba(8,12,20,${.14*edge})`;
     cx.beginPath(); cx.moveTo(L[0],L[1]+H*0.78); cx.lineTo(B[0],B[1]+H*0.78); cx.lineTo(R[0],R[1]+H*0.78);
     cx.lineTo(R[0],R[1]+H); cx.lineTo(B[0],B[1]+H); cx.lineTo(L[0],L[1]+H); cx.closePath(); cx.fill();
   }
@@ -4370,9 +4418,13 @@ function box(sx,sy,s,hp,col,opts={}){
   // sunlit roof edge + crisp silhouette
   cx.strokeStyle='rgba(255,244,220,.30)'; cx.lineWidth=Math.max(.7,.9*z);
   cx.beginPath(); cx.moveTo(L[0],L[1]); cx.lineTo(T[0],T[1]); cx.lineTo(R[0],R[1]); cx.stroke();
-  cx.strokeStyle='rgba(10,16,26,.30)';
-  cx.beginPath(); cx.moveTo(L[0],L[1]); cx.lineTo(B[0],B[1]); cx.lineTo(R[0],R[1]); cx.stroke();
-  if (opts.line){ cx.strokeStyle='rgba(0,0,0,.18)'; cx.lineWidth=1; cx.stroke(); }
+  // dark grounding silhouette + optional hard outline: faded toward survey zoom (see `edge`) so they
+  // don't smear a tiny footprint black. The light roof edge above stays to keep massing crisp.
+  if (edge>0.01){
+    cx.beginPath(); cx.moveTo(L[0],L[1]); cx.lineTo(B[0],B[1]); cx.lineTo(R[0],R[1]);
+    cx.strokeStyle=`rgba(10,16,26,${.30*edge})`; cx.lineWidth=Math.max(.7,.9*z); cx.stroke();
+    if (opts.line){ cx.strokeStyle=`rgba(0,0,0,${.18*edge})`; cx.lineWidth=Math.max(.7,.9*z); cx.stroke(); }
+  }
   return {T,R,B,L,H,w,h};
 }
 /* draw one window as a parallelogram lying in the wall plane:

@@ -60,6 +60,39 @@ test('save round-trips a tower + stacked road overlays (bitmask payload)', async
   expect(res.tunnel).toBe(true);
 });
 
+test('rail and ground paving stack either way (elevated track over road, road under track)', async ({ game }) => {
+  // Elevated rail rides on pylons, so ground-level paving must coexist with it
+  // regardless of placement order. The old asymmetry let you lay rail over a
+  // road but refused a road under existing rail (buildClear vetoed c.rail).
+  const res = await game.eval(inPage(`
+    resetGrid();
+    S.money = 1e6;
+    // (a) rail laid over existing ground tiles it should span: a road and a park
+    set(5, 5, 'road'); set(8, 8, 'park');
+    S.tool = 'rail'; place(5, 5, true); place(8, 8, true);
+    // (b) the mirror — those tiles laid back under existing rail (on open ground)
+    const under = {};
+    for (const [x, t] of [[7,'road'],[9,'park'],[11,'garden'],[13,'path'],[15,'pool']]){
+      map[20][x].rail = true;            // rail sitting on open ground at (x, 20)
+      S.tool = t; place(x, 20, true);
+      under[t] = { rail: map[20][x].rail, t: map[20][x].t };
+    }
+    return {
+      railOverRoad: { rail: map[5][5].rail, t: map[5][5].t },
+      railOverPark: { rail: map[8][8].rail, t: map[8][8].t },
+      under,
+    };
+  `));
+  expect(res.railOverRoad).toEqual({ rail: true, t: 'road' });
+  expect(res.railOverPark).toEqual({ rail: true, t: 'park' });
+  // every spannable ground tile lays back under existing rail, keeping the track
+  expect(res.under.road).toEqual({ rail: true, t: 'road' });
+  expect(res.under.park).toEqual({ rail: true, t: 'park' });
+  expect(res.under.garden).toEqual({ rail: true, t: 'garden' });
+  expect(res.under.path).toEqual({ rail: true, t: 'path' });
+  expect(res.under.pool).toEqual({ rail: true, t: 'pool' });
+});
+
 test('budget accounting identity holds', async ({ game }) => {
   await game.loadExample();
   const ok = await game.eval(() => {
