@@ -2866,6 +2866,11 @@ const ADMIN_FREE=500, ADMIN_RATE=1.6;
    simTick), pulling the surcharge back down, so a city that keeps growing/renewing stays cheap.
    gentle slope (~AGE_RATE/yr); AGE_MAX only bounds the absurd (≈a century frozen), not real play. */
 const AGE_RATE=0.02, AGE_MAX=3.0;
+/* maturity anchoring: pre-feature saves are seeded at AGE_SEED_FRAC of their calendar age (a city
+   built gradually has younger-than-calendar *average* infrastructure), and renewal can never pull the
+   tracked age below AGE_FLOOR_FRAC of the city's real age — so an old city always reads (and pays) as
+   old, while a city that keeps building stays nearer that floor. keeps "0 yrs at year 11" from happening. */
+const AGE_SEED_FRAC=0.5, AGE_FLOOR_FRAC=0.25;
 /* ---------- goods & trade ----------
    Industry manufactures goods; homes and shops consume them. A net SURPLUS is
    exported for income, a net DEFICIT must be imported at a cost — but only as
@@ -3327,6 +3332,7 @@ function simTick(){
     // so renewing/expanding the city pulls the ageing surcharge back down (a shrinking stock — pure
     // demolition — is treated as removed at the average, leaving the age unchanged).
     if (S.infraStock>0 && B.infraStock>S.infraStock) S.infraAge *= S.infraStock / B.infraStock;
+    S.infraAge = Math.max(S.infraAge, S.day * AGE_FLOOR_FRAC);   // renewal slows ageing but can't make an old city read as new
     S.infraStock = B.infraStock;
     S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.adminCost=B.adminCost; S.polNet=B.polNet;
     S.tradeNet=B.tradeNet; S.gdp=B.gdp;
@@ -12923,7 +12929,10 @@ function loadSave(code){
   try{ updateScenChip(); }catch(_){}
   refreshLoanBox();
   S.pop=data.p||0;
-  S.infraAge=data.ia||0; S.infraStock=data.is||0;   // older saves default to a fresh (age 0) stock — generous, never punitive on load
+  // a save from before this feature has no `ia`: seed the age from the city's maturity so an
+  // established city doesn't load as brand-new (and the depreciation actually engages).
+  S.infraAge = (data.ia!=null) ? data.ia : Math.round((S.day||0)*AGE_SEED_FRAC);
+  S.infraStock = data.is||0;
   S.milestone=data.ms||0;
   if (data.wx!==undefined){ S.weather=!!data.wx; SEAS._init=false; updateSeason();
     const wb=document.querySelector('#wxMenuBtn .mlbl'); if (wb) wb.textContent='Weather: '+(S.weather?'On':'Off'); }
@@ -14475,7 +14484,7 @@ function fillBudgetModal(){
   // ---- maintenance & ageing callout ----
   if (B.infraStock>0){
     h+=`<div class="bmCallout"><div class="ttl">🛠 Maintenance &amp; ageing</div>`
-      + row(`Average infrastructure age`, ageYrs.toFixed(1)+' yrs','sub')
+      + row(`Average infrastructure age`, ageYrs.toFixed(1)+' yrs'+(S.day>0?` <span style="color:#6d8096">· city is ${(S.day/YEAR_DAYS).toFixed(1)} yrs</span>`:''),'sub')
       + row(`Ageing multiplier on road + service upkeep`, '× '+ageMul.toFixed(3),'sub')
       + (ageExtra>=0.5 ? row(`Extra upkeep from ageing`, '−'+f(ageExtra).slice(1),'neg sub') : '')
       + `<div class="bmNote">Infrastructure costs gently more to maintain as it ages. Building out or replacing tiles renews the city — it lowers the average age and pulls this surcharge back down, so a growing city stays cheap while a frozen one slowly gets pricier.</div></div>`;

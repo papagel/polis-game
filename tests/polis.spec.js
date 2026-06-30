@@ -246,6 +246,39 @@ test('ageing is answerable: building out fresh infrastructure dilutes the city a
   expect(r.after).toBeLessThan(r.before);    // renewing/expanding the city makes it younger and cheaper
 });
 
+test('infrastructure age is seeded from city maturity on load (no hard zero for established cities)', async ({ game }) => {
+  // a save made before this feature has no `ia` field. it must not load as brand-new infrastructure
+  // (which would show "0 yrs" on an old city and leave the depreciation brake disengaged); instead the
+  // age is seeded from the city's calendar age, younger than it (renewal over the city's life) but > 0.
+  const r = await game.eval(() => {
+    loadSave(EXAMPLE_CITY);                 // an early TLV5 string with no `ia`
+    return { day: S.day, age: S.infraAge, mul: computeBudget().ageMul };
+  });
+  expect(r.day).toBeGreaterThan(0);
+  expect(r.age).toBeGreaterThan(0);          // not stuck at zero
+  expect(r.age).toBeLessThan(r.day);         // but younger than the calendar age (it kept renewing)
+  expect(r.mul).toBeGreaterThan(1);          // so an established city actually carries a surcharge
+});
+
+test('renewal floor: building cannot make an old city read as brand-new', async ({ game }) => {
+  // the dilution from build-out is bounded: a heavy expansion slows ageing but can't pull the tracked
+  // age below a fraction of the city's real age, so an old city always reads (and pays) as old.
+  const r = await game.eval(inPage(`
+    resetGrid();
+    S.money = 1e6; S.diff = 1;
+    hroad(10, 10, 14);
+    S.infraStock = computeBudget().infraStock;
+    S.day = 20 * YEAR_DAYS - 1;                 // simTick increments first, so land exactly on a 30-day boundary
+    while ((S.day + 1) % 30 !== 0) S.day++;
+    S.infraAge = 15 * YEAR_DAYS;
+    hroad(20, 10, 38);                          // a huge build-out that would otherwise dilute the age toward zero
+    simTick();                                  // day -> multiple of 30, month-end dilution + floor run
+    return { age: S.infraAge, floor: S.day * 0.25, day: S.day };
+  `));
+  expect(r.day % 30).toBe(0);                              // we actually hit a month end
+  expect(r.age).toBeGreaterThanOrEqual(r.floor - 1e-6);   // the floor held despite the build-out
+});
+
 test('budget breakdown modal opens and renders the live numbers', async ({ game }) => {
   await game.loadExample();
   const r = await game.eval(() => {
