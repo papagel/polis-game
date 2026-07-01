@@ -823,8 +823,7 @@
   <div class="row" id="bLoanRow" style="display:none"><span>Loan payment</span><span id="bLoan">§0</span></div>
   <div class="row" id="bPolRow" style="display:none"><span>Ordinances</span><span id="bPol">§0</span></div>
   <div class="row" style="border-top:1px solid var(--line);margin-top:4px;padding-top:6px"><span>Net / month</span><span id="bNet">§0</span></div>
-  <button id="whyBtn" style="background:none;border:none;color:#6d8096;font-size:11px;cursor:pointer;padding:4px 0;text-align:left;font-family:'Inter'">How is this calculated? ▾</button>
-  <div id="budgetWhy" style="display:none;font-size:11px;line-height:1.55;color:#aeb8c2;background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:2px 0 6px"></div>
+  <button id="whyBtn" style="background:none;border:none;color:#6d8096;font-size:11px;cursor:pointer;padding:4px 0;text-align:left;font-family:'Inter'">How is this calculated? →</button>
   <div class="row" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><span>📈 GDP / yr</span><span id="bGdp">§0</span></div>
   <div class="row"><span>⚡ Power</span><span id="bPower">0 / 0 MW</span></div>
   <div class="row"><span>💧 Water</span><span id="bWater">0 / 0 kL</span></div>
@@ -2991,7 +2990,7 @@ function projectBudget(){
   S.budgetParts=B;
   S.net = S.income - S.roadCost - S.svcCost - S.emitCost - S.adminCost + S.polNet + S.tradeNet - (S.loan?S.loan.pay:0);
   updateHUD();
-  fillBudgetWhy(); fillBudgetModal();
+  fillBudgetModal();
 }
 /* ---------- fire risk ----------
    Per-type daily ignition odds for a powered lot: a factory is full of fuel and
@@ -12965,7 +12964,7 @@ function loadSave(code){
     S.tradeNet=B.tradeNet; S.gdp=B.gdp; S.jobs=B.jobs; S.budgetParts=B;
     S.net = S.income - S.roadCost - S.svcCost - S.emitCost - S.adminCost + S.polNet + S.tradeNet - (S.loan?S.loan.pay:0);
   }
-  updateHUD(); fillBudgetWhy(); fillBudgetModal();
+  updateHUD(); fillBudgetModal();
 }
 const modal=document.getElementById('saveModal'),
       codeBox=document.getElementById('saveCode'),
@@ -14422,37 +14421,9 @@ diffSlider.oninput=(e)=>{
   syncGameDiff();
 };
 /* mid-game difficulty: takes effect from the next month — income, upkeep, growth, fire & crime */
-function fillBudgetWhy(){
-  const el=document.getElementById('budgetWhy');
-  if (!el || el.style.display==='none') return;
-  const B=S.budgetParts || computeBudget();
-  const r=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:10px"><span>${l}</span><b style="white-space:nowrap">${v}</b></div>`;
-  const f=(n)=>'§'+Math.round(n).toLocaleString();
-  el.innerHTML =
-    `<div style="color:var(--amber);font-family:'Chakra Petch';font-size:10px;letter-spacing:.08em">INCOME</div>`
-    + r(`Residents ${B.pop.toLocaleString()} × tax ${B.tax} × 0.26`, f(B.resTax))
-    + r(`Jobs ${B.jobs.toLocaleString()} × tax ${B.tax} × 0.36`, f(B.jobTax))
-    + r(`Difficulty (${B.dName})`, '× '+B.dInc.toFixed(2))
-    + r(`= Tax income`, f((B.resTax+B.jobTax)*B.dInc))
-    + (B.airports ? r(`Tourism · ${B.airports} airport${B.airports>1?'s':''} (after difficulty)`, '+'+f(B.tourism).slice(1)) : '')
-    + ((B.exportInc && B.exportInc>=0.5)
-        ? r(`Exports · ${Math.round(B.exportUnits).toLocaleString()} goods surplus × ${EXPORT_PRICE}`+(B.tradePorts||B.airports?` (${B.tradePorts} port${B.tradePorts===1?'':'s'}${B.airports?` + ${B.airports} air`:''})`:` (overland only — build a seaport)`), '+'+f(B.exportInc).slice(1))
-        : '')
-    + `<div style="color:var(--amber);font-family:'Chakra Petch';font-size:10px;letter-spacing:.08em;margin-top:6px">UPKEEP · ×${B.dUp.toFixed(2)} difficulty${(B.ageMul&&B.ageMul>1.005)?` · ×${B.ageMul.toFixed(2)} ageing (build to renew)`:''}</div>`
-    + r(`Roads ${B.roads}×0.95 + avenues ${B.aves}×2.85`+(B.paths?` + paths ${B.paths}×0.18`:'')+(B.busStops?` + stops ${B.busStops}×3`:'')+((B.wearCost&&B.wearCost>=0.5)?` + traffic wear ${f(B.wearCost)}`:''), '−'+f(B.roadCost).slice(1))
-    + r(`Services base ${f(B.svcBase)} × funding × 2.6`+((B.svcLoad&&B.svcLoad>1.005)?` × load ${B.svcLoad.toFixed(2)} (pop caseload)`:''), '−'+f(B.svcCost).slice(1))
-    + ((B.adminCost && B.adminCost>=0.5) ? r(`Administration · ${Math.max(0,B.pop-ADMIN_FREE).toLocaleString()} over ${ADMIN_FREE.toLocaleString()} × ${ADMIN_RATE}`, '−'+f(B.adminCost).slice(1)) : '')
-    + ((B.emitCost && B.emitCost>=0.5) ? r(`Emissions levy · ${Math.round(B.emit)} smog × ${EMIT_RATE}`+((S.edu||0)>0.02?` <span style="color:#5fe08a">(−${Math.round(50*(S.edu||0))}% schooling)</span>`:''), '−'+f(B.emitCost).slice(1)) : '')
-    + ((B.importCost && B.importCost>=0.5) ? r(`Imports · ${Math.round(B.importUnits).toLocaleString()} goods deficit`+((B.tradePorts||B.airports)?` (gateways cut the bill)`:` (no port — overland spot premium)`), '−'+f(B.importCost).slice(1)) : '')
-    + (S.loan ? r(`Loan payment`, '−'+f(S.loan.pay).slice(1)) : '')
-    + ((B.polNet && Math.abs(B.polNet)>=0.5) ? r(`Ordinances (tolls − running costs)`, (B.polNet>=0?'+':'−')+f(Math.abs(B.polNet)).slice(1)) : '')
-    + `<div style="border-top:1px solid var(--line);margin-top:5px;padding-top:4px">`
-    + r(`Net / month`, (S.net>=0?'+':'−')+f(Math.abs(S.net)).slice(1)) + '</div>'
-    + (B.gdp ? `<div style="color:#6d8096;font-size:10px;margin-top:5px">GDP ${f(B.gdp)}/yr · ${B.pop>0?f(B.gdp/B.pop):'§0'} per capita · annualised value added — tax takes ≈${B.tax}% of it (not part of the budget)</div>` : '');
-}
-/* the full budget breakdown modal — a richer view of the same numbers fillBudgetWhy summarises,
-   with the upkeep mechanics (ageing, congestion wear, service load) spelled out and a few
-   actionable insights derived from the live budget. kept read-only: it only renders S.budgetParts. */
+/* the full budget breakdown modal — income, upkeep and the upkeep mechanics (ageing, congestion wear,
+   service load) spelled out, plus a few actionable insights derived from the live budget. opened from
+   the budget panel's "How is this calculated?" button. kept read-only: it only renders S.budgetParts. */
 function fillBudgetModal(){
   const el=document.getElementById('bmBody');
   if (!el || !document.getElementById('budgetModal').classList.contains('open')) return;
