@@ -46,8 +46,11 @@ four neighbors into a 2×2 **tower** (`grp`/`part`), which can rise to
 skyscraper / highrise / megatower. Unpowered/unwanted lots decay and
 downgrade; `unmerge()` breaks towers back down (or to `rubble` after fire).
 
-`CAP` (~2741) = population/jobs per type per level. `D = S.demand` is recomputed
-from the jobs↔pop↔commerce↔industry balance minus a tax drag. A
+`CAP` (~2745) = population/jobs per type per level; the level-up gates and
+promotion odds live in the **`GROWTH`** table beside it. `D = S.demand` is
+recomputed from the jobs↔pop↔commerce↔industry balance minus a tax drag
+(coefficients in **`DEMAND`**); happiness weights live in **`MOOD`** and the
+`S.happyParts` breakdown sums to the mood target by construction. A
 **demographics layer** (child/work/senior cohorts eased by health, education
 and happiness) sets `S.labor`, which feeds back into demand.
 
@@ -103,7 +106,8 @@ road net into landfills/recycling/incinerators, landfills fill up.
   geometry (`box`/`vol`/`cyl`/`windows`/`gable`). Day/night (`duskAmt`),
   weather (`WX`, `drawPrecip`), and seasons (`SEAS`/`updateSeason`) modulate it.
 - **Render caches** (don't bypass them): a baked ground plane (`PERF.gnd`),
-  LRU sprite caches for res lots and towers, and a whole-world snapshot
+  LRU sprite caches for zoned single lots (`VARN`/`blitLot`; `SPR_LIVE` lists
+  the variants that must stay live) and 2×2 towers, and a whole-world snapshot
   (`bakeWorld`) used at far zoom / mid-gesture on heavy maps.
 
 ## Other systems

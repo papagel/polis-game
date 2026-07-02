@@ -1438,6 +1438,17 @@ const WSRC  = { pump:{cap:600,r:5}, tower:{cap:240,r:3} };
 const WSTSRC = { landfill:{cap:1600,pol:10,polR:4}, recycling:{cap:3000,pol:2,polR:2}, incinerator:{cap:4200,pol:6,polR:3} };
 /* leisure buildings raise land value over their own radius — bigger venues reach further */
 const LEIS = { park:[3,7], playground:[3,8.5], garden:[4,13], pool:[4,10], plaza:[4,10], stadium:[6,12], arena:[6,12.5], cityhall:[6,14], monument:[7,16], botanic:[8,15], museum:[8,17], titan:[9,20], airport:[5,8], spaceport:[8,18], zoo:[8,16], church:[6,12], port:[5,9] };
+/* coverage services: f = the cover field it paints, k = the funding slider that scales it,
+   r/s = radius/strength multipliers on that slider's base. The ONE source of truth shared by
+   recomputeFields (the splat), svcCoverR (the placement-preview ring) and computeBudget (the
+   funding-key lookup) — previously three hand-mirrored copies that could drift apart. */
+const SVC_COVER = {
+  police:{f:'police',k:'police',r:1,s:1}, fire:{f:'fire',k:'fire',r:1,s:1},
+  school:{f:'school',k:'school',r:0.8,s:1}, highschool:{f:'school',k:'school',r:1,s:1.3}, university:{f:'school',k:'school',r:1.4,s:1.7},
+  clinic:{f:'health',k:'health',r:0.6,s:1}, hospital:{f:'health',k:'health',r:1,s:1}, medcenter:{f:'health',k:'health',r:1.3,s:1.6}
+};
+/* base coverage radius for a funding slider at its current setting */
+function svcFundR(k){ return Math.max(2, Math.round(10*Math.sqrt(S.fund[k]/100))); }
 function powerNeed(c){
   if (ZONE[c.t]) return c.part?0 : [0,3,6,12,30,55,95,150][c.lv]||0;
   if (SVC[c.t] && !PLANT[c.t] && !WSRC[c.t]) return 5;
@@ -1969,7 +1980,8 @@ function recomputeWaste(){
   }
   S.wasteUse=use;
 }
-function recomputeNets(){ recomputePower(); recomputeWater(); recomputeWaste(); shoreDirty=true; }
+let NET_DEFER=false, NET_PENDING=false;   // commitPending coalesces per-tile net rebuilds across a drag into one pass
+function recomputeNets(){ if (NET_DEFER){ NET_PENDING=true; return; } recomputePower(); recomputeWater(); recomputeWaste(); shoreDirty=true; }
 function splat(arr, x, y, r, amt){
   for (let dy=-r;dy<=r;dy++) for (let dx=-r;dx<=r;dx++){
     const nx=x+dx, ny=y+dy; if(!inB(nx,ny)) continue;
@@ -1996,17 +2008,9 @@ function recomputeFields(){
     if (WSTSRC[c.t] && !c.part) splat(pollution,x,y, WSTSRC[c.t].polR, WSTSRC[c.t].pol);
     // bins nobody empties rot in the street — only a concern once the city is past a village
     if (ZONE[c.t] && c.lv>0 && !c.part && !c.ws && S.pop>300) splat(pollution,x,y,3, 5+c.lv*2);
-    const fr=(k)=>Math.max(2, Math.round(10*Math.sqrt(S.fund[k]/100)));
-    const fs=(k)=>S.fund[k]/100;
     const fcx=x+((c.fw||1)-1>>1), fcy=y+((c.fh||1)-1>>1);   // footprint centre; parts splat nothing
-    if (c.t==='police' && !c.part) splat(cover.police,fcx,fcy,fr('police'),fs('police'));
-    if (c.t==='fire' && !c.part)   splat(cover.fire,  fcx,fcy,fr('fire'),fs('fire'));
-    if (c.t==='school' && !c.part)     splat(cover.school,fcx,fcy,Math.round(fr('school')*0.8),fs('school'));
-    if (c.t==='highschool' && !c.part) splat(cover.school,fcx,fcy,fr('school'),fs('school')*1.3);
-    if (c.t==='university' && !c.part) splat(cover.school,fcx,fcy,Math.round(fr('school')*1.4),fs('school')*1.7);
-    if (c.t==='clinic' && !c.part)    splat(cover.health,fcx,fcy,Math.round(fr('health')*0.6),fs('health'));
-    if (c.t==='hospital' && !c.part)  splat(cover.health,fcx,fcy,fr('health'),fs('health'));
-    if (c.t==='medcenter' && !c.part) splat(cover.health,fcx,fcy,Math.round(fr('health')*1.3),fs('health')*1.6);
+    const sc=SVC_COVER[c.t];
+    if (sc && !c.part) splat(cover[sc.f], fcx, fcy, Math.round(svcFundR(sc.k)*sc.r), (S.fund[sc.k]/100)*sc.s);
     if (LEIS[c.t] && !c.part){ const ox=x+((c.fw||1)-1>>1), oy=y+((c.fh||1)-1>>1); splat(leisure,ox,oy,LEIS[c.t][0],LEIS[c.t][1]); }
     if (c.bus && ROADTYPE[c.t]) splat(cover.transit,x,y,4,1.25);
   }
@@ -2743,6 +2747,29 @@ const CAP = {
   com:[0, 6, 16, 36, 160, 310, 560, 950],
   ind:[0, 9, 24, 42, 185, 300, 460, 460],   // lv5/6 = heavy-industry complexes (megaplants); lv7 unreached
 };
+/* growth gates & rates — the most tuning-sensitive numbers in the game, hoisted out of the
+   simTick growth loop so balance lives in one table (see polis-conventions). devN = dev score
+   needed to reach level N; val* = land-value gates (industry is exempt above the low val2/val3
+   bars — its own smog kills value, it levels on demand/utilities/edu instead); edu* =
+   educated-workforce gates; p* = per-day promotion odds for the tall tiers. */
+const GROWTH = {
+  dev1:30, dev2:110, dev3:230, devSky:440, devHi:600, devMega:720,   // level-up dev thresholds
+  devInd5:460, devInd6:640, devMerge:260,                            // heavy industry + 2×2 merge
+  devCapTower:780, devCapLot:430,                                    // dev accrual ceilings
+  val2:{ind:28, other:50}, val3:{ind:36, other:58},                  // land-value gates, lv2/lv3
+  valSky:72, valHi:80, valMega:88,                                   // land-value gates, tall tiers
+  eduCom3:0.35, eduInd3:0.25, eduHi:0.80, eduMega:0.92,              // education gates
+  eduInd5:0.30, eduInd6:0.55,
+  pSky:0.02, pHi:0.012, pMega:0.008, pInd5:0.02, pInd6:0.012, pMerge:0.08,
+  leisMega:10,                                                       // megatowers demand real leisure nearby
+};
+/* happiness weights — S.happyParts is built term-by-term from these and the mood target is the
+   SUM OF THE PARTS (the accounting-identity spec holds by construction). ease = migration inertia. */
+const MOOD = { base:30, lv:0.5, jobs:18, tax:2.2, power:1.5, water:0.8, traffic:0.7,
+               crime:0.45, crimeCap:10, access:12, health:0.22, healthPivot:72,
+               waste:14, wasteCap:10, edu:12, ease:0.1 };
+/* demand coefficients — tax drag, mood pull, and each sector's structural appetite */
+const DEMAND = { taxDrag:0.025, mood:0.010, moodCom:0.6, rBias:0.35, iBias:0.15, comShare:0.40, indShare:0.55 };
 /* labor-force participation: the share of residents who actually seek work.
    Kids, students, retirees and non-working adults don't — so a city of N
    people needs only ~N*LABOR jobs, not N. LABOR is the baseline/fallback; the
@@ -2922,10 +2949,8 @@ function computeBudget(){
     if (t==='ind') indJ += CAP.ind[map[y][x].lv]||0;
     if (t==='ind' && map[y][x].lv>0) indEmit += 12 + map[y][x].lv*6;
     if (UPKEEP[t] && !map[y][x].part){
-      const fk = (t==='police')?'police' : (t==='fire')?'fire'
-               : (t==='school'||t==='highschool'||t==='university')?'school'
-               : (t==='clinic'||t==='hospital'||t==='medcenter')?'health' : null;
-      svcBase += UPKEEP[t] * (fk ? S.fund[fk]/100 : 1);
+      const sc = SVC_COVER[t];   // funding sliders only scale the coverage services
+      svcBase += UPKEEP[t] * (sc ? S.fund[sc.k]/100 : 1);
       svcRaw  += UPKEEP[t];   // funding-invariant: the depreciation stock measure must not move when sliders do
     }
   }
@@ -2983,12 +3008,16 @@ function computeBudget(){
            pop, jobs, comJ, indJ, tax:S.tax, resTax, jobTax, dInc:d.inc, dUp:d.up, dName:d.n,
            roads, aves, paths, busStops, airports, svcBase, wearCost, svcLoad, roadWear, aveWear, ageMul, infraStock };
 }
-function projectBudget(){
-  if (!S.started) return;
-  const B=computeBudget();
+/* copy a computeBudget() result into the S.* fields the HUD/history read — one site,
+   shared by the monthly tick and the live projection, so the two can't drift */
+function applyBudgetParts(B){
   S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.adminCost=B.adminCost; S.polNet=B.polNet;
   S.tradeNet=B.tradeNet; S.gdp=B.gdp;
   S.budgetParts=B;
+}
+function projectBudget(){
+  if (!S.started) return;
+  applyBudgetParts(computeBudget());
   S.net = S.income - S.roadCost - S.svcCost - S.emitCost - S.adminCost + S.polNet + S.tradeNet - (S.loan?S.loan.pay:0);
   updateHUD();
   fillBudgetModal();
@@ -3012,23 +3041,12 @@ const FIRE_FLAM = { res: FIRE_RISK.res/FIRE_RISK.com, com: 1, ind: FIRE_RISK.ind
 function fireSpreadChance(n){
   return (n && ZONE[n.t] && n.lv>0 && !n.fire) ? FIRE_SPREAD*(FIRE_FLAM[n.t]||1) : 0;
 }
-/* Coverage radius (tiles) a service building projects — mirrors recomputeFields'
-   fr()/per-type multipliers exactly so the placement-preview ring matches the
-   splat the sim will actually paint (funding sliders scale both). 0 = not a
-   coverage building. */
+/* Coverage radius (tiles) a service building projects — reads the same SVC_COVER
+   traits recomputeFields splats from, so the placement-preview ring always matches
+   the coverage the sim will actually paint. 0 = not a coverage building. */
 function svcCoverR(tool){
-  const fr=k=>Math.max(2, Math.round(10*Math.sqrt(S.fund[k]/100)));
-  switch(tool){
-    case 'police':     return fr('police');
-    case 'fire':       return fr('fire');
-    case 'school':     return Math.round(fr('school')*0.8);
-    case 'highschool': return fr('school');
-    case 'university':  return Math.round(fr('school')*1.4);
-    case 'clinic':     return Math.round(fr('health')*0.6);
-    case 'hospital':   return fr('health');
-    case 'medcenter':  return Math.round(fr('health')*1.3);
-    default: return 0;
-  }
+  const sc=SVC_COVER[tool];
+  return sc ? Math.round(svcFundR(sc.k)*sc.r) : 0;
 }
 function fireChance(c,x,y){
   const base=FIRE_RISK[c.t];
@@ -3115,8 +3133,8 @@ function simTick(){
     const dem = c.t==='res'?D.r : c.t==='com'?D.c : D.i;
     if (hasRoad && cellPw && dem > -0.5){
       const lvReq = landVal[idx(x,y)];
-      const g2 = c.t==='ind' ? 28 : 50;   // industry doesn't gentrify — it just needs demand
-      const g3 = c.t==='ind' ? 36 : 58;
+      const g2 = c.t==='ind' ? GROWTH.val2.ind : GROWTH.val2.other;   // industry doesn't gentrify — it just needs demand
+      const g3 = c.t==='ind' ? GROWTH.val3.ind : GROWTH.val3.other;
       let p = (0.045 + Math.max(0,dem)*0.08) * DIFF[S.diff].grow;
       if (dem <= -0.2) p *= 0.6;       // soft market: established districts still densify, slowly
       if (!cellWt) p *= 0.5;           // dry lots grow slowly
@@ -3131,42 +3149,42 @@ function simTick(){
         if (S.happy < 40) c.dev -= (40 - S.happy) * 0.05 * (c.lv>=4 ? 0.4 : 1);
       }
       if (!c.ws && S.pop>300) p *= 0.8;     // uncollected streets grow slower
-      if (rnd() < p) c.dev = Math.min(c.grp?780:430, c.dev + 8 + rnd()*14);
-      if (c.dev>30  && c.lv<1) { c.lv=1; c.bld=1; dirty=true; recomputeFields(); }
+      if (rnd() < p) c.dev = Math.min(c.grp?GROWTH.devCapTower:GROWTH.devCapLot, c.dev + 8 + rnd()*14);
+      if (c.dev>GROWTH.dev1 && c.lv<1) { c.lv=1; c.bld=1; dirty=true; recomputeFields(); }
       // industry is exempt from the land-value gate: its own pollution suppresses value,
       // which used to lock factories at warehouses-and-breweries forever. Industry levels
       // on demand, utilities, calm roads — and an educated workforce for the top tier.
       const valOK2 = c.t==='ind' || lvReq>g2;
       const valOK3 = c.t==='ind' || lvReq>g3;
-      if (c.dev>110 && c.lv<2 && cellWt && !jam && valOK2) { c.lv=2; c.bld=1; dirty=true; recomputeFields(); }
-      const eduOK = c.t==='res' || (S.edu||0) >= (c.t==='com'?0.35:0.25);
-      if (c.dev>230 && c.lv<3 && cellWt && !jam && valOK3 && eduOK) { c.lv=3; c.bld=1; dirty=true; recomputeFields(); }
+      if (c.dev>GROWTH.dev2 && c.lv<2 && cellWt && !jam && valOK2) { c.lv=2; c.bld=1; dirty=true; recomputeFields(); }
+      const eduOK = c.t==='res' || (S.edu||0) >= (c.t==='com'?GROWTH.eduCom3:GROWTH.eduInd3);
+      if (c.dev>GROWTH.dev3 && c.lv<3 && cellWt && !jam && valOK3 && eduOK) { c.lv=3; c.bld=1; dirty=true; recomputeFields(); }
       // mature towers in prime districts rise into skyscrapers
-      if (c.lv===4 && c.t!=='ind' && c.dev>440 && lvReq>72 && rnd()<0.02){
+      if (c.lv===4 && c.t!=='ind' && c.dev>GROWTH.devSky && lvReq>GROWTH.valSky && rnd()<GROWTH.pSky){
         c.lv=5; c.bld=1; c.dev=520; dirty=true; recomputeFields();
         msgAt(`<b>A ${c.t==='res'?'residential':'commercial'} skyscraper crowns the skyline.</b>`, x, y);
       }
       // beyond skyscrapers: highrises need an educated city, megatowers a pampered one
-      if (c.lv===5 && c.t!=='ind' && c.dev>600 && lvReq>80 && (S.edu||0)>=0.80 && cellWt && !jam && rnd()<0.012){
+      if (c.lv===5 && c.t!=='ind' && c.dev>GROWTH.devHi && lvReq>GROWTH.valHi && (S.edu||0)>=GROWTH.eduHi && cellWt && !jam && rnd()<GROWTH.pHi){
         c.lv=6; c.bld=1; c.dev=660; dirty=true; recomputeFields();
         msgAt(`<b>A ${c.t==='res'?'residential':'commercial'} highrise tops out.</b> Educated cities build tall.`, x, y);
       }
-      if (c.lv===6 && c.t!=='ind' && c.dev>720 && lvReq>88 && (S.edu||0)>=0.92 && leisure[idx(x,y)]>=10 && cellWt && !jam && rnd()<0.008){
+      if (c.lv===6 && c.t!=='ind' && c.dev>GROWTH.devMega && lvReq>GROWTH.valMega && (S.edu||0)>=GROWTH.eduMega && leisure[idx(x,y)]>=GROWTH.leisMega && cellWt && !jam && rnd()<GROWTH.pMega){
         c.lv=7; c.bld=1; c.dev=780; dirty=true; recomputeFields();
         msgAt(`<b>A megatower pierces the clouds.</b> ${c.t==='res'?'Twelve hundred residents':'A vertical district of jobs'} in one block — the city's new crown.`, x, y);
       }
       // industry scales vertically into heavy complexes — no land-value/leisure gate (it makes its own smog),
       // but the upper tiers need a skilled, educated workforce. Tops out at lv6 (megaplant), never a glass megatower.
-      if (c.lv===4 && c.t==='ind' && c.dev>460 && cellWt && !jam && (S.edu||0)>=0.30 && rnd()<0.02){
+      if (c.lv===4 && c.t==='ind' && c.dev>GROWTH.devInd5 && cellWt && !jam && (S.edu||0)>=GROWTH.eduInd5 && rnd()<GROWTH.pInd5){
         c.lv=5; c.bld=1; c.dev=540; dirty=true; recomputeFields();
         msgAt(`<b>An industrial complex scales up to heavy industry.</b> Hundreds more jobs in one block.`, x, y);
       }
-      if (c.lv===5 && c.t==='ind' && c.dev>640 && cellWt && !jam && (S.edu||0)>=0.55 && rnd()<0.012){
+      if (c.lv===5 && c.t==='ind' && c.dev>GROWTH.devInd6 && cellWt && !jam && (S.edu||0)>=GROWTH.eduInd6 && rnd()<GROWTH.pInd6){
         c.lv=6; c.bld=1; c.dev=700; dirty=true; recomputeFields();
         msgAt(`<b>A heavy-industry megaplant comes online.</b> A vertical district of jobs.`, x, y);
       }
       // mature lv3 lots try to merge with three matching neighbors into a tower
-      if (c.lv===3 && !c.grp && c.dev>260 && dem>-0.3 && rnd()<0.08){
+      if (c.lv===3 && !c.grp && c.dev>GROWTH.devMerge && dem>-0.3 && rnd()<GROWTH.pMerge){
         tryMerge(x,y) || tryMerge(x-1,y) || tryMerge(x,y-1) || tryMerge(x-1,y-1);
       }
       // dry or jammed lots above their sustainable level slowly slip back
@@ -3232,14 +3250,14 @@ function simTick(){
   S.jamRoad = jamRoad; S.jamAve = jamAve;   // jammed road tiles, and how many are already avenues
 
   // demand
-  const taxDrag = (S.tax - 9) * 0.025;   // trimmed — mood (below) now carries most of tax's bite
+  const taxDrag = (S.tax - 9) * DEMAND.taxDrag;   // trimmed — mood (below) now carries most of tax's bite
   const demK = (DIFF[S.diff] && DIFF[S.diff].dem) || 1;
   const scaleDem = v => v > 0 ? v * demK : v;   // harder difficulty cools hot demand; gluts stay as bad
-  const mood = ((S.happy!=null?S.happy:60) - 50) * 0.010;   // A: a desirable city draws people; a sour one cools demand
+  const mood = ((S.happy!=null?S.happy:60) - 50) * DEMAND.mood;   // A: a desirable city draws people; a sour one cools demand
   const lab = (S.labor!=null) ? S.labor : LABOR;   // live workforce share (demographics-driven); LABOR before tick 1
-  D.r = clamp(scaleDem(( (S.jobs - pop*lab) / (40 + pop*0.35) ) + 0.35 - taxDrag + mood) + pfx.demR, -1, 1);
-  D.c = clamp(scaleDem(( (pop*0.40 - comJ) / (30 + pop*0.25) ) - taxDrag + mood*0.6) + pfx.demC, -1, 1);
-  D.i = clamp(scaleDem(( (pop*0.55 - indJ) / (30 + pop*0.25) ) + 0.15 - taxDrag) + pfx.demI, -1, 1);
+  D.r = clamp(scaleDem(( (S.jobs - pop*lab) / (40 + pop*0.35) ) + DEMAND.rBias - taxDrag + mood) + pfx.demR, -1, 1);
+  D.c = clamp(scaleDem(( (pop*DEMAND.comShare - comJ) / (30 + pop*0.25) ) - taxDrag + mood*DEMAND.moodCom) + pfx.demC, -1, 1);
+  D.i = clamp(scaleDem(( (pop*DEMAND.indShare - indJ) / (30 + pop*0.25) ) + DEMAND.iBias - taxDrag) + pfx.demI, -1, 1);
 
   // happiness
   let lvAvg=55, n=0, lvSum=0;
@@ -3247,18 +3265,20 @@ function simTick(){
     if (map[y][x].t==='res' && map[y][x].lv>0){ lvSum += landVal[idx(x,y)]; n++; }
   if (n) lvAvg = lvSum/n;
   const jobBal = pop>0 ? clamp(S.jobs/Math.max(1,pop*lab),0,1.2) : 1;
-  const crimeDrag = Math.min(10, (S.crimeAvg||0)*0.45);
+  const crimeDrag = Math.min(MOOD.crimeCap, (S.crimeAvg||0)*MOOD.crime);
   const access = pop>0 ? clamp(strandedPop/pop,0,1) : 0;   // share of residents cut off from jobs by road
   S.strandedPop = strandedPop;
-  const healthDrag = (S.health!=null) ? (S.health-72)*0.22 : 0;   // care + clean air lift mood; smog & sickness sink it
-  const wasteDrag = devLots ? Math.min(10, (noWaste/devLots)*14) : 0;   // uncollected rubbish sours the city
+  const healthDrag = (S.health!=null) ? (S.health-MOOD.healthPivot)*MOOD.health : 0;   // care + clean air lift mood; smog & sickness sink it
+  const wasteDrag = devLots ? Math.min(MOOD.wasteCap, (noWaste/devLots)*MOOD.waste) : 0;   // uncollected rubbish sours the city
   S.wasteShort = noWaste;
-  const eduMood = ((S.edu||0) - 0.5) * 12;   // schooled cities lift mood, neglected ones sag (±6); small — land value already banks most of education's payoff
-  S.happyParts = { base:30, lv:lvAvg*.5, jobs:jobBal*18, tax:-(S.tax-9)*2.2, power:-unp*1.5, water:-dry*0.8, traffic:-congested*0.7, crime:-crimeDrag, access:-access*12, health:healthDrag, waste:-wasteDrag, edu:eduMood, policy:pfx.happy };
+  const eduMood = ((S.edu||0) - 0.5) * MOOD.edu;   // schooled cities lift mood, neglected ones sag (±6); small — land value already banks most of education's payoff
+  S.happyParts = { base:MOOD.base, lv:lvAvg*MOOD.lv, jobs:jobBal*MOOD.jobs, tax:-(S.tax-9)*MOOD.tax, power:-unp*MOOD.power, water:-dry*MOOD.water, traffic:-congested*MOOD.traffic, crime:-crimeDrag, access:-access*MOOD.access, health:healthDrag, waste:-wasteDrag, edu:eduMood, policy:pfx.happy };
   // mood eases toward its target rather than snapping — models migration inertia and damps the
-  // happiness↔demand feedback loop now that mood feeds growth (A) and emigration (B)
-  const happyTarget = clamp(30 + lvAvg*.5 + jobBal*18 - (S.tax-9)*2.2 - unp*1.5 - dry*0.8 - congested*0.7 - crimeDrag - access*12 + healthDrag - wasteDrag + eduMood + pfx.happy, 0, 100);
-  S.happyF = (S.happyF==null) ? happyTarget : S.happyF + (happyTarget - S.happyF)*0.1;
+  // happiness↔demand feedback loop now that mood feeds growth (A) and emigration (B).
+  // the target IS the sum of the parts above — the breakdown identity holds by construction.
+  let happySum=0; for (const k in S.happyParts) happySum += S.happyParts[k];
+  const happyTarget = clamp(happySum, 0, 100);
+  S.happyF = (S.happyF==null) ? happyTarget : S.happyF + (happyTarget - S.happyF)*MOOD.ease;
   S.happy = Math.round(S.happyF);
   // age structure (derived): nudge the base curve by the four drivers, clamp each
   // bin to sane bounds, renormalize, then ease — migration is slow. The eased
@@ -3310,22 +3330,6 @@ function simTick(){
   if (S.day % 30 === 0) scenarioTick();
   // month end → budget
   if (S.day % 30 === 0){
-    let roads=0, aves=0, paths=0, svc=0, busStops=0, rails=0, rstations=0;
-    for (let y=0;y<G;y++) for (let x=0;x<G;x++){
-      const t=map[y][x].t;
-      if (t==='road') roads++;
-      if (t==='avenue') aves++;
-      if (t==='path') paths++;
-      if (map[y][x].bus) busStops++;
-      if (map[y][x].rail) rails++;
-      if (t==='rstation') rstations++;
-      if (UPKEEP[t] && !map[y][x].part){
-        const fk = (t==='police')?'police' : (t==='fire')?'fire'
-                 : (t==='school'||t==='highschool'||t==='university')?'school'
-                 : (t==='clinic'||t==='hospital'||t==='medcenter')?'health' : null;
-        svc += UPKEEP[t] * (fk ? S.fund[fk]/100 : 1);
-      }
-    }
     // a mature, well-run city should clear a modest margin — not print money
     const B=computeBudget();
     // depreciation reset: fresh infrastructure built since last month dilutes the average asset age,
@@ -3334,9 +3338,7 @@ function simTick(){
     if (S.infraStock>0 && B.infraStock>S.infraStock) S.infraAge *= S.infraStock / B.infraStock;
     S.infraAge = Math.max(S.infraAge, S.day * AGE_FLOOR_FRAC);   // renewal slows ageing but can't make an old city read as new
     S.infraStock = B.infraStock;
-    S.income=B.income; S.tourism=B.tourism; S.roadCost=B.roadCost; S.svcCost=B.svcCost; S.emitCost=B.emitCost; S.adminCost=B.adminCost; S.polNet=B.polNet;
-    S.tradeNet=B.tradeNet; S.gdp=B.gdp;
-    S.budgetParts=B;
+    applyBudgetParts(B);
     // loan servicing: fixed amortized payment each month until the balance clears
     S.loanPay=0;
     if (S.loan){
@@ -6442,40 +6444,56 @@ function queueStruct(tower, h, fn){
   if (STRUCT_Q) STRUCT_Q.push({k:(tower?1e7:0)+h, fn, pid:PICKING?PICK_ID:null});   // pid: replay under the right id colour during a pick pass
   else fn();
 }
-/* ---------- building sprite cache (residential singles + 2×2 towers) ----------
-   Residential bodies are fully static: no per-frame animation (drawRes takes no `now`),
-   position-independent except the lv3 land-value mansion gate, and rotation-invariant
-   (box() works in screen space, ignoring S.rot). So a body is fully determined by
-   [lv, variant, night, lvHi] — we rasterize it once and blit it. Variants come from
-   pk(N); N differs per level. Each sprite remembers the zoom it was baked at (`bz`); during a
-   zoom we keep blitting it SCALED rather than redrawing live, so a building never flips between
-   the crisp live path and the softer baked path (that flip read as a colour shift). Once the
-   zoom settles we re-bake at the new zoom to resharpen, budgeted per frame. The continuous dusk
-   tint stays a global overlay on top, and lit windows bake into the `night` variant. */
-const VARN_RES=[0,5,5,4];               // variant count by level (lv 1..3)
-const resSprites=new Map();
+/* ---------- building sprite cache (zoned singles + 2×2 towers) ----------
+   Zoned single-lot bodies are static: no per-frame animation (drawRes/drawCom take no live `now`;
+   drawInd only animates three lv3 variants, which stay on the live path), position-independent
+   except the res lv3 land-value mansion gate and the com road-frontage mirror (both fold into the
+   key), and rotation-invariant (box() works in screen space, ignoring S.rot). So a body is fully
+   determined by [type, lv, variant, night, extra] — we rasterize it once and blit it. Variants come
+   from pk(N); N differs per type+level (VARN; 0 = never bake, draw live). Each sprite remembers the
+   zoom it was baked at (`bz`); during a zoom we keep blitting it SCALED rather than redrawing live,
+   so a building never flips between the crisp live path and the softer baked path (that flip read
+   as a colour shift). Once the zoom settles we re-bake at the new zoom to resharpen, budgeted per
+   frame. The continuous dusk tint stays a global overlay on top; lit windows bake into `night`. */
+const VARN={ res:[0,5,5,4], com:[0,11,8,6], ind:[0,5,5,5] };   // variant count by lv 1..3
+// variants that can't share a sprite: com bistro/dept-store colour from RAW per-tile noise
+// ("a street of them isn't uniform"), ind refinery/steelworks/data-center animate on `now`
+const SPR_LIVE=new Set(['com|2|3','com|3|2','ind|3|1','ind|3|3','ind|3|4']);
+const resSprites=new Map();             // one LRU for all zoned singles (name kept: profiler reads it)
 let SPRSEAS='', SPR_BAKES=0, SPR_INTERACT=false, SPR_LZ=-1, SPR_ZT=-1e9;
 const SPR_BUDGET=24;                    // max bakes per frame
-function bakeRes(lv, variant, night, lvHi){
+function drawLotLive(c,x,y,sx,sy,night,now){
+  const z=S.zoom, pk=(n)=>Math.min(n-1,(c.vary*n)|0), cyp=sy+TH/2*z;
+  if (c.t==='res') drawRes(c,x,y,sx,sy,cyp,1,night,z,pk);
+  else if (c.t==='com') drawCom(c,x,y,sx,sy,cyp,1,night,z,pk,now||0);
+  else drawInd(c,sx,sy,cyp,1,night,z,pk,now||0);
+}
+function bakeLot(t, lv, variant, night, extra){
   const z=S.zoom;
   const W=Math.max(8,Math.ceil(150*z)), H=Math.max(8,Math.ceil(118*z));
   const AX=Math.round(W*0.5), AY=H-Math.ceil(46*z);          // tile anchor inside the sprite
   const off=document.createElement('canvas');
   off.width=Math.max(1,Math.round(W*DPR)); off.height=Math.max(1,Math.round(H*DPR));
   const oc=off.getContext('2d'); oc.setTransform(DPR,0,0,DPR,0,0);
-  const N=VARN_RES[lv]||5, vary=(variant+0.5)/N;             // bucket centre → pk() lands on `variant`
-  const c={t:'res',lv,vary,bld:0,grp:null,part:false};
+  const N=VARN[t][lv]||5, vary=(variant+0.5)/N;              // bucket centre → pk() lands on `variant`
+  const c={t,lv,vary,bld:0,grp:null,part:false};
   const savedCx=cx, savedLV=landVal[0], savedShadow={x:lastBoxShadow.x,y:lastBoxShadow.y,w:lastBoxShadow.w};
-  cx=oc; landVal[0]=lvHi?85:55; lastBoxShadow={x:NaN,y:NaN,w:0};
+  cx=oc; landVal[0]=(t==='res'&&extra)?85:55; lastBoxShadow={x:NaN,y:NaN,w:0};
   const pk=(n)=>Math.min(n-1,(vary*n)|0);
-  try{ drawRes(c,0,0,AX,AY,AY+TH/2*z,1,night,z,pk); }catch(_){}
+  try{
+    if (t==='res') drawRes(c,0,0,AX,AY,AY+TH/2*z,1,night,z,pk);
+    else if (t==='com') drawCom(c,0,0,AX,AY,AY+TH/2*z,1,night,z,pk,0,!!extra);   // extra = frontage mirror
+    else drawInd(c,AX,AY,AY+TH/2*z,1,night,z,pk,0);
+  }catch(_){}
   cx=savedCx; landVal[0]=savedLV; lastBoxShadow=savedShadow;
   return { canvas:off, W, H, AX, AY, bz:z };
 }
-function blitRes(c,x,y,sx,sy,night){
-  const lv=c.lv, N=VARN_RES[lv]||5, variant=Math.min(N-1,(c.vary*N)|0);
-  const lvHi=(lv===3 && landVal[idx(x,y)]>76)?1:0;
-  const key=lv+'|'+variant+'|'+(night?1:0)+'|'+lvHi;
+function blitLot(c,x,y,sx,sy,night,now){
+  const t=c.t, lv=c.lv, N=VARN[t][lv], variant=Math.min(N-1,(c.vary*N)|0);
+  if (SPR_LIVE.has(t+'|'+lv+'|'+variant)){ drawLotLive(c,x,y,sx,sy,night,now); return; }
+  const extra = t==='res' ? ((lv===3 && landVal[idx(x,y)]>76)?1:0)
+              : t==='com' ? (frontSide(x,y)==='L'?1:0) : 0;
+  const key=t+'|'+lv+'|'+variant+'|'+(night?1:0)+'|'+extra;
   const z=S.zoom;
   let sp=resSprites.get(key);
   // Bake on first sight; re-bake to resharpen only once a zoom has SETTLED (never mid-gesture).
@@ -6483,10 +6501,10 @@ function blitRes(c,x,y,sx,sy,night){
   // the crisp live path and the softer baked path, which is what read as a colour shift.
   if (!sp || (!SPR_INTERACT && sp.bz!==z)){
     if (SPR_BAKES>=SPR_BUDGET){
-      if (!sp){ drawRes(c,x,y,sx,sy,sy+TH/2*z,1,night,z,(n)=>Math.min(n-1,(c.vary*n)|0)); return; }
+      if (!sp){ drawLotLive(c,x,y,sx,sy,night,now); return; }
     } else {
-      sp=bakeRes(lv,variant,night,lvHi); resSprites.set(key,sp); SPR_BAKES++;
-      if (resSprites.size>48){ resSprites.delete(resSprites.keys().next().value); }
+      sp=bakeLot(t,lv,variant,night,extra); resSprites.set(key,sp); SPR_BAKES++;
+      if (resSprites.size>160){ resSprites.delete(resSprites.keys().next().value); }
     }
   }
   const k=z/sp.bz;
@@ -7853,6 +7871,16 @@ function railAdjStation(x,y){
   return (inB(x+1,y)&&map[y][x+1].t==='rstation')||(inB(x-1,y)&&map[y][x-1].t==='rstation')||
          (inB(x,y+1)&&map[y+1][x].t==='rstation')||(inB(x,y-1)&&map[y-1][x].t==='rstation');
 }
+/* The same holds for any tile whose own art draws in the STRUCT pass: leisure grounds
+   (park benches, plaza fountains…), tree canopies, and elevated relief all paint after the
+   ground bake — a track baked flat would be buried under the very props it spans. These
+   rail tiles skip the bake and redraw live, after the tile's art, so the viaduct stays on top. */
+const RAIL_STRUCT={ park:1, playground:1, plaza:1, garden:1, pool:1, tree:1 };
+function railLiveTile(x,y){
+  const c=map[y][x];
+  const elevLive=isElevCell(x,y) && (c.t==='grass' || (c.tunnel&&(c.t==='road'||c.t==='avenue')));   // matches drawCell's elevNat
+  return !!RAIL_STRUCT[c.t] || elevLive || railAdjStation(x,y);
+}
 /* offset endpoints for a rail lane A->C->B at perpendicular distance side*off.
    The control point sits on the bend's bisector so the two parallel lanes of a
    turn curve cleanly through the centre instead of crossing each other. */
@@ -8410,7 +8438,7 @@ function drawZone(c,x,y,sx,sy,night,now){
   const pk=(n)=>Math.min(n-1,(c.vary*n)|0);
   const cyp=sy+TH/2*z;
   queueStruct(false, towerHeight(c.t,c.lv)*hf, ()=>{
-    if (PERF.spr && !PICKING && STRUCT_Q!==null && c.t==='res' && c.bld===0) blitRes(c,x,y,sx,sy,night);
+    if (PERF.spr && !PICKING && STRUCT_Q!==null && c.bld===0 && VARN[c.t][c.lv]) blitLot(c,x,y,sx,sy,night,now);
     else if (c.t==='res') drawRes(c,x,y,sx,sy,cyp,hf,night,z,pk);
     else if (c.t==='com') drawCom(c,x,y,sx,sy,cyp,hf,night,z,pk,now);
     else drawInd(c,sx,sy,cyp,hf,night,z,pk,now);
@@ -8852,11 +8880,12 @@ function giftBox(sx,sy,ox,oy,s,hp,boxCol,ribCol){
   cx.fillStyle=ribCol; cx.beginPath(); cx.arc(c[0], c[1]-1*z, 1.1*z, 0,7); cx.fill();
 }
 /* ---------- 25 structurally distinct commercial buildings ---------- */
-function drawCom(c,x,y,sx,sy,cyp,hf,night,z,pk,now){
+function drawCom(c,x,y,sx,sy,cyp,hf,night,z,pk,now,mirror){
   // orient a lot's frontage to the street: mirror the build across the screen-vertical axis
   // (swap the two grid offsets + flip R↔L) when its road sits on the +view-y side. lighting stays
   // tied to the screen, so only the entrance moves — the box shading is untouched.
-  const m = frontSide(x,y)==='L';
+  // `mirror` overrides the live frontage probe when baking a sprite (x,y are meaningless there).
+  const m = mirror!==undefined ? mirror : frontSide(x,y)==='L';
   const V  = (ox,oy,ax,ay,h,col,opts)=> m? vol(sx,sy,oy,ox,ay,ax,h,col,opts) : vol(sx,sy,ox,oy,ax,ay,h,col,opts);
   const CY = (ox,oy,r,h,col)=> m? cyl(sx,sy,oy,ox,r,h,col) : cyl(sx,sy,ox,oy,r,h,col);
   const SD = s=> m? (s==='R'?'L':s==='L'?'R':s) : s;
@@ -9347,42 +9376,11 @@ function drawInd(c,sx,sy,cyp,hf,night,z,pk,now){
     }
   }
 }
-function render(now){
-  BLD_TINT=null;   // safety: never carry a tower tint across frames
-  const W=cv.width/DPR, H=cv.height/DPR;
-  // cull window for the shared ground/structure passes. Equals the screen (W,H) for every live draw and
-  // every screen-sized bake; the far-zoom WORLD bake temporarily widens it to the offscreen's size so the
-  // whole map — not just the on-screen slice — lands in the snapshot, which is what lets panning be free.
-  let cw=W, ch=H;
-  if (shoreDirty){ recomputeShore(); recomputeBridges(); }
-  if (elevDirty) recomputeElev();
-  updateSeason();
-  WX.rain += (WX.target-WX.rain)*0.22;          // once per frame, not once per tile
-  // sky
-  const dk = duskAmt();
-  const sky = cx.createLinearGradient(0,0,0,H);
-  if (dk>0.5){ sky.addColorStop(0,'#0b1626'); sky.addColorStop(1,'#16263a'); }
-  else if (dk>0){ sky.addColorStop(0,'#3a4a6b'); sky.addColorStop(1,'#c2876b'); }
-  else { sky.addColorStop(0,'#9fc7e8'); sky.addColorStop(1,'#d7e8f2'); }
-  cx.fillStyle=sky; cx.fillRect(0,0,W,H);
-  let __rotaOn=false, __rotaE=0;
-  if (ROTA){
-    const k2=Math.min(1,(now-ROTA.t0)/ROTA.dur);
-    if (k2>=1){ ROTA=null; }
-    else {
-      const e2=k2<.5 ? 2*k2*k2 : 1-Math.pow(-2*k2+2,2)/2;
-      __rotaE=e2; __rotaOn=true;
-      cx.save();
-      cx.translate(W/2,H/2);
-      cx.rotate(ROTA.spin*(e2-1)*Math.PI/2);   // new world swings into place, rigid
-      cx.translate(-W/2,-H/2);
-    }
-  }
-
-  /* vehicle layering: each car is flushed after the view diagonal its near corner reaches,
-     so no ground ever paints over it. Cars whose bodies interact on screen are clustered and
-     drawn together, ordered by a lane-aware rule: when their lanes don't overlap, the nearer
-     LANE wins for the entire pass — the order can't flip halfway like a naive depth sum. */
+/* vehicle layering: each car is flushed after the view diagonal its near corner reaches,
+   so no ground ever paints over it. Cars whose bodies interact on screen are clustered and
+   drawn together, ordered by a lane-aware rule: when their lanes don't overlap, the nearer
+   LANE wins for the entire pass — the order can't flip halfway like a naive depth sum. */
+function buildCarBands(){
   const carEntries=[];
   for (const car of (svc.length ? cars.concat(svc) : cars)){
     const fx=car.px+(car.x-car.px)*car.t, fy=car.py+(car.y-car.py)*car.t;
@@ -9443,28 +9441,29 @@ function render(now){
     return (a.vx+a.vy)-(b.vx+b.vy);
   };
   const carBands=new Map();
-  {
-    const groups=new Map();
-    for (let i=0;i<carEntries.length;i++){
-      const k=carEntries[i].cl>=0?carEntries[i].cl:('s'+i);
-      if(!groups.has(k)) groups.set(k,[]);
-      groups.get(k).push(carEntries[i]);
-    }
-    // deterministic order between separate groups sharing a band: farther group first
-    const glist=[...groups.values()];
-    glist.sort((g1,g2)=>{
-      let d1=1e9,d2=1e9;
-      for (const e of g1) d1=Math.min(d1,e.vx+e.vy);
-      for (const e of g2) d2=Math.min(d2,e.vx+e.vy);
-      return d1-d2;
-    });
-    for (const g of glist){
-      let band=0; for (const e of g) band=Math.max(band,e.band);
-      g.sort(cmpCar);
-      if(!carBands.has(band)) carBands.set(band,[]);
-      carBands.get(band).push(...g);
-    }
+  const groups=new Map();
+  for (let i=0;i<carEntries.length;i++){
+    const k=carEntries[i].cl>=0?carEntries[i].cl:('s'+i);
+    if(!groups.has(k)) groups.set(k,[]);
+    groups.get(k).push(carEntries[i]);
   }
+  // deterministic order between separate groups sharing a band: farther group first
+  const glist=[...groups.values()];
+  glist.sort((g1,g2)=>{
+    let d1=1e9,d2=1e9;
+    for (const e of g1) d1=Math.min(d1,e.vx+e.vy);
+    for (const e of g2) d2=Math.min(d2,e.vx+e.vy);
+    return d1-d2;
+  });
+  for (const g of glist){
+    let band=0; for (const e of g) band=Math.max(band,e.band);
+    g.sort(cmpCar);
+    if(!carBands.has(band)) carBands.set(band,[]);
+    carBands.get(band).push(...g);
+  }
+  return carBands;
+}
+function buildPedBands(){
   const pedBands=new Map();
   for (const p of peds){
     const fx=p.px+(p.x-p.px)*p.t, fy=p.py+(p.y-p.py)*p.t;
@@ -9474,6 +9473,42 @@ function render(now){
     if(!pedBands.has(b)) pedBands.set(b,[]);
     pedBands.get(b).push([p,fx,fy]);
   }
+  return pedBands;
+}
+function render(now){
+  BLD_TINT=null;   // safety: never carry a tower tint across frames
+  const W=cv.width/DPR, H=cv.height/DPR;
+  // cull window for the shared ground/structure passes. Equals the screen (W,H) for every live draw and
+  // every screen-sized bake; the far-zoom WORLD bake temporarily widens it to the offscreen's size so the
+  // whole map — not just the on-screen slice — lands in the snapshot, which is what lets panning be free.
+  let cw=W, ch=H;
+  if (shoreDirty){ recomputeShore(); recomputeBridges(); }
+  if (elevDirty) recomputeElev();
+  updateSeason();
+  WX.rain += (WX.target-WX.rain)*0.22;          // once per frame, not once per tile
+  // sky
+  const dk = duskAmt();
+  const sky = cx.createLinearGradient(0,0,0,H);
+  if (dk>0.5){ sky.addColorStop(0,'#0b1626'); sky.addColorStop(1,'#16263a'); }
+  else if (dk>0){ sky.addColorStop(0,'#3a4a6b'); sky.addColorStop(1,'#c2876b'); }
+  else { sky.addColorStop(0,'#9fc7e8'); sky.addColorStop(1,'#d7e8f2'); }
+  cx.fillStyle=sky; cx.fillRect(0,0,W,H);
+  let __rotaOn=false, __rotaE=0;
+  if (ROTA){
+    const k2=Math.min(1,(now-ROTA.t0)/ROTA.dur);
+    if (k2>=1){ ROTA=null; }
+    else {
+      const e2=k2<.5 ? 2*k2*k2 : 1-Math.pow(-2*k2+2,2)/2;
+      __rotaE=e2; __rotaOn=true;
+      cx.save();
+      cx.translate(W/2,H/2);
+      cx.rotate(ROTA.spin*(e2-1)*Math.PI/2);   // new world swings into place, rigid
+      cx.translate(-W/2,-H/2);
+    }
+  }
+
+  const carBands=buildCarBands();      // vehicle depth ordering — see buildCarBands
+  const pedBands=buildPedBands();
   const trainBands=trainBandEntries();
   const trNight=dk>0.5;
   // analytic culling: only walk the diagonals and tiles that can touch the screen.
@@ -9504,7 +9539,7 @@ function render(now){
         const [px,py]=toScreen(vx,vy);
         if (px<-TW*z||px>cw+TW*z||py<-200*z||py>ch+TH*2*z) continue;
         drawCell(x,y,now);
-        if (map[y][x].rail && !railAdjStation(x,y)) drawRail(x,y);   // tracks are flat ground — except where they meet a station (drawn live, by depth, in the struct pass)
+        if (map[y][x].rail && !railLiveTile(x,y)) drawRail(x,y);   // tracks are flat ground — except over struct-pass art (stations, leisure props, canopies), drawn live by depth
       }
     }
     cx=sv;
@@ -9553,9 +9588,9 @@ function render(now){
       if (px<-TW*S.zoom||px>cw+TW*S.zoom||py<-200*S.zoom||py>ch+TH*2*S.zoom) continue;
       drawCell(x,y,now);
       if (map[y][x].bus) drawBusStop(px,py);
-      // GP===2: rail is baked in the ground pass — EXCEPT station-adjacent tiles, which were
-      // held out of the bake so they can composite with the station here, in painter's order.
-      if (map[y][x].rail && (GP!==2 || railAdjStation(x,y))) drawRail(x,y);
+      // GP===2: rail is baked in the ground pass — EXCEPT tiles held out of the bake
+      // (station joins, leisure props, canopies) which composite here, in painter's order.
+      if (map[y][x].rail && (GP!==2 || railLiveTile(x,y))) drawRail(x,y);
     }
     if (STRUCT_Q.length){ STRUCT_Q.sort((a,b)=>b.k-a.k); for (const e of STRUCT_Q) e.fn(); STRUCT_Q.length=0; }
   };
@@ -9999,8 +10034,12 @@ function render(now){
     cx.fillRect(0,0,W,H);
   }
   drawDisasterFX(disClk, dk);
-  // data overlay (traffic / land value / pollution / utilities)
-  if (S.overlay && S.overlay!=='none'){
+  if (S.overlay && S.overlay!=='none') drawOverlayPass(W,H);
+}
+/* data overlay (traffic / land value / pollution / utilities): per-tile tints, then a
+   reach ring + icon badge on every building that shapes the overlay, then the legend */
+function drawOverlayPass(W,H){
+  {
     for (let y=0;y<G;y++) for (let x=0;x<G;x++){
       const c=map[y][x];
       const [px,py]=tileScreen(x,y);
@@ -10079,29 +10118,29 @@ function render(now){
       cx.fillStyle='#e9eef5'; cx.fillText(icon,bx2,by2+0.5);
       cx.textBaseline='alphabetic';
     };
-    const fr2=(k)=>Math.max(2, Math.round(10*Math.sqrt(S.fund[k]/100)));
+    // ring radii come from svcCoverR — the same SVC_COVER traits the sim splats from
     if (S.overlay==='edu'){
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
         const c2=map[y][x]; if (c2.part) continue; const t2=c2.t;
-        if (t2==='school') marker(x,y,Math.round(fr2('school')*0.8),'✎','rgba(255,200,80,.95)');
-        else if (t2==='highschool') marker(x,y,fr2('school'),'✐','rgba(255,180,60,.95)');
-        else if (t2==='university') marker(x,y,Math.round(fr2('school')*1.4),'🎓','rgba(255,160,40,.95)');
+        if (t2==='school') marker(x,y,svcCoverR(t2),'✎','rgba(255,200,80,.95)');
+        else if (t2==='highschool') marker(x,y,svcCoverR(t2),'✐','rgba(255,180,60,.95)');
+        else if (t2==='university') marker(x,y,svcCoverR(t2),'🎓','rgba(255,160,40,.95)');
       }
     }
     else if (S.overlay==='health'){
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
         const c2=map[y][x]; if (c2.part) continue; const t2=c2.t;
-        if (t2==='clinic') marker(x,y,Math.round(fr2('health')*0.6),'+','rgba(160,255,200,.9)');
-        else if (t2==='hospital') marker(x,y,fr2('health'),'✚','rgba(120,245,180,.95)');
-        else if (t2==='medcenter') marker(x,y,Math.round(fr2('health')*1.3),'⚕','rgba(90,235,160,.95)');
+        if (t2==='clinic') marker(x,y,svcCoverR(t2),'+','rgba(160,255,200,.9)');
+        else if (t2==='hospital') marker(x,y,svcCoverR(t2),'✚','rgba(120,245,180,.95)');
+        else if (t2==='medcenter') marker(x,y,svcCoverR(t2),'⚕','rgba(90,235,160,.95)');
       }
     }
     else if (S.overlay==='crime'){
       const sv=S.safetyView||'all';
       for (let y=0;y<G;y++) for (let x=0;x<G;x++){
         const c2=map[y][x]; if (c2.part) continue; const t2=c2.t;
-        if (t2==='police' && sv!=='fire') marker(x,y,fr2('police'),'☂','rgba(110,150,255,.95)');
-        else if (t2==='fire' && sv!=='police') marker(x,y,fr2('fire'),'▲','rgba(255,110,90,.95)');
+        if (t2==='police' && sv!=='fire') marker(x,y,svcCoverR(t2),'☂','rgba(110,150,255,.95)');
+        else if (t2==='fire' && sv!=='police') marker(x,y,svcCoverR(t2),'▲','rgba(255,110,90,.95)');
       }
     }
     else if (S.overlay==='power'){
@@ -10429,6 +10468,9 @@ function commitPending(){
   let placed=0;
   const fxTiles=[];
   let denied=false;
+  // place() rebuilds power/water/waste + every field per tile — a long drag froze the UI for
+  // O(tiles × G²). Defer both and flush ONE rebuild for the whole gesture (same trick as simTick's RF_DEFER).
+  NET_DEFER=true; RF_DEFER=true;
   try{
     for (const [x,y] of tiles){
       const r=place(x,y,quiet);
@@ -10437,6 +10479,10 @@ function commitPending(){
     }
   }catch(err){ console.error(err); }
   finally{
+    NET_DEFER=false; RF_DEFER=false;
+    if (NET_PENDING){ NET_PENDING=false; recomputeNets(); }
+    if (RF_PENDING){ RF_PENDING=false; recomputeFields(); }
+    if (placed>0) updateHUD();   // per-tile HUD refreshes above saw pre-flush caps
     const bull=S.tool==='bulldoze';
     if (placed>0){
       const col=(TOOLDEF[S.tool]&&TOOLDEF[S.tool].col)||'#ffd23f';
@@ -10720,6 +10766,19 @@ function pinchInfo(e){
   const a=e.touches[0], b=e.touches[1];
   return { d:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)||1, cx:(a.clientX+b.clientX)/2, cy:(a.clientY+b.clientY)/2 };
 }
+/* tool hotkeys — three historical layers, evaluated in this order (kept as data in ONE
+   place so the overlap is visible; the handler preserves the original precedence):
+   · play: letter keys while a city is running — direct tool + submenu memory. Shadows
+     the same letters in `pick` during play (so F = fire tool in-game, flatten otherwise).
+   · digits: the legacy number row (+ b/v). Deliberately not modifier-gated — original
+     release behaviour, kept for muscle memory.
+   · pick: group-aware letters (E/W/L reach tools `play` doesn't cover); resolves a
+     group's remembered sub-tool and respects milestone locks. */
+const KEYMAP={
+  play:{ r:'res', c:'com', i:'ind', t:'road', x:'bulldoze', p:'police', f:'fire', g:'park', h:'hospital', u:'busstop' },
+  digits:{ '1':'road','2':'res','3':'com','4':'ind','5':'power','6':'avenue','7':'pump','8':'tower', b:'bulldoze', p:'park', v:'pan' },
+  pick:{ t:'road', e:'power', w:'pump', p:'police', l:'school', h:'hospital', g:'park', c:'com', i:'ind', x:'bulldoze' },
+};
 window.addEventListener('keydown', e=>{
   const typing = e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA' || e.target.isContentEditable);
   if (e.key==='Escape'){
@@ -10736,13 +10795,12 @@ window.addEventListener('keydown', e=>{
   if (typing) return;                   // never hijack keys while typing in a field
   if (e.code==='Space'){ e.preventDefault(); setSpeed(S.speed?0:2); }
   if (!e.ctrlKey && !e.metaKey && !e.altKey && S.started){
-    const KEYTOOL={ r:'res', c:'com', i:'ind', t:'road', x:'bulldoze', p:'police', f:'fire', g:'park', h:'hospital', u:'busstop' };
     const k=e.key.toLowerCase();
     if (k==='?'){ e.preventDefault(); document.getElementById('helpModal').classList.add('open'); return; }
-    if (KEYTOOL[k]){
+    if (KEYMAP.play[k]){
       e.preventDefault();
-      setTool(KEYTOOL[k]);
-      rememberSub(KEYTOOL[k]);
+      setTool(KEYMAP.play[k]);
+      rememberSub(KEYMAP.play[k]);
       return;
     }
   }
@@ -10757,20 +10815,16 @@ window.addEventListener('keydown', e=>{
   if (e.key==='ArrowDown'||e.key==='s') S.oy-=pan;
   if (e.key==='ArrowLeft'||e.key==='a') S.ox+=pan;
   if (e.key==='ArrowRight'||e.key==='d') S.ox-=pan;
-  const hot={'1':'road','2':'res','3':'com','4':'ind','5':'power','6':'avenue','7':'pump','8':'tower','b':'bulldoze','p':'park','v':'pan'};
-  if (hot[e.key]) setTool(hot[e.key]);
+  if (KEYMAP.digits[e.key]) setTool(KEYMAP.digits[e.key]);
   if (e.key==='q') rotateAnim(-1);
   if (e.key==='e') rotateAnim(1);
   if (e.key==='r' && FOOT[S.tool] && FOOT[S.tool][0]!==FOOT[S.tool][1]){ S.bOrient=!S.bOrient; refreshOrientChip(); }
   if (e.key==='f') toggleFlatten();
-  // tool selection hotkeys
   if (!e.ctrlKey && !e.metaKey && !e.altKey){
-    const TK={ t:'road', e:'power', w:'pump', p:'police', l:'school', h:'hospital',
-               g:'park', c:'com', i:'ind', x:'bulldoze' };
     const k=e.key.toLowerCase();
     // 'r' is taken by orient-rotate when a rotatable footprint is active; otherwise → Residential
     if (k==='r' && !(FOOT[S.tool] && FOOT[S.tool][0]!==FOOT[S.tool][1])){ pickTool('res'); return; }
-    if (TK[k]){ pickTool(TK[k]); return; }
+    if (KEYMAP.pick[k]){ pickTool(KEYMAP.pick[k]); return; }
   }
 });
 
@@ -13613,14 +13667,14 @@ function adviseCity(){
     for (let y=0;y<G;y++) for (let x=0;x<G;x++){
       const c=map[y][x];
       if (c.grp && !c.part && c.t!=='ind'){
-        if (c.lv===5 && c.dev>560 && edu<0.80) capped5++;
-        if (c.lv===6 && c.dev>680 && edu<0.92) capped6++;
+        if (c.lv===5 && c.dev>560 && edu<GROWTH.eduHi) capped5++;
+        if (c.lv===6 && c.dev>680 && edu<GROWTH.eduMega) capped6++;
       }
     }
     if (capped5>2) out.push(['🎓',`${capped5} skyscrapers are capped by education`,
-      `Highrises need an 80% educated workforce — you're at ${Math.round(edu*100)}%. Build schools and universities.`]);
+      `Highrises need a ${Math.round(GROWTH.eduHi*100)}% educated workforce — you're at ${Math.round(edu*100)}%. Build schools and universities.`]);
     else if (capped6>2) out.push(['🎓',`${capped6} highrises are capped by education`,
-      `Megatowers demand a 92% educated workforce — you're at ${Math.round(edu*100)}%. Universities cover the widest area.`]);
+      `Megatowers demand a ${Math.round(GROWTH.eduMega*100)}% educated workforce — you're at ${Math.round(edu*100)}%. Universities cover the widest area.`]);
   }
   let plants=0, wsrc=0, zonesDev=0, dry=0, unp=0, lowLV=0, resLots=0, sumLV=0, indHi=0, fireSt=0, jam=0, jamAve=0;
   for (let y=0;y<G;y++) for (let x=0;x<G;x++){
@@ -13657,10 +13711,10 @@ function adviseCity(){
   if ((S.crimeAvg||0)>6) out.push(['🚨','Crime is rising',`Average crime is ${(S.crimeAvg).toFixed(1)} — police coverage suppresses it. Add stations or raise police funding in the budget. Check the Crime overlay for hotspots.`]);
   {
     let stuck=0;
-    for (let y=0;y<G;y++) for (let x=0;x<G;x++){ const c=map[y][x]; if ((c.t==='com'||c.t==='ind') && c.lv===2 && c.dev>230) stuck++; }
-    if (stuck>2 && (S.edu||0)<0.35) out.push(['🎓','Businesses want an educated workforce',`${stuck} mature businesses can't reach level 3 — only ${Math.round((S.edu||0)*100)}% of residents have school coverage (commerce needs 35%, industry 25%). Build schools near homes.`]);
+    for (let y=0;y<G;y++) for (let x=0;x<G;x++){ const c=map[y][x]; if ((c.t==='com'||c.t==='ind') && c.lv===2 && c.dev>GROWTH.dev3) stuck++; }
+    if (stuck>2 && (S.edu||0)<GROWTH.eduCom3) out.push(['🎓','Businesses want an educated workforce',`${stuck} mature businesses can't reach level 3 — only ${Math.round((S.edu||0)*100)}% of residents have school coverage (commerce needs ${Math.round(GROWTH.eduCom3*100)}%, industry ${Math.round(GROWTH.eduInd3*100)}%). Build schools near homes.`]);
   }
-  if (resLots>4 && sumLV/resLots<58) out.push(['❀','Raise residential land value',`Homes average ${Math.round(sumLV/resLots)} land value — below 58 they stop densifying. Add parks, gardens, schools; push pollution away.`]);
+  if (resLots>4 && sumLV/resLots<GROWTH.val3.other) out.push(['❀','Raise residential land value',`Homes average ${Math.round(sumLV/resLots)} land value — below ${GROWTH.val3.other} they stop densifying. Add parks, gardens, schools; push pollution away.`]);
   if (lowLV>3) out.push(['🏫',`${lowLV} homes sit below value 55`,'Inspect one to see its exact land-value math, then fix the biggest negative.']);
   if (S.happy<55 && S.pop>50) out.push(['☹','Happiness is low','Cut taxes a notch, clear gridlock, or add leisure — pools, plazas, a stadium.']);
   if (S.net<0) out.push(['💸','The budget runs a deficit',`§${Math.round(-S.net)}/month. Raise taxes slightly or trim service funding in the budget panel.`]);

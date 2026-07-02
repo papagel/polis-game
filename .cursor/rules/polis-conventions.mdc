@@ -90,8 +90,12 @@ fallback); autosave fires monthly.
 
 Gameplay numbers live in **named tables**, not scattered literals — tune there:
 `UPKEEP`, `CAP`, `PLANT`, `WSRC`, `LEIS`, `ROAD_CAP`, `DIFF`, `LOAN_OFFERS`,
-`POLICIES`, the trade constants, and the growth thresholds inside `simTick()`.
-Prefer adjusting a table constant over editing per-tile logic.
+`POLICIES`, the trade constants, `GROWTH` (level-up dev/land-value/education
+gates + promotion odds — the advisor quotes these too), `MOOD` (happiness
+weights; the breakdown identity is the sum of parts built from it), `DEMAND`
+(tax drag / mood pull / sector appetites), and `SVC_COVER` (service coverage
+radii/strength + funding keys — shared by the field splat, the placement ring,
+and the budget). Prefer adjusting a table constant over editing per-tile logic.
 
 ## Testing changes
 

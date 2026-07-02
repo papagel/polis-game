@@ -1,11 +1,11 @@
 import { test, expect } from './harness.js';
 
 // THROWAWAY sim profiler. Times simTick() on big cities and attributes cost to
-// recomputeFields() — which today is called once PER level-up inside the growth
-// loop, so a booming city pays O(G^2 x level-ups) per tick. "steady" = the city
-// as-loaded (near equilibrium); "boom" = all lots knocked down with max demand,
-// forcing mass regrowth so the per-level-up recompute shows its teeth.
-// Run: `npx playwright test tick.spec.js`.
+// recomputeFields(). Level-up calls inside the growth loop are RF_DEFER-coalesced
+// into one real pass per tick — only non-deferred passes are counted, so rfPerTick
+// reads as REAL O(G²) work, not deferred no-ops. "steady" = the city as-loaded
+// (near equilibrium); "boom" = all lots knocked down with max demand, forcing mass
+// regrowth. Run: `npx playwright test tick.spec.js`.
 
 test('sim tick cost breakdown', async ({ game }) => {
   test.setTimeout(180000);
@@ -13,7 +13,7 @@ test('sim tick cost breakdown', async ({ game }) => {
   const out = await game.eval(() => {
     let rfCalls=0, rfSelf=0, rcCalls=0, rcSelf=0;
     const _rf=recomputeFields, _rc=recomputeCommute;
-    recomputeFields = function(){ rfCalls++; const t=performance.now(); const r=_rf.apply(this,arguments); rfSelf+=performance.now()-t; return r; };
+    recomputeFields = function(){ if (!RF_DEFER) rfCalls++; const t=performance.now(); const r=_rf.apply(this,arguments); rfSelf+=performance.now()-t; return r; };
     recomputeCommute = function(){ rcCalls++; const t=performance.now(); const r=_rc.apply(this,arguments); rcSelf+=performance.now()-t; return r; };
 
     function devLotCount(){ let d=0; for(let y=0;y<G;y++)for(let x=0;x<G;x++){ const c=map[y][x]; if(ZONE[c.t]&&c.lv>0&&!c.part) d++; } return d; }
