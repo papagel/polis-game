@@ -108,15 +108,22 @@ test('budget accounting identity holds', async ({ game }) => {
 test('civic overhead supplies the late-game negative feedback', async ({ game }) => {
   await game.loadExample();
   // the runaway came from income being linear in pop while upkeep is flat per
-  // footprint. assert the admin term (a) is zero for a town under the free
-  // threshold, and (b) grows with population above it — the missing brake.
+  // footprint. assert the admin term (a) spares only the FOUNDING years for a
+  // small town (the free floor decays over ADMIN_GRACE — a permanent floor made
+  // any sub-500-pop town an idle money-printer), and (b) scales with city size.
   const r = await game.eval(() => {
-    const at = (pop) => { S.pop = pop; return computeBudget().adminCost; };
-    return { town: at(ADMIN_FREE - 500), small: at(ADMIN_FREE + 1000), big: at(ADMIN_FREE + 50000) };
+    const at = (pop, day) => { S.pop = pop; S.day = day; return computeBudget().adminCost; };
+    return {
+      founding: at(ADMIN_FREE - 100, 0),                  // young small town: governed free
+      settled:  at(ADMIN_FREE - 100, ADMIN_GRACE + 30),   // same town after the grace: pays
+      small:    at(ADMIN_FREE + 1000, ADMIN_GRACE + 30),
+      big:      at(ADMIN_FREE + 50000, ADMIN_GRACE + 30),
+    };
   });
-  expect(r.town).toBe(0);                 // a town is governed "for free"
-  expect(r.small).toBeGreaterThan(0);     // it switches on past the threshold
-  expect(r.big).toBeGreaterThan(r.small * 10);  // and scales with city size
+  expect(r.founding).toBe(0);                   // the opening minutes stay spared
+  expect(r.settled).toBeGreaterThan(0);         // but a mature village pays its way
+  expect(r.small).toBeGreaterThan(r.settled);   // and the term grows with population
+  expect(r.big).toBeGreaterThan(r.small * 10);  // scaling with city size
 });
 
 test('road maintenance scales with traffic, not headcount (wear brake)', async ({ game }) => {
@@ -210,6 +217,58 @@ test('stability: 10 years of ticks produce no NaN/Infinity or thrown errors', as
   expect(stats.pop).toBeGreaterThanOrEqual(0);
   expect(stats.happy).toBeGreaterThanOrEqual(0);
   expect(game.errors()).toEqual([]);
+});
+
+test('an idle village stops being a money printer once its founding grace ends', async ({ game }) => {
+  // measured before the fix: an untouched 300-pop town banked an ~85% margin forever
+  // (income §1.6k/mo vs §200 costs) because the flat ADMIN_FREE floor exempted it for
+  // life. the floor now decays over ADMIN_GRACE, so the same town's idle margin must
+  // DROP once settled — and the overhead engages for every city size, not just metros.
+  const r = await game.eval(inPage(`
+    resetGrid(); S.started = true; S.diff = 1;
+    hroad(20, 10, 30); set(10, 21, 'power'); set(11, 21, 'pump');
+    // a MIXED village (homes + shops + factories) — the balanced idle case the design
+    // intends to run a modest surplus; a res-only town also pays import costs on top
+    for (let x=12; x<=28; x++){
+      const t = x%4===0 ? 'ind' : (x%4===2 ? 'com' : 'res');
+      const c = set(x, 19, t); c.lv = 2; c.dev = 150;
+    }
+    recomputeNets(); recomputeFields();
+    // seat pop/jobs from the map (computeBudget reads S.pop; jobs it re-derives itself)
+    let pop = 0; for (let y=0;y<G;y++) for (let x=0;x<G;x++) if (map[y][x].t==='res') pop += CAP.res[map[y][x].lv]||0;
+    S.pop = pop;
+    const margin = (day) => { S.day = day; const B = computeBudget();
+      const net = B.income - B.roadCost - B.svcCost - B.emitCost - B.adminCost + B.polNet + B.tradeNet;
+      return net / B.income; };
+    return { founding: margin(0), settled: margin(ADMIN_GRACE + 30) };
+  `));
+  expect(r.founding).toBeGreaterThan(r.settled);   // the grace really expires
+  expect(r.settled).toBeLessThan(0.6);             // idle margin lands near the ~45% design intent
+  expect(r.settled).toBeGreaterThan(0);            // …but a healthy village still runs a surplus
+});
+
+test('the gridlock mood drag is bounded — a metro cannot be nailed to zero by tile count', async ({ game }) => {
+  // congested-lot COUNTS scale with city area while happiness is 0–100: before the cap, a
+  // 90k metro with ~400 jammed lots read −280 mood from traffic alone and every large city
+  // pinned at 0. the drag is now capped like crime/waste. assert the cap engages, and that
+  // some drag still exists (gridlock must keep hurting).
+  const r = await game.eval(inPage(`
+    resetGrid(); S.started = true;
+    // a big grid of roads + zoned lots, every road saturated far past capacity
+    for (let y=10; y<50; y+=2) hroad(y, 10, 50);
+    for (let x=10; x<=50; x+=8) for (let y=10; y<50; y++) if (map[y][x].t!=='road') set(x, y, 'road');
+    set(10, 9, 'power'); set(11, 9, 'pump');
+    for (let y=11; y<50; y+=2) for (let x=11; x<50; x++) if (map[y][x].t==='grass'){ const c=set(x,y,'res'); c.lv=2; c.dev=150; }
+    recomputeNets(); recomputeFields();
+    for (let i=0;i<traffic.length;i++) if (Number.isFinite(stepCost[i])) traffic[i] = 1e4;   // everything jammed
+    for (let y=0;y<G;y++) for (let x=0;x<G;x++) if (ROADTYPE[map[y][x].t]) traffic[idx(x,y)] = roadCapAt(x,y)*3;
+    __seedRng(5); simTick(); __unseedRng();
+    return { drag: S.happyParts.traffic, cap: MOOD.trafficCap,
+             congested: S.congested, happy: S.happy };
+  `));
+  expect(r.congested).toBeGreaterThan(50);              // the city really is wall-to-wall gridlock
+  expect(r.drag).toBeLessThan(0);                       // gridlock still drags mood…
+  expect(r.drag).toBeGreaterThanOrEqual(-r.cap - 1e-9); // …but never below the cap
 });
 
 test('ageing depreciation: a frozen city pays steadily more upkeep over time', async ({ game }) => {

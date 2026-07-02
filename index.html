@@ -2764,8 +2764,10 @@ const GROWTH = {
   leisMega:10,                                                       // megatowers demand real leisure nearby
 };
 /* happiness weights — S.happyParts is built term-by-term from these and the mood target is the
-   SUM OF THE PARTS (the accounting-identity spec holds by construction). ease = migration inertia. */
-const MOOD = { base:30, lv:0.5, jobs:18, tax:2.2, power:1.5, water:0.8, traffic:0.7,
+   SUM OF THE PARTS (the accounting-identity spec holds by construction). ease = migration inertia.
+   traffic/crime/waste are CAPPED: the per-tile counts scale with city AREA while mood is 0–100,
+   so uncapped they nailed every large city to zero (a 90k metro with 400 jammed lots read −280). */
+const MOOD = { base:30, lv:0.5, jobs:18, tax:2.2, power:1.5, water:0.8, traffic:0.7, trafficCap:15,
                crime:0.45, crimeCap:10, access:12, health:0.22, healthPivot:72,
                waste:14, wasteCap:10, edu:12, ease:0.1 };
 /* demand coefficients — tax drag, mood pull, and each sector's structural appetite */
@@ -2883,16 +2885,21 @@ const EMIT_RATE=0.45;
    feeds growth/land value), not a maintenance discount. */
 const ROAD_WEAR=1.7, AVE_WEAR=5.1;   // extra §/tile at congestion≈1, on top of the flat upkeep
 const SVC_LOAD=0.00002;              // per-resident caseload growth that multiplies service upkeep
-/* civic overhead: the first ADMIN_FREE residents (the bootstrap town) are governed "for
-   free"; every head above pays ADMIN_RATE §/month. lowered from 2.4 now that road wear +
-   service load carry part of the brake. scaled by d.up so Easy barely notices it, Hard feels it. */
-const ADMIN_FREE=500, ADMIN_RATE=1.6;
+/* civic overhead: during the founding years the first ADMIN_FREE residents are governed
+   "for free" — the floor DECAYS to zero over ADMIN_GRACE days, so it spares the opening
+   minutes (its original intent) without making a permanently-tiny town a §17k/yr idle
+   money-printer (measured: an untouched 300-pop village banked an 85% margin forever).
+   After the grace, every head pays ADMIN_RATE §/month. RATE partially restored toward its
+   original 2.4 — the wear brake that justified lowering it only exists under congestion,
+   so healthy idle cities never paid it. scaled by d.up so Easy barely notices, Hard feels it. */
+const ADMIN_FREE=500, ADMIN_RATE=2.0, ADMIN_GRACE=1080;   // grace: 3 founding years
 /* depreciation: physical infrastructure costs gently more to maintain as it ages, so a frozen
    city is never a steady-state money printer — standing still slowly raises the upkeep bill. it
    is ANSWERABLE: building out fresh infrastructure dilutes the city's average asset age (done in
    simTick), pulling the surcharge back down, so a city that keeps growing/renewing stays cheap.
-   gentle slope (~AGE_RATE/yr); AGE_MAX only bounds the absurd (≈a century frozen), not real play. */
-const AGE_RATE=0.02, AGE_MAX=3.0;
+   0.02 proved cosmetic (+20%/decade on a small base never dented an idle surplus) — at 0.05 a
+   decade of neglect costs +50%, enough to feel. AGE_MAX bounds the absurd, not real play. */
+const AGE_RATE=0.05, AGE_MAX=3.0;
 /* maturity anchoring: pre-feature saves are seeded at AGE_SEED_FRAC of their calendar age (a city
    built gradually has younger-than-calendar *average* infrastructure), and renewal can never pull the
    tracked age below AGE_FLOOR_FRAC of the city's real age — so an old city always reads (and pays) as
@@ -2999,11 +3006,12 @@ function computeBudget(){
   // income is linear in pop while the flat per-footprint costs aren't, so without a brake every
   // city compounds an ~80% surplus. that brake is now SHARED: road wear (wearCost) and service
   // load (svcLoad) already absorbed part of it above; this flat per-head admin overhead carries
-  // the remainder. the small free floor only spares the opening minutes (a pop<500 startup that
-  // hasn't wired up income yet).
-  const adminCost = Math.max(0, pop - ADMIN_FREE) * ADMIN_RATE * d.up * km.up;
+  // the remainder. the free floor spares only the FOUNDING years (it decays to zero over
+  // ADMIN_GRACE) — a permanent floor made any sub-500-pop town a compounding idle money-printer.
+  const adminFree = ADMIN_FREE * Math.max(0, 1 - (S.day||0)/ADMIN_GRACE);
+  const adminCost = Math.max(0, pop - adminFree) * ADMIN_RATE * d.up * km.up;
   const polNet = polBudget();
-  return { income, tourism, roadCost, svcCost, emitCost, emit, adminCost, polNet,
+  return { income, tourism, roadCost, svcCost, emitCost, emit, adminCost, adminFree, polNet,
            tradeNet, exportInc, importCost, exportUnits, importUnits, goodsNet, goodsProd, goodsUse, tradeCap, tradePorts, gdp,
            pop, jobs, comJ, indJ, tax:S.tax, resTax, jobTax, dInc:d.inc, dUp:d.up, dName:d.n,
            roads, aves, paths, busStops, airports, svcBase, wearCost, svcLoad, roadWear, aveWear, ageMul, infraStock };
@@ -3272,7 +3280,8 @@ function simTick(){
   const wasteDrag = devLots ? Math.min(MOOD.wasteCap, (noWaste/devLots)*MOOD.waste) : 0;   // uncollected rubbish sours the city
   S.wasteShort = noWaste;
   const eduMood = ((S.edu||0) - 0.5) * MOOD.edu;   // schooled cities lift mood, neglected ones sag (±6); small — land value already banks most of education's payoff
-  S.happyParts = { base:MOOD.base, lv:lvAvg*MOOD.lv, jobs:jobBal*MOOD.jobs, tax:-(S.tax-9)*MOOD.tax, power:-unp*MOOD.power, water:-dry*MOOD.water, traffic:-congested*MOOD.traffic, crime:-crimeDrag, access:-access*MOOD.access, health:healthDrag, waste:-wasteDrag, edu:eduMood, policy:pfx.happy };
+  const trafficDrag = Math.min(MOOD.trafficCap, congested*MOOD.traffic);   // bounded like crime/waste — see MOOD
+  S.happyParts = { base:MOOD.base, lv:lvAvg*MOOD.lv, jobs:jobBal*MOOD.jobs, tax:-(S.tax-9)*MOOD.tax, power:-unp*MOOD.power, water:-dry*MOOD.water, traffic:-trafficDrag, crime:-crimeDrag, access:-access*MOOD.access, health:healthDrag, waste:-wasteDrag, edu:eduMood, policy:pfx.happy };
   // mood eases toward its target rather than snapping — models migration inertia and damps the
   // happiness↔demand feedback loop now that mood feeds growth (A) and emigration (B).
   // the target IS the sum of the parts above — the breakdown identity holds by construction.
@@ -14502,7 +14511,7 @@ function fillBudgetModal(){
   h+=sec(`UPKEEP · ×${B.dUp.toFixed(2)} difficulty`);
   h+=row(`Roads ${B.roads}×0.95 + avenues ${B.aves}×2.85`+(B.paths?` + paths ${B.paths}×0.18`:'')+(B.busStops?` + stops ${B.busStops}×3`:'')+((B.wearCost&&B.wearCost>=0.5)?` + traffic wear ${f(B.wearCost)}`:''), '−'+f(B.roadCost).slice(1),'neg');
   h+=row(`Services base ${f(B.svcBase)} × funding × 2.6`+((B.svcLoad&&B.svcLoad>1.005)?` × load ${B.svcLoad.toFixed(2)}`:''), '−'+f(B.svcCost).slice(1),'neg');
-  if (B.adminCost&&B.adminCost>=0.5) h+=row(`Administration · ${Math.max(0,B.pop-ADMIN_FREE).toLocaleString()} over ${ADMIN_FREE.toLocaleString()} × ${ADMIN_RATE}`, '−'+f(B.adminCost).slice(1),'neg');
+  if (B.adminCost&&B.adminCost>=0.5) h+=row(`Administration · ${Math.round(Math.max(0,B.pop-(B.adminFree||0))).toLocaleString()} residents × ${ADMIN_RATE}`+((B.adminFree||0)>=1?` (${Math.round(B.adminFree)} founding-grace heads free)`:''), '−'+f(B.adminCost).slice(1),'neg');
   if (B.emitCost&&B.emitCost>=0.5) h+=row(`Emissions levy · ${Math.round(B.emit)} smog × ${EMIT_RATE}`+((S.edu||0)>0.02?` (−${Math.round(50*(S.edu||0))}% schooling)`:''), '−'+f(B.emitCost).slice(1),'neg');
   if (B.importCost&&B.importCost>=0.5) h+=row(`Imports · ${Math.round(B.importUnits).toLocaleString()} goods deficit`+((B.tradePorts||B.airports)?` (gateways cut the bill)`:` (no port — spot premium)`), '−'+f(B.importCost).slice(1),'neg');
   if (S.loan) h+=row(`Loan payment`, '−'+f(loanPay).slice(1),'neg');

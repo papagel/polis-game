@@ -65,9 +65,10 @@ and happiness) sets `S.labor`, which feeds back into demand.
   build-out) + service `svcCost` (`UPKEEP` × funding sliders `S.fund` ×
   population load × difficulty) + emissions levy + ordinances (`polBudget`).
 - `S.net = income − roadCost − svcCost − emitCost − adminCost − polCost − loanPay`;
-  added to `S.money`. `adminCost` (`max(0,pop−ADMIN_FREE)×ADMIN_RATE×d.up`) is
-  the per-capita civic overhead that cancels the otherwise-unbounded late-game
-  income runaway.
+  added to `S.money`. `adminCost` (per-head `ADMIN_RATE`, minus a free floor
+  that decays to zero over the `ADMIN_GRACE` founding years) is the per-capita
+  civic overhead that cancels the otherwise-unbounded income runaway — at every
+  size, including idle sub-500-pop towns.
 - **Trade/GDP** (~2884–2960): industry produces goods, pop+commerce consume
   them; surplus exports via border/seaport/airport freight capacity (income
   capped by `TRADE_INCOME_CAP`), deficits import at bulk/spot prices. A

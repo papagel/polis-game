@@ -8,6 +8,9 @@ export const HELPERS = `
     // page start identically (S.happyF is the smoothed-happiness state that feeds growth/decay).
     S.happyF = null; S.happy = 60; S.pop = 0; S.jobs = 0; S.demand = { r:0, c:0, i:0 };
     for (let y=0;y<G;y++) for (let x=0;x<G;x++) map[y][x] = blankCell();
+    // the random boot map's elevation caches outlive the grid wipe — a stale mountain cell
+    // can veto placements ("level this ground first") and flake specs. Flat world, honestly.
+    EBASE = null; EHAND = null; EVERT = null; ELEVCELL = null; elevDirty = true;
   }
   function set(x,y,t){ map[y][x].t = t; return map[y][x]; }
   function hroad(y,x0,x1){ for (let x=x0;x<=x1;x++) map[y][x].t = 'road'; }
