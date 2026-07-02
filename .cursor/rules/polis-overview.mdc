@@ -6,25 +6,27 @@ alwaysApply: true
 # POLIS — Project Overview
 
 POLIS is an isometric **city-builder game** whose game lives entirely in a
-single self-contained file: `index.html` (~12950 lines). No build step, no
+single self-contained file: `index.html` (~15900 lines). No build step, no
 dependencies, no framework — vanilla JS + Canvas 2D. The only external
-resources are Google Fonts (loaded via CDN `<link>`). The repo also carries a
-headless test suite (`tests/`) and CI, but the game itself ships as that one
-file.
+resources are Google Fonts and the Cloudflare analytics beacon (CDN `<link>`/
+`<script>`). A small `sw.js` service worker (registered only over http/https,
+never file://) caches the shell so the deployed game works offline. The repo
+also carries a headless test suite (`tests/`) and CI, but the game itself
+ships as that one file.
 
 ## File layout (all in `index.html`)
 
 | Lines | Section |
 |-------|---------|
-| `1`–`480` | `<head>` + all CSS (custom-property design tokens at `:root`) |
-| `480`–`899` | `<body>` — the DOM: canvas `#c`, HUD, panels, modals |
-| `899`–`12948` | `<script>` — the entire game engine |
+| `1`–`557` | `<head>` + all CSS (custom-property design tokens at `:root`) |
+| `560`–`995` | `<body>` — the DOM: canvas `#c`, HUD, panels, modals |
+| `997`–`15932` | `<script>` — the entire game engine |
 
 Because everything is global and in one file, **use line ranges and symbol
 names to navigate** rather than expecting modules. Line numbers drift as the
 file grows, so treat them as approximate and confirm by symbol name. Key entry
-points: `loop()` (~11294, the rAF frame loop), `simTick()` (~2542, one game
-day), `render()` (~8147, draws a frame).
+points: `loop()` (~13540, the rAF frame loop), `simTick()` (~3064, one game
+day), `render()` (~9350, draws a frame).
 
 ## Run locally
 

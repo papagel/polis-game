@@ -40,17 +40,17 @@ silently-dropped edit is exactly how these half-wired bugs happen).
 
 Tile types are serialized **by array index**, so order is load-bearing:
 
-- [ ] Append the id to **`TYPE_IDS`** (~10738) — **never reorder or remove**
+- [ ] Append the id to **`TYPE_IDS`** (~12794) — **never reorder or remove**
       existing entries, or every saved city breaks.
-- [ ] Add a display name in `NAMES` (~9104).
+- [ ] Add a display name in `NAMES` (~10798).
 - [ ] Register it in the relevant trait tables so systems pick it up:
       `ZONE`/`SVC`/`ROADTYPE`/`WALKTYPE`/`CONDUCT`, plus `UPKEEP`, and
       `CAP`/`PLANT`/`WSRC`/`LEIS`/`FOOT` as applicable. **A building that
       produces an effect (water, power, a service, leisure) is dead until its
       type is a key in that effect's table.**
-- [ ] Add it to the `TOOLS` catalog (~963) with cost `c`, icon, group.
+- [ ] Add it to the `TOOLS` catalog (~1109) with cost `c`, icon, group.
 - [ ] Give it a draw path in `render()` / a `draw*` function.
-- [ ] Handle placement in `place()` (~2211) if it needs special rules
+- [ ] Handle placement in `place()` (~2566) if it needs special rules
       (terrain validity, special footprint, etc.).
 - [ ] Confirm save/load round-trips it (it rides on `TYPE_IDS`, but verify).
 
@@ -77,7 +77,7 @@ capacity/reach. Add or extend a `*.spec.js` accordingly (see Testing changes).
 
 ## Save format
 
-`makeSave()` (~10798) / `loadSave()` (~10803) encode the city as
+`makeSave()` (~12844) / `loadSave()` (~12859) encode the city as
 `TLV5.<base64(JSON)>`: per-cell `[typeIndex, lv, dev, overlayBitmask]` plus `S`
 fields (the current `TLV5` also carries player terrain heights `eh`). If you
 change the cell payload shape, **bump the version prefix** (`TLV5`→`TLV6`) and
@@ -90,8 +90,8 @@ fallback); autosave fires monthly.
 
 Gameplay numbers live in **named tables**, not scattered literals — tune there:
 `UPKEEP`, `CAP`, `PLANT`, `WSRC`, `LEIS`, `ROAD_CAP`, `DIFF`, `LOAN_OFFERS`,
-and the growth thresholds inside `simTick()`. Prefer adjusting a table constant
-over editing per-tile logic.
+`POLICIES`, the trade constants, and the growth thresholds inside `simTick()`.
+Prefer adjusting a table constant over editing per-tile logic.
 
 ## Testing changes
 
@@ -101,7 +101,7 @@ loads the real `index.html` via `file://` so every global exists, and asserts
 **invariants** — save round-trips, the budget accounting identity, growth
 gating, network flood-fill, loan amortization — instead of golden numbers, so
 honest balance tuning stays green. Determinism leans on the test-only RNG seam
-`__seedRng`/`__unseedRng` (~937); in normal play the RNG is `Math.random`.
+`__seedRng`/`__unseedRng` (~1048); in normal play the RNG is `Math.random`.
 Add/extend a `*.spec.js` when you touch the sim, and keep new assertions
 invariant-based. If you change `TYPE_IDS` or the save payload, the round-trip
 specs are the safety net — run them.

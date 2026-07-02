@@ -386,6 +386,7 @@
   #codeBox summary:hover{color:var(--ink)}
   #codeBox textarea{margin-top:10px}
   #catModal .inner,#advModal .inner,#statsModal .inner,#saveModal .inner,#budgetModal .inner{position:relative}
+  [role="dialog"]:focus{outline:none}
   .modalX{position:absolute;top:10px;right:12px;background:#1a2636;border:1px solid var(--line);border-radius:8px;color:var(--dim);width:28px;height:28px;cursor:pointer;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center}
   .modalX:hover{color:var(--ink);border-color:var(--amber)}
   .catDN{position:absolute;top:10px;right:48px;background:#1a2636;border:1px solid var(--line);border-radius:8px;color:var(--dim);height:28px;padding:0 10px;cursor:pointer;font-size:11px;line-height:1;display:flex;align-items:center;gap:5px;font-family:'Chakra Petch'}
@@ -557,7 +558,7 @@
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c" aria-label="City map — the interactive game world">POLIS is a visual city-builder and needs a browser with canvas support.</canvas>
 
 <div id="intro">
   <h1>P<span class="lo">O</span>LIS</h1>
@@ -673,8 +674,8 @@
 <div id="corner" class="hud">
   <button id="undoBtn" class="off" title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
   <button id="redoBtn" class="off" title="Redo (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
-  <button id="zin">+</button>
-  <button id="zout">−</button>
+  <button id="zin" aria-label="Zoom in">+</button>
+  <button id="zout" aria-label="Zoom out">−</button>
   <button id="rotL" title="Rotate view (Q / E)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 11a8 8 0 1 1 2.5 6"/><path d="M4 5v6h6" fill="none"/></svg></button>
 </div>
 
@@ -14863,6 +14864,11 @@ function pwaInit(){
       document.head.appendChild(ml);
     }
   }catch(_){}
+  // offline shell: SW only exists on http(s) — file:// (the "just open it" path) skips it
+  try{
+    if ('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1'))
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }catch(_){}
   window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); deferredInstall=e; });
   const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (typeof navigator!=='undefined' && navigator.standalone);
   if (standalone){ const ib=document.getElementById('installBtn'); if (ib) ib.style.display='none'; }
@@ -14929,7 +14935,7 @@ function buildBBar(){
   for (const id of DIRECT){
     const d=TOOLDEF[id]; if (!d) continue;
     const b=document.createElement('button');
-    b.dataset.id=id; b.title=d.n;
+    b.dataset.id=id; b.title=d.n; b.setAttribute('aria-label',d.n);
     b.innerHTML='<span class="ic" style="color:'+d.col+'">'+(tintI(ICONS[id])||d.ic)+'</span>';
     b.onclick=()=>setTool(id);
     cats.appendChild(b);
@@ -15829,6 +15835,47 @@ function openDisModal(){
 const origPlace=place;
 place=function(x,y,quiet){ const before=inB(x,y)?map[y][x].t:null; const r=origPlace(x,y,quiet); if(inB(x,y)&&map[y][x].t!==before) dirtyRoads=true; return r; };
 updateHUD();
+/* ---------- accessibility: names for icon-only buttons + dialog semantics ---------- */
+{
+  // screen readers don't reliably announce title= — mirror it into aria-label
+  document.querySelectorAll('button[title]:not([aria-label])').forEach(b=>{ if (b.title) b.setAttribute('aria-label', b.title); });
+  document.querySelectorAll('.modalX').forEach(b=>b.setAttribute('aria-label','Close'));
+  // the two clickable stat chips are divs — give them button semantics + keyboard activation
+  for (const id of ['funds','rank']){
+    const el=document.getElementById(id); if (!el) continue;
+    el.setAttribute('role','button'); el.tabIndex=0;
+    el.addEventListener('keydown', e=>{ if (e.key==='Enter'||e.key===' '){ e.preventDefault(); el.click(); } });
+  }
+  const MODALS=['demoModal','aboutModal','disModal','setSheet','renameModal','confirmModal','scenModal',
+                'saveModal','helpModal','mapModal','statsModal','catModal','advModal','budgetModal'];
+  const FOCUS='button:not([disabled]), [href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
+  for (const id of MODALS){
+    const wrap=document.getElementById(id); if (!wrap) continue;
+    const dlg=wrap.querySelector('.modal, .inner')||wrap;
+    dlg.setAttribute('role','dialog'); dlg.setAttribute('aria-modal','true'); dlg.tabIndex=-1;
+    const h=dlg.querySelector('h2,h3');
+    if (h){ if (!h.id) h.id=id+'_ttl'; dlg.setAttribute('aria-labelledby', h.id); }
+    dlg.addEventListener('keydown', e=>{                       // keep Tab cycling inside the open dialog
+      if (e.key!=='Tab') return;
+      const f=[...dlg.querySelectorAll(FOCUS)].filter(x=>x.offsetParent!==null);
+      if (!f.length) return;
+      const first=f[0], last=f[f.length-1], a=document.activeElement;
+      if (e.shiftKey && (a===first||a===dlg)){ e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && a===last){ e.preventDefault(); first.focus(); }
+    });
+    // every open/close path toggles .open — observe it centrally instead of patching each call site
+    let prevFocus=null;
+    new MutationObserver(()=>{
+      if (wrap.classList.contains('open')){
+        prevFocus=document.activeElement;
+        setTimeout(()=>{ if (wrap.classList.contains('open') && !dlg.contains(document.activeElement)) dlg.focus(); }, 0);
+      } else if (prevFocus){
+        if (dlg.contains(document.activeElement) && prevFocus.focus) prevFocus.focus();
+        prevFocus=null;
+      }
+    }).observe(wrap, {attributes:true, attributeFilter:['class']});
+  }
+}
 /* compact mobile mode: body.mob drives the narrow-screen stylesheet,
    and stat labels shrink so they can't collide */
 const MOB_LBL={funds:['Treasury ▾','FUNDS ▾'], pchip:['⚡ Power','⚡ PWR'], wchip:['💧 Water','💧 H₂O'],

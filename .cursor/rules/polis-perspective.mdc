@@ -5,7 +5,7 @@ alwaysApply: true
 
 # POLIS — Drawing in Isometric Perspective
 
-The renderer is a fixed 2:1 isometric projection (`TW=64, TH=32`, ~line 929):
+The renderer is a fixed 2:1 isometric projection (`TW=64, TH=32`, ~line 1004):
 `isoX=(x−y)·TW/2`, `isoY=(x+y)·TH/2`. Every `draw*` fn gets the tile's screen
 anchor `sx,sy`; the **ground plane** of a point at grid offset `(ox,oy)` is:
 
@@ -72,7 +72,7 @@ single screenshot, then look broken once you **rotate the camera** or place a
   building looks like it floats. Keep slab colours consistent (per-tile diamond ==
   unified deck) so the seam between passes is invisible.
 
-### Example — forecourt flags (convention center, ~line 8239)
+### Example — forecourt flags (convention center, ~line 9178)
 
 ```js
 // ❌ inside the footprint (oy=.22,.02 < building front face ~.32) → poles stab through the wall

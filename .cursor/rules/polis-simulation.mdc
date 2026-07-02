@@ -15,72 +15,102 @@ All line numbers refer to `index.html` and are approximate.
   part:bool, bld:construction%, bridge, bus, rail, rz:rubble-origin type }`.
   Helpers: `idx(x,y)=y*G+x`, `inB(x,y)` bounds check.
 - **Scalar fields** (Float32Array, length G*G), recomputed in
-  `recomputeFields()` (~1706): `pollution`, `leisure`, `crime`, `landVal`,
+  `recomputeFields()` (~1985): `pollution`, `leisure`, `crime`, `landVal`,
   and `cover.{police,fire,school,health,transit}`. `splat()` paints a radial
   falloff. Land value blends pollution, traffic, service coverage, leisure,
   nearby water/trees, and crime.
-- **Global state `S`** (~913): `money, tax, day, speed, diff, pop, jobs,
+- **Global state `S`** (~1011): `money, tax, day, speed, diff, pop, jobs,
   happy, demand{r,c,i}, zoom/ox/oy (camera), tool, overlay, rot, milestone,
-  fund{police,fire,school,health}, power/water caps`.
+  fund{police,fire,school,health}, policy{}, loan, power/water caps`.
 
 ## The tick loop
 
-`loop()` (~11294) runs on `requestAnimationFrame`. A fixed-step accumulator
+`loop()` (~13540) runs on `requestAnimationFrame`. A fixed-step accumulator
 calls `simTick()` per game day; speed → step from `TICK_MS=[∞,560,280,130]`.
 **Rendering is decoupled** from the sim and throttled by a frame governor
 (`PERF.saver`); the simulation always runs at full fidelity regardless of FPS.
 
-`simTick()` (~2542) each day: fire spread + rubble cleanup → per-cell zone
-**growth/decay**, then aggregates education & crime, recomputes demand &
-happiness, and every 30 days runs the **monthly budget** + autosave.
+`simTick()` (~3064) each day: fire spread + rubble cleanup → per-cell zone
+**growth/decay**, then aggregates education & crime, recomputes demand,
+demographics & happiness, and every 30 days runs the **monthly budget** +
+autosave. Per-level-up field recomputes are coalesced via `RF_DEFER` into one
+`recomputeFields()` pass per tick.
 
 ## Growth model (the heart of the game)
 
 A zoned lot (`res`/`com`/`ind`) levels up only when gated by:
 **adjacent road** (`roadAdj`), **power** (`pw`), **water** (`wt`), positive
 **demand**, **land value** thresholds, and for high tiers **education**
-(`S.edu`) and **leisure**. Levels 1→7; mature lv3 lots `tryMerge()` four
-neighbors into a 2×2 **tower** (`grp`/`part`), which can rise to skyscraper /
-highrise / megatower. Unpowered/unwanted lots decay and downgrade; `unmerge()`
-breaks towers back down (or to `rubble` after fire).
+(`S.edu`) and **leisure**. Levels 1→7; mature lv3 lots `tryMerge()` (~2800)
+four neighbors into a 2×2 **tower** (`grp`/`part`), which can rise to
+skyscraper / highrise / megatower. Unpowered/unwanted lots decay and
+downgrade; `unmerge()` breaks towers back down (or to `rubble` after fire).
 
-`CAP` (~2376) = population/jobs per type per level. `D = S.demand` is recomputed
-from the jobs↔pop↔commerce↔industry balance minus a tax drag.
+`CAP` (~2741) = population/jobs per type per level. `D = S.demand` is recomputed
+from the jobs↔pop↔commerce↔industry balance minus a tax drag. A
+**demographics layer** (child/work/senior cohorts eased by health, education
+and happiness) sets `S.labor`, which feeds back into demand.
 
 ## Economy
 
-`computeBudget()` (~2457), applied monthly in `simTick`:
+`computeBudget()` (~2907), applied monthly in `simTick`:
 - **Income** = (`resTax = pop*tax*0.26` + `jobTax = jobs*tax*0.36`) × difficulty
-  `d.inc` + **tourism** (from working airports), all × `kmRamp()`.
-- **Costs** = road/avenue/path/busstop/rail upkeep + service `svcCost`
-  (`UPKEEP` × per-service funding sliders `S.fund` × 2.6 × difficulty).
-- `S.net = income − roadCost − svcCost − emitCost − adminCost − loanPay`; added to
- `S.money`. `adminCost` (`max(0,pop−ADMIN_FREE)×ADMIN_RATE×d.up`) is the per-capita
- civic overhead that cancels the otherwise-unbounded late-game income runaway.
-- **Difficulty** `DIFF` (~1203) scales growth/income/upkeep/disaster rates.
-  **Loans**: `LOAN_OFFERS`, `takeLoan`/`repayLoan`, amortized monthly.
+  `d.inc` + **tourism** (working airports, capped) + **trade** (see below),
+  all × `kmRamp()`.
+- **Costs** = road/avenue/path/busstop/rail upkeep (scaled by congestion wear
+  and an infrastructure-**ageing** multiplier `ageMul`, diluted by fresh
+  build-out) + service `svcCost` (`UPKEEP` × funding sliders `S.fund` ×
+  population load × difficulty) + emissions levy + ordinances (`polBudget`).
+- `S.net = income − roadCost − svcCost − emitCost − adminCost − polCost − loanPay`;
+  added to `S.money`. `adminCost` (`max(0,pop−ADMIN_FREE)×ADMIN_RATE×d.up`) is
+  the per-capita civic overhead that cancels the otherwise-unbounded late-game
+  income runaway.
+- **Trade/GDP** (~2884–2960): industry produces goods, pop+commerce consume
+  them; surplus exports via border/seaport/airport freight capacity (income
+  capped by `TRADE_INCOME_CAP`), deficits import at bulk/spot prices. A
+  derived GDP headline anchors tax income.
+- **Ordinances** `POLICIES` (~1384): 8 toggleable policies with monthly
+  cost/income (`polBudget` ~1422) and field effects (pollution, crime,
+  education, demand, mood).
+- **Difficulty** `DIFF` (~1358) scales growth/income/upkeep/disaster rates;
+  the top level uses the escalating `kmRamp()` (~1367) no-win ramp.
+  **Loans**: `LOAN_OFFERS` (~12798), `takeLoan`/`repayLoan`, one at a time,
+  amortized monthly.
 
 ## Networks (power, water, traffic)
 
-Roads carry **cars, power, and water**. `recomputePower()` (~1483) and
-`recomputeWater()` (~1571) flood-fill conductivity (`CONDUCT`) from plants
+Roads carry **cars, power, and water**. `recomputePower()` (~1761) and
+`recomputeWater()` (~1849) flood-fill conductivity (`CONDUCT`) from plants
 (`PLANT`) / sources (`WSRC`) across roads + buildings; call both via
-`recomputeNets()`. Traffic is a Float32Array decayed each day; `congestion()`
-= traffic / `ROAD_CAP`; gridlock chokes growth and land value.
+`recomputeNets()`. **Traffic is routed, not splatted**: `recomputeCommute()`
+(~3429) runs multi-source Dijkstras over the road graph with BPR-style
+congestion-priced edges (`buildStepCost` ~3380), and `emitCommute()` (~3463)
+walks each lot's work/shop/leisure trips down the cost gradient onto the
+`traffic` Float32Array (decayed daily). `congestion()` = traffic / `ROAD_CAP`
+(~1722); gridlock chokes growth and land value, and unreachable jobs feed a
+happiness penalty. Sanitation is its own network: garbage collected over the
+road net into landfills/recycling/incinerators, landfills fill up.
 
 ## Agents & rendering
 
-- Agents: `cars[]` (`stepCars` ~2971), `peds[]` (~3086), `planes[]`, `trains[]`.
-- **Isometric renderer**: `isoX/isoY/toScreen` (~3581), tile `TW=64,TH=32`,
-  4 rotations (`rotate`, `rotC/rotD`), painter's-algorithm in `render()` (~8147).
+- Agents: `cars[]` (`stepCars` ~3556), `peds[]` (~3676), `planes[]` (~7702),
+  `trains[]` (~7712), ships, service vehicles (`svc` — fire engines really
+  extinguish; the rest are cosmetic).
+- **Isometric renderer**: `isoX/isoY/toScreen` (~4291), tile `TW=64,TH=32`,
+  4 rotations (`rotate`, `rotC/rotD`), painter's-algorithm in `render()` (~9350).
   Per-type draw fns: `drawZone`, `drawRes/drawCom/drawInd`, `drawBigBuilding`,
   `drawVenue`, `drawTowerTile`, `civic`, `drawAirport`. Buildings are procedural
   geometry (`box`/`vol`/`cyl`/`windows`/`gable`). Day/night (`duskAmt`),
   weather (`WX`, `drawPrecip`), and seasons (`SEAS`/`updateSeason`) modulate it.
+- **Render caches** (don't bypass them): a baked ground plane (`PERF.gnd`),
+  LRU sprite caches for res lots and towers, and a whole-world snapshot
+  (`bakeWorld`) used at far zoom / mid-gesture on heavy maps.
 
 ## Other systems
 
-Disasters (`triggerDisaster`/`stepDisaster`), scenarios (`SCEN`,
-`startScenario`), milestones/ranks (`MILESTONES`), undo/redo (`undoStack`),
-generative WebAudio music + SFX (`audioInit`, `musicLoop`, multiple styles),
-and PWA install (`pwaInit`, procedurally-drawn app icon).
+Disasters (`triggerDisaster` ~15132/`stepDisaster`), scenarios (`SCEN` ~14534,
+`startScenario`), milestones/ranks (`MILESTONES` ~1287), undo/redo
+(`undoStack`), generative WebAudio music + SFX (`audioInit`, `musicLoop`,
+multiple styles), PWA install (`pwaInit`, procedurally-drawn app icon) with an
+offline shell in `sw.js`, and accessibility wiring (dialog roles + focus
+management, one central block near the end of the script).
